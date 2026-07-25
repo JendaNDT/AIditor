@@ -10,10 +10,11 @@ Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal,
 **Spike 0, krok 1 — otevřít soubor a přehrát ho.**
 `NSOpenPanel` se Security-Scoped Bookmarkem → `AVPlayer` v `NSViewRepresentable` → mezerník play/pauza, šipky krok po snímku.
 Matematika křivky je hotová a otestovaná (`SpeedRampEngine/`), takže krok 3 spiku už staví na ověřeném základu.
-Před tím ještě: Xcode, `git init`, testovací sada klipů. Detaily v `SPIKE_0.md`.
+Příprava hotová: Xcode nainstalovaný, git repozitář založený, klipy v `TestClips/` (ignorované gitem). Detaily v `SPIKE_0.md`.
+⚠️ Při zakládání Xcode projektu **nastav deployment target ručně na macOS 14.0** — výchozí by byl 26.0.
 
 ## ✅ Hotovo
-- **`SpeedRampEngine` — první modul, zkompilovaný a otestovaný.** 31 testů, 0 selhání, Swift 6.0.3. Bézier easing, integrace rychlostní křivky, inverzní mapování pro scrubbing, segmentace pro `scaleTimeRange` zarovnaná na hranice snímků, `Codable` pro `project.json`. Ověřeno proti nezávislé Python referenci na analyticky spočitatelných případech.
+- **`SpeedRampEngine` — první modul, zkompilovaný a otestovaný.** 31 testů, 0 selhání, Swift 6.3.3. Bézier easing, integrace rychlostní křivky, inverzní mapování pro scrubbing, segmentace pro `scaleTimeRange` zarovnaná na hranice snímků, `Codable` pro `project.json`. Ověřeno proti nezávislé Python referenci na analyticky spočitatelných případech.
 - Produktová a technická specifikace v2.0 (HTML + PDF)
 - **Implementační plán** — 12 fází, 3 kill-gates, modulová mapa, session protokol (`IMPLEMENTACNI_PLAN.md`)
 - **Interaktivní tracker** — odškrtávací postup s progress barem (`krasa-tracker.html`)
@@ -38,7 +39,7 @@ Před tím ještě: Xcode, `git init`, testovací sada klipů. Detaily v `SPIKE_
 - **F6** Svatební asistent *(2 týdny)* — nejlevnější odlišení v produktu
 - **F7** Audio engine, 32-bit float, LUFS *(3 týdny)*
 - **F8** Titulky přes WhisperKit *(2 týdny)*
-- **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)*
+- **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — **+ migrace na `AVVideoComposition.Configuration`** jako druhá větev pod `if #available(macOS 26.0, *)`. Ne dřív.
 - 🚧 **KILL-GATE 2:** prodat deseti lidem, kteří tě neznají
 
 ### Za v1.0 — podmíněné
@@ -52,8 +53,8 @@ Před tím ještě: Xcode, `git init`, testovací sada klipů. Detaily v `SPIKE_
 ## ⚠️ Známá rizika a korekce specifikace
 *(Detaily v `IMPLEMENTACNI_PLAN.md`, sekce 1.)*
 
-- **`AVMutableVideoComposition` je od macOS 26 deprecated** → stavět na `AVVideoComposition.Configuration`.
-- **`scaleTimeRange` neumí plynulou křivku** — dělá lineární časové mapování. Ramp = segmentace nebo vlastní compositor. Navíc hlášené artefakty ve zvuku na hranicích segmentů.
+- **`AVMutableVideoComposition` je od macOS 26 deprecated, ale používá se dál.** Náhrada `AVVideoComposition.Configuration` je `@available(macOS 26.0, *)`, a minimum projektu je macOS 14.0 — na macOS 14–25 tedy neexistuje. Deprecated ≠ odstraněné. Warning umlčovat cíleně u volání, ne globálně. *(Dřívější text tvrdil opak — byla to chyba, opraveno 25. 07. 2026.)*
+- **`scaleTimeRange` neumí plynulou křivku** — dělá lineární časové mapování. `CMTimeMapping` je dvojice `CMTimeRange`, takže křivka do něj nejde zapsat z principu. **Ramp = segmentace, jiná cesta není** (vlastní compositor do časování nevidí). Navíc hlášené artefakty ve zvuku na hranicích segmentů.
 - **Whisper-small je pro češtinu nepoužitelný** (34–38 % WER) → `large-v3-turbo` (~13 %, stejná velikost jako medium, násobně rychlejší).
 - **`SpeechAnalyzer` češtinu nepodporuje** — v seznamu 42 locale není `cs_CZ`. Sekce 4.3.1 specifikace se ruší.
 - **Vision nemá veřejné API pro otisk obličeje.** Face grouping = vlastní Core ML model + vlastní DBSCAN + UI pro ruční opravy. Ente na tom pracovalo 21 měsíců s placeným týmem.
@@ -66,7 +67,8 @@ Před tím ještě: Xcode, `git init`, testovací sada klipů. Detaily v `SPIKE_
 
 ## 🏗️ Klíčová rozhodnutí
 - **Timeline v AppKitu, zbytek v SwiftUI.** SwiftUI nemá recyklaci buněk ani viditelnost do drag session. Riverside má SwiftUI chrome + samostatný timeline engine, Recut je celý AppKit.
-- **`AVVideoComposition.Configuration`**, ne deprecated API.
+- **Kompozice přes `AVMutableVideoComposition`** pro spike i MVP. `AVVideoComposition.Configuration` až jako druhá větev před vydáním (fáze 9), runtime gatovaná přes `if #available(macOS 26.0, *)`.
+- **Speed ramping a `Configuration` spolu nesouvisí.** `Configuration` neobsahuje žádné časování — jen instrukce, transformace, průhlednost, ořez, barvy.
 - **Jedna časová základna projektu.** Nikdy neodvozovat čísla snímků ze zdrojových časových značek.
 - **VFR→CFR při generování proxy.** Jedno rozhodnutí řeší tři problémy naráz.
 - **ProRes 422 Proxy v polovičním rozlišení**, ne plném. M4 Air má hardwarový ProRes engine — chyběl jen základnímu M1.

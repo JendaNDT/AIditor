@@ -44,13 +44,19 @@ Tohle je celý smysl — když se to rozbije, přijdeš o víkend, ne o čtvrt r
 
 ### Krok 3 – Plynulá křivka (tady se to zlomí, nebo ne)
 Ramp 1,0× → 0,25× → 1,0× přes prostředek klipu.
-**Pozor, tohle je jádro spiku:** `scaleTimeRange` dělá konstantní změnu rychlosti přes daný úsek — vytvoří lineární časové mapování. Plynulý Bézier se z jednoho volání udělat nedá.
-Dvě cesty, vyzkoušej v tomhle pořadí:
 
-- **A) Segmentace (jednodušší):** klip se nakrájí na desítky krátkých úseků, každý dostane vlastní `scaleTimeRange` podle křivky. Schodovitá aproximace. Rychlé na napsání, ale každá hranice segmentu je potenciální lupnutí ve zvuku.
-- **B) Vlastní compositor (těžší):** `AVMutableVideoComposition` s vlastním `AVVideoCompositing`, kde si časové mapování počítáš sám. Čistší výsledek, výrazně víc práce. Sáhni po tom, jen když A) selže na kvalitě.
+**Pozor, tohle je jádro spiku:** `scaleTimeRange` dělá konstantní změnu rychlosti přes daný úsek — vytvoří lineární časové mapování. Plynulý Bézier se z jednoho volání udělat nedá.
+
+**Cesta je jedna: segmentace na mikro-úseky.** Klip se nakrájí na desítky krátkých úseků a každý dostane vlastní `scaleTimeRange` podle křivky. Segmenty ti spočítá hotový `SpeedRampEngine.segments(outputFrameRate:framesPerSegment:)` — zarovnané na hranice snímků, ověřené 31 testy.
+
+> **Dřív tu stála volba mezi segmentací a vlastním compositorem. Ta volba neexistuje.**
+> Vlastní `AVVideoCompositing` do časování nevidí. Přes `sourceFrame(byTrackID:)` dostane snímek, který kompozice pro daný `compositionTime` **už vybrala**, a API pro vyžádání jiného zdrojového času neexistuje. Který snímek to bude, určuje `CMTimeMapping` stopy — a ten je pouhá dvojice `CMTimeRange`, tedy afinní mapování z definice. Compositor je nástroj na pixely (efekty, prolínačky, Metal), ne na čas.
+> Jediná alternativa k segmentaci je opustit `AVComposition` úplně a jet `AVAssetReader` → vlastní výběr snímků → `AVAssetWriter`. Tím ale ztratíš živý náhled v `AVPlayer`. Drž si to jako záložní plán **pro export**, kdyby segmentovaná kompozice na 4K/60 nestíhala — náhled a export nemusí jet stejnou cestou.
+
+Kompozici stav přes `AVMutableVideoComposition`. Je od macOS 26 deprecated, ale funguje a na macOS 14–25 je jediná možnost — `AVVideoComposition.Configuration` je `@available(macOS 26.0, *)`. Warning umlč cíleně u toho volání, ne globálně.
 
 ✅ Hotovo, když ramp vidíš i slyšíš a export doběhne.
+⚠️ Čeho si tu všímej: každá hranice segmentu je potenciální lupnutí ve zvuku. To je hlavní riziko celého spiku, ne to, jestli se ramp „povede".
 
 ### Krok 4 – Změřit
 Zapiš si čísla. Bez nich to není spike, ale hraní.
@@ -84,7 +90,23 @@ Zapiš si čísla. Bez nich to není spike, ale hraní.
 
 ## Hotové prompty pro Claude Code
 
-### Prompt 0 – ověření API (**pusť ho jako první**)
+### Prompt 0 – ověření API — ✅ **HOTOVO 25. 07. 2026, nepouštěj znovu**
+
+Odpověď je zapracovaná do kroku 3 výše a do sekce 1 `IMPLEMENTACNI_PLAN.md`. Shrnutí:
+
+| Otázka | Odpověď | Jistota |
+|---|---|---|
+| Umí `scaleTimeRange` křivku? | Ne, lineární. `CMTimeMapping` je dvojice `CMTimeRange`. | ověřeno v SDK |
+| Segmentace, nebo vlastní compositor? | **Segmentace.** Compositor do časování nevidí. | ověřeno v SDK |
+| Existuje `AVVideoComposition.Configuration`? | Ano, ale `@available(macOS 26.0, *)` → pro nás zatím ne. | ověřeno v SDK |
+| Je `AVMutableVideoComposition` deprecated? | Ano, od macOS 26. Funguje dál, používáme ji. | ověřeno v SDK |
+| Artefakty ve zvuku na hranicích segmentů | **neověřeno** — to je právě úkol kroku 3 | otevřené |
+
+Ověřovalo se proti `MacOSX26.5.sdk` na disku (hlavičky + `.swiftinterface`), ne proti webu — doc stránky se renderují JavaScriptem a stáhnout se nedají. Existence každé odkazované stránky potvrzena zvlášť přes JSON endpoint Apple docs.
+
+<details>
+<summary>Původní znění promptu</summary>
+
 ```
 Než začneme cokoli psát: potvrď mi, jak se v AVFoundation na macOS 14+
 v roce 2026 reálně dělá plynulá (eased, ne konstantní) změna rychlosti klipu.
@@ -99,6 +121,8 @@ Konkrétně:
 Pokud si něčím nejsi jistý, řekni to explicitně místo odhadu.
 Ještě nepiš žádný kód.
 ```
+
+</details>
 
 ### Prompt 1 – přehrávač
 ```

@@ -21,7 +21,7 @@ Rešerše z 25. 7. 2026 našla sedm věcí, které mění návrh. Řazeno podle 
 
 | # | Zjištění | Dopad na plán |
 |---|---|---|
-| 1 | **`AVMutableVideoComposition` je od macOS 26 deprecated.** Náhrada je `AVVideoComposition.Configuration` (struct, `Sendable`). | Píšeš proti nové API hned. Deprecated ≠ nefunkční, ale nemá smysl začínat na mrtvé větvi. Zvedá to minimální macOS na 26 pro build, cíl běhu zůstává 14.0 s runtime gatováním. |
+| 1 | **`AVMutableVideoComposition` je od macOS 26 deprecated.** Náhrada `AVVideoComposition.Configuration` (struct, `Sendable`) je ale `@available(macOS 26.0, *)`. | **Píšeš dál proti `AVMutableVideoComposition`.** Deployment target je 14.0, kde `Configuration` neexistuje — na macOS 14–25 je deprecated API jediná možnost. Deprecated ≠ odstraněné. Warning umlčuj cíleně u konkrétního volání, nikdy globálně. Dvojí větev pod `if #available(macOS 26.0, *)` je úkol pro fázi 9, ne pro teď. |
 | 2 | **Whisper-small je pro češtinu nepoužitelný** — 34–38 % WER, každé třetí slovo špatně. | Model ze specifikace se mění na **large-v3-turbo** (~13 % WER, stejná velikost jako medium, násobně rychlejší). Medium nemá důvod existovat. |
 | 3 | **`SpeechAnalyzer` češtinu nepodporuje.** V seznamu 42 locale není `cs_CZ` ani `pl_PL`. | Sekce 4.3.1 specifikace („sledovat vývoj, mohlo by nahradit Whisper") se ruší. Whisper je jediná cesta, ne dočasné řešení. |
 | 4 | **Modely pro rozpoznávání obličejů jsou z velké části komerčně zakázané.** InsightFace/ArcFace/buffalo\_l: *„non-commercial research purposes only"*. | Face grouping se odsouvá až za v1.0 a stává se podmíněnou fází. Jediný čistý model je **AuraFace-v1** (Apache 2.0). |
@@ -31,7 +31,8 @@ Rešerše z 25. 7. 2026 našla sedm věcí, které mění návrh. Řazeno podle 
 
 Plus dvě věci z minula, které zůstávají v platnosti:
 
-- `scaleTimeRange` dělá **konstantní** změnu rychlosti. Plynulá křivka = segmentace nebo vlastní compositor.
+- `scaleTimeRange` dělá **konstantní** změnu rychlosti. Plynulá křivka = **segmentace, a nic jiného.** `CMTimeMapping` je dvojice `CMTimeRange`, takže mapování je afinní z definice. Vlastní compositor to neřeší: `sourceFrame(byTrackID:)` mu vrátí snímek, který kompozice pro daný `compositionTime` už vybrala, a požádat o jiný zdrojový čas nejde. Compositor je na pixely, ne na čas.
+- `AVVideoComposition.Configuration` **neobsahuje žádné časování** — jen instrukce, transformace, průhlednost, ořez a barvy. S rychlostní křivkou nemá nic společného a nikdy mít nebude. Ať to nikoho příště nemate.
 - Vision **nemá** veřejné API pro otisk obličeje. `VNGenerateFaceCaptureQualityRequest` navíc neexistuje — správně je `VNDetectFaceCaptureQualityRequest`.
 
 ---
@@ -77,7 +78,7 @@ Rozdělení je navržené tak, aby se každý modul dal napsat a otestovat **izo
 | `MediaImporter` | NSOpenPanel, Security-Scoped Bookmarks, sonda formátu | ★★☆☆☆ |
 | `VFRDetector` | Rozpozná variable frame rate čtením délek vzorků | ★★★☆☆ |
 | `ProxyGenerator` | AVAssetReader→Writer, ProRes 422 Proxy, půlrozlišení, VFR→CFR | ★★★☆☆ |
-| `CompositionBuilder` | TimelineModel → `AVVideoComposition.Configuration` | ★★★★☆ |
+| `CompositionBuilder` | TimelineModel → `AVMutableComposition` + `AVMutableVideoComposition` | ★★★★☆ |
 | `PlaybackController` | AVPlayer, seek coalescing, krokování | ★★★☆☆ |
 | `ExportEngine` | AVAssetWriter, VideoToolbox, profily | ★★★☆☆ |
 | `MetalCompositor` | `AVVideoCompositing` + Metal shadery | ★★★★★ |
@@ -148,7 +149,8 @@ Klíčové detaily:
 `SpeedRampEngine` (už máš ze spiku) + `CompositionBuilder` + `SpeedRampEditor` UI.
 
 Klíčové detaily:
-- Stav proti `AVVideoComposition.Configuration`, ne proti deprecated `AVMutableVideoComposition`.
+- **Stav proti `AVMutableVideoComposition`.** Je deprecated od macOS 26, ale `AVVideoComposition.Configuration` je `@available(macOS 26.0, *)` a deployment target je 14.0 — na macOS 14–25 by ti appka s `Configuration` spadla při startu. Warning umlč cíleně u konkrétního volání (`@available(macOS, deprecated:)` obálka nebo lokální `#pragma`/diagnostic push), **ne globálním vypnutím deprecation warningů** — to bys přišel o varování u všeho ostatního.
+- **Rychlostní křivku dělej segmentací.** Vlastní compositor ti s časováním nepomůže (viz sekce 1) — má smysl jen pro efekty a Metal. Segmenty ti spočítá `SpeedRampEngine.segments(outputFrameRate:framesPerSegment:)`.
 - Na klipech bez efektu nastav **`passthroughTrackID`** — compositor se pro ně vůbec nespustí. Zadarmo získaný výkon.
 - Pokud tvoje instrukce potřebuje volání pro každý snímek, nastav **`containsTweening = true`**. Tohle je vysvětlení „vynechaných snímků", na které lidé naráží a hlásí je jako bug — AVFoundation správně přeskakuje volání, když ví, že by výstup byl identický.
 - Pro náhled nastav **`renderScale < 1.0`**. Největší jediný výkonový zisk u 4K. Funguje jen na `AVPlayerItem`, export renderuje vždy plně.
@@ -234,6 +236,14 @@ Nepoužívej `SwiftWhisper` — je zamrzlý na whisper.cpp z jara 2023 a nemá M
 ### FÁZE 9 — Distribuce (3 týdny) → **v1.0**
 
 Developer ID, hardened runtime, `notarytool`, `stapler`, Sparkle, licencování, freemium limit 3 minuty.
+
+**+ Migrace kompozice na `AVVideoComposition.Configuration`.** Tohle je jediné místo, kam ten úkol patří — ne dřív.
+
+- `CompositionBuilder` dostane dvě větve pod `if #available(macOS 26.0, *)`: novou přes `AVVideoComposition(configuration:)`, starou přes `AVMutableVideoComposition`. Obě za jedním vlastním rozhraním, ať se to nerozlézá po kódu.
+- Totéž pro `AVVideoCompositionInstruction.Configuration` a `AVVideoCompositionLayerInstruction.Configuration`.
+- **Starou větev nesmíš smazat**, dokud je deployment target 14.0. Motivace je odklidit warningy a být připravený na den, kdy Apple API opravdu odstraní — ne zbavit se funkčního kódu.
+- Napsat se to musí dvakrát, ale jen jednou a na jednom místě. Odhad: 2–3 dny, ne týden.
+- **Netýká se speed rampingu.** `Configuration` časování neobsahuje, segmentace zůstane beze změny.
 
 **Korekce specifikace:** stahování modelů za běhu **není** překážkou pro Mac App Store. FreeChat (7,9 MB, stahuje GGUF), Whisper Mate i Whisper Transcription tam takhle běží dnes. Apple DTS to potvrdil.
 
@@ -324,7 +334,7 @@ Fixní testovací sada od fáze 1: 4K/60 CFR, 4K/30 VFR z mobilu, 120fps slow-mo
 |---|---|---|
 | AppKit timeline | Fáze 2 | Přepis z SwiftUI později = týdny |
 | Jedna časová základna projektu | Fáze 1 | Prorůstá vším |
-| `AVVideoComposition.Configuration` | Fáze 3 | Nezačínej na deprecated API |
+| `AVMutableVideoComposition` jako hlavní cesta | Fáze 3 | `Configuration` na macOS 14–25 neexistuje |
 | VFR→CFR v proxy | Fáze 4 | Mění datový model |
 | `AVAssetWriter` místo ExportSession | Fáze 5 | Jinak přepisuješ export |
 

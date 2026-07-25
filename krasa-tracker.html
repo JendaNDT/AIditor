@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Projekt Krása — Tracker</title>
+<style>
+:root{
+  --bg:#0e1116; --bg2:#151a22; --bg3:#1c232e; --line:#28313d;
+  --tx:#e6ebf2; --tx2:#93a1b4; --tx3:#5e6b7d;
+  --ok:#3fb950; --warn:#d29922; --dan:#f0596b; --acc:#5a9ff5; --acc2:#a371f7;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--tx);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  padding:32px 20px 80px; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px;margin:0 auto}
+
+header{margin-bottom:28px}
+h1{font-size:29px;font-weight:650;letter-spacing:-.4px}
+.sub{color:var(--tx2);font-size:14px;margin-top:5px}
+
+/* progress */
+.bar-wrap{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:22px 0 30px}
+.bar-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.bar-lbl{font-size:13px;color:var(--tx2);text-transform:uppercase;letter-spacing:.9px;font-weight:600}
+.bar-num{font-size:26px;font-weight:680;font-variant-numeric:tabular-nums}
+.bar{height:9px;background:var(--bg3);border-radius:99px;overflow:hidden}
+.bar>i{display:block;height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .45s cubic-bezier(.4,0,.2,1)}
+.milestones{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.ms{font-size:11.5px;padding:4px 10px;border-radius:99px;background:var(--bg3);color:var(--tx3);
+  border:1px solid var(--line);font-weight:600;letter-spacing:.3px}
+.ms.done{background:rgba(63,185,80,.12);color:var(--ok);border-color:rgba(63,185,80,.35)}
+
+/* tabs */
+.tabs{display:flex;gap:4px;margin-bottom:22px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tab{background:none;border:none;color:var(--tx3);font:inherit;font-size:14px;font-weight:600;
+  padding:10px 16px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:.15s}
+.tab:hover{color:var(--tx2)}
+.tab.on{color:var(--tx);border-bottom-color:var(--acc)}
+.pane{display:none}.pane.on{display:block}
+
+/* phase */
+.ph{background:var(--bg2);border:1px solid var(--line);border-radius:13px;margin-bottom:11px;overflow:hidden;transition:.2s}
+.ph.open{border-color:#39445270}
+.ph-h{display:flex;align-items:center;gap:13px;padding:15px 18px;cursor:pointer;user-select:none}
+.ph-h:hover{background:#ffffff05}
+.chev{color:var(--tx3);font-size:11px;transition:transform .2s;width:10px;flex:none}
+.ph.open .chev{transform:rotate(90deg)}
+.tag{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:var(--bg3);
+  color:var(--tx2);letter-spacing:.6px;flex:none;font-variant-numeric:tabular-nums}
+.ph-t{font-weight:600;flex:1;min-width:0}
+.ph-meta{font-size:12.5px;color:var(--tx3);flex:none;font-variant-numeric:tabular-nums}
+.mini{width:52px;height:5px;background:var(--bg3);border-radius:99px;overflow:hidden;flex:none}
+.mini>i{display:block;height:100%;width:0;background:var(--ok);transition:width .35s}
+.ph-b{padding:2px 18px 16px 41px;display:none}
+.ph.open .ph-b{display:block}
+.note{font-size:13.5px;color:var(--tx2);margin:6px 0 13px;padding:11px 13px;background:#ffffff06;
+  border-left:2px solid var(--acc);border-radius:0 7px 7px 0}
+.note b{color:var(--tx);font-weight:600}
+.dm{font-size:12.5px;color:var(--tx3);margin-top:12px;padding-top:11px;border-top:1px solid var(--line)}
+.dm b{color:var(--tx2)}
+
+/* task */
+.t{display:flex;gap:10px;align-items:flex-start;padding:6px 0;cursor:pointer}
+.t:hover .cb{border-color:var(--tx3)}
+.cb{width:17px;height:17px;border:1.5px solid #3a4553;border-radius:5px;flex:none;margin-top:2px;
+  display:grid;place-items:center;transition:.15s}
+.cb::after{content:'';width:8px;height:4.5px;border-left:2px solid #fff;border-bottom:2px solid #fff;
+  transform:rotate(-45deg) scale(0);transition:transform .15s;margin-top:-2px}
+.t.on .cb{background:var(--ok);border-color:var(--ok)}
+.t.on .cb::after{transform:rotate(-45deg) scale(1)}
+.t span{font-size:14px;transition:.15s}
+.t.on span{color:var(--tx3);text-decoration:line-through}
+
+/* gate */
+.gate{background:linear-gradient(135deg,rgba(240,89,107,.07),rgba(210,153,34,.05));
+  border:1px solid rgba(240,89,107,.3);border-radius:13px;padding:17px 20px;margin-bottom:11px}
+.gate-t{font-weight:680;color:var(--dan);font-size:13px;letter-spacing:.7px;margin-bottom:7px}
+.gate-q{font-size:16px;font-weight:600;margin-bottom:11px;line-height:1.45}
+.gate ul{list-style:none;font-size:13.5px;color:var(--tx2)}
+.gate li{padding:3px 0 3px 17px;position:relative}
+.gate li::before{content:'→';position:absolute;left:0;color:var(--tx3)}
+
+/* table */
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin-bottom:8px}
+th{text-align:left;padding:9px 11px;color:var(--tx3);font-size:11px;text-transform:uppercase;
+  letter-spacing:.8px;border-bottom:1px solid var(--line);font-weight:700}
+td{padding:10px 11px;border-bottom:1px solid #1f2731;vertical-align:top}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#ffffff04}
+.st{color:var(--warn);letter-spacing:1px;white-space:nowrap;font-size:12px}
+.st.x5{color:var(--dan)}
+.st.x1,.st.x2{color:var(--ok)}
+code{background:var(--bg3);padding:1.5px 6px;border-radius:5px;font-size:12.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#9fc9ff}
+
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:13px;padding:19px 21px;margin-bottom:13px}
+.card h3{font-size:15px;font-weight:650;margin-bottom:11px;display:flex;align-items:center;gap:9px}
+.dot{width:7px;height:7px;border-radius:99px;flex:none}
+.card p{font-size:13.5px;color:var(--tx2);margin-bottom:9px}
+.card p:last-child{margin-bottom:0}
+.card strong{color:var(--tx);font-weight:600}
+
+.tools{display:flex;gap:9px;margin-top:26px;flex-wrap:wrap}
+.btn{background:var(--bg3);border:1px solid var(--line);color:var(--tx2);font:inherit;font-size:13px;
+  font-weight:600;padding:9px 16px;border-radius:9px;cursor:pointer;transition:.15s}
+.btn:hover{background:#242d3a;color:var(--tx);border-color:#3a4553}
+.out{margin-top:13px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:13px;
+  font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--tx2);white-space:pre-wrap;display:none}
+.out.on{display:block}
+footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);color:var(--tx3);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Projekt Krása</h1>
+  <div class="sub">Implementační tracker · nativní macOS videoeditor · režim 30+ h týdně</div>
+</header>
+
+<div class="bar-wrap">
+  <div class="bar-top">
+    <span class="bar-lbl">Postup k v1.0</span>
+    <span class="bar-num" id="pct">0 %</span>
+  </div>
+  <div class="bar"><i id="fill"></i></div>
+  <div class="milestones" id="miles"></div>
+</div>
+
+<div class="tabs">
+  <button class="tab on" data-p="p1">Fáze</button>
+  <button class="tab" data-p="p2">Moduly</button>
+  <button class="tab" data-p="p3">Korekce specifikace</button>
+  <button class="tab" data-p="p4">Nejisté</button>
+</div>
+
+<div class="pane on" id="p1"></div>
+
+<div class="pane" id="p2">
+  <div class="card">
+    <h3><span class="dot" style="background:var(--ok)"></span>Vrstva 1 — Čistá logika</h3>
+    <p>Žádné Apple frameworky, plně testovatelné. <strong>Bezpečná zóna — piš sem co nejvíc.</strong></p>
+    <table><thead><tr><th>Modul</th><th>Co dělá</th><th>Obtížnost</th></tr></thead><tbody>
+      <tr><td><code>SpeedRampEngine</code></td><td>Mapování časů, Bézier</td><td class="st x2">★★☆☆☆</td></tr>
+      <tr><td><code>ProjectModel</code></td><td>Struktury projektu, Codable</td><td class="st x1">★☆☆☆☆</td></tr>
+      <tr><td><code>TimelineModel</code></td><td>Stopy, klipy, split/trim/ripple</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>UndoStack</code></td><td>Historie změn</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>ShotPlanModel</code></td><td>Svatební checklist</td><td class="st x1">★☆☆☆☆</td></tr>
+      <tr><td><code>ClusterEngine</code></td><td>DBSCAN (až fáze 11)</td><td class="st">★★★☆☆</td></tr>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--warn)"></span>Vrstva 2 — Média</h3>
+    <table><thead><tr><th>Modul</th><th>Co dělá</th><th>Obtížnost</th></tr></thead><tbody>
+      <tr><td><code>MediaImporter</code></td><td>NSOpenPanel, bookmarks, sonda</td><td class="st x2">★★☆☆☆</td></tr>
+      <tr><td><code>VFRDetector</code></td><td>Rozpozná proměnlivé snímkování</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>ProxyGenerator</code></td><td>ProRes Proxy, půlrozlišení, VFR→CFR</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>CompositionBuilder</code></td><td>Model → AVVideoComposition.Configuration</td><td class="st">★★★★☆</td></tr>
+      <tr><td><code>PlaybackController</code></td><td>AVPlayer, seek coalescing</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>ExportEngine</code></td><td>AVAssetWriter, VideoToolbox</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>MetalCompositor</code></td><td>AVVideoCompositing + shadery</td><td class="st x5">★★★★★</td></tr>
+      <tr><td><code>AudioEngine</code></td><td>32-bit float, LUFS, pitch</td><td class="st">★★★★☆</td></tr>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--acc)"></span>Vrstva 3 — UI</h3>
+    <p><strong>Timeline v AppKitu, zbytek v SwiftUI.</strong> SwiftUI nemá recyklaci buněk, nedá viditelnost do drag session a nad tisíci prvky se seká. Riverside Studio má SwiftUI chrome + samostatný C++/Metal timeline engine. Recut je celý AppKit.</p>
+    <table><thead><tr><th>Modul</th><th>Technologie</th></tr></thead><tbody>
+      <tr><td><code>TimelineView</code></td><td><strong>AppKit</strong> — NSView v NSScrollView, CALayer</td></tr>
+      <tr><td><code>PlayerView</code></td><td>AppKit v NSViewRepresentable</td></tr>
+      <tr><td><code>SpeedRampEditor</code></td><td>AppKit (kreslení křivky)</td></tr>
+      <tr><td>Panely, inspektor, asistent</td><td>SwiftUI</td></tr>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--dan)"></span>Vrstva 4 — AI (až za v1.0)</h3>
+    <table><thead><tr><th>Modul</th><th>Co dělá</th><th>Obtížnost</th></tr></thead><tbody>
+      <tr><td><code>SceneDetector</code></td><td>Detekce střihů</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>QualityFilter</code></td><td>Rozostření, kvalita záběru</td><td class="st x2">★★☆☆☆</td></tr>
+      <tr><td><code>TranscriptionEngine</code></td><td>WhisperKit</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>FaceEmbedder</code></td><td>AuraFace přes Core ML</td><td class="st x5">★★★★★</td></tr>
+    </tbody></table>
+  </div>
+</div>
+
+<div class="pane" id="p3"></div>
+
+<div class="pane" id="p4">
+  <div class="card">
+    <h3><span class="dot" style="background:var(--warn)"></span>Kde stojíš na měkkém</h3>
+    <p>Poctivě — tohle nikdo neověřil, ani já.</p>
+    <p>• <strong>Nikdo nikdy nepublikoval benchmark vlastního <code>AVVideoCompositing</code> držícího 4K/60 náhled.</strong> Ani pozitivní, ani negativní. Proto je Spike 0 fáze nula a ne příprava.</p>
+    <p>• Ze čtyř komerčních macOS video appek, jejichž binárky šly rozebrat, <strong>žádná nekompozituje přes AVVideoComposition</strong> — všechny mají vlastní engine. Může to znamenat, že to nestačí, nebo že chtěly Windows. Nevíme.</p>
+    <p>• Odhady časů jsou moje, ne měřené. Násobek 1,7 je odhad odhadu.</p>
+    <p>• Zda <code>AVAssetWriter</code> s ProRes Proxy skutečně zapne hardwarový engine, nejde přes API zjistit. Změř to.</p>
+    <p>• Rychlost Whisperu na bezventilátorovém Airu — všechna publikovaná čísla jsou z aktivně chlazených strojů. Počítej s horším koncem rozsahu.</p>
+    <p>• Zda <code>SpeechAnalyzer</code> opravdu nezná češtinu, ověř pěti řádky na reálném macOS 26: <code>SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier:"cs_CZ"))</code></p>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--dan)"></span>Plán B</h3>
+    <p>Není to selhání, je to jiný produkt.</p>
+    <p><strong>„Krása Ramp"</strong> — jedna mini-appka. Nahodíš klip, nakreslíš křivku, exportuješ. Fáze 0–1, 3, 5 bez timeline. Zhruba 6 týdnů místo 6 měsíců. Prodejné za 490 Kč. Dokončitelné.</p>
+    <p><strong>„Svatební asistent"</strong> — checklist, záběrový plán, kalkulace dat a baterek jako PWA v Reactu, který umíš. Pár dnů. Ověří niku bez řádky Swiftu.</p>
+    <p>Obojí jde postavit i <strong>vedle</strong> hlavního projektu jako pojistka.</p>
+  </div>
+</div>
+
+<div class="tools">
+  <button class="btn" id="bExp">Zkopírovat stav do PROJECT_STATUS.md</button>
+  <button class="btn" id="bAll">Rozbalit vše</button>
+  <button class="btn" id="bRst">Vynulovat</button>
+</div>
+<div class="out" id="out"></div>
+
+<footer>
+  Projekt Krása · implementační tracker v1.0 · 25. 7. 2026<br>
+  Stav se neukládá mezi načteními — po práci klikni na „Zkopírovat stav" a vlož ho do <code>PROJECT_STATUS.md</code>.
+</footer>
+
+</div>
+<script>
+const PH=[
+ {id:0,tag:"F0",t:"Spike — funguje speed ramp vůbec?",w:"1 týden",v:"",
+  note:"Zadání v <b>SPIKE_0.md</b>. Nezkracuj ho. Odpadní kód, který odpoví na jednu otázku.",
+  dm:"<b>Hotovo když:</b> máš vyplněnou tabulku sedmi kritérií.",
+  ts:["Xcode + git init + první commit","Testovací sada: 4K/60 CFR, 4K/30 VFR, 120fps, klip s češtinou","Prompt 0 — ověření API, žádný kód","Přehrání klipu, krokování po snímcích","Konstantní zpomalení 0,5× + export","Plynulý ramp 1,0 → 0,25 → 1,0","Změřit: synchron, lupance, fps náhledu, čas exportu"]},
+ {id:1,tag:"F1",t:"Kostra a přehrávač",w:"2 týdny",v:"v0.1",
+  note:"<b>VFRDetector musí existovat hned.</b> Apple nemá API, které řekne „tohle je VFR\" — musíš číst délky vzorků a hledat rozptyl. Bez toho ti mobilní klipy tiše rozjedou zvuk v celém projektu.",
+  dm:"<b>Hotovo když:</b> otevřeš 4K/60 klip, krokuješ po snímcích, appka řekne CFR/VFR a snímkovou frekvenci.",
+  ts:["Xcode projekt, sandbox entitlements","MediaImporter + Security-Scoped Bookmarks","PlaybackController — seek dle QA1820 se zero tolerance","Seek coalescing: chaseTime + isSeekInProgress","VFRDetector","Krokování po snímcích, J/K/L"]},
+ {id:2,tag:"F2",t:"Timeline",w:"4–5 týdnů",v:"v0.2",
+  note:"<b>Nejtěžší UI v celém projektu.</b> Nepodceňuj to. Nejdřív TimelineModel s testy, teprve pak view.",
+  dm:"<b>Hotovo když:</b> naimportuješ 10 klipů, poskládáš, rozstřihneš, přetáhneš, zazoomuješ — a je to plynulé.",
+  ts:["TimelineModel — čistá logika + unit testy","Operace: split, trim, ripple delete","NSView v NSScrollView, klipy jako CALayer","Pravítko a hlavičky stop synced přes NSViewBoundsDidChangeNotification","Waveformy předrenderované do CGImage dlaždic per zoom","Drag & drop klipů, snapping","Zoom časové osy"]},
+ {id:3,tag:"F3",t:"Speed ramping ostrý",w:"3 týdny",v:"v0.3",
+  note:"Stav proti <code>AVVideoComposition.Configuration</code>, <b>ne</b> proti deprecated <code>AVMutableVideoComposition</code>.",
+  dm:"<b>Hotovo když:</b> nakreslíš křivku myší, náhled ji ukáže, zvuk drží.",
+  ts:["CompositionBuilder → AVVideoComposition.Configuration","passthroughTrackID na klipech bez efektu","containsTweening = true tam, kde potřebuješ volání per snímek","renderScale < 1.0 pro náhled","SpeedRampEditor — kreslení uzlů a křivky","AVAudioUnitTimePitch — korekce výšky hlasu"]},
+ {id:4,tag:"F4",t:"Proxy a výkon",w:"2 týdny",v:"v0.4",
+  note:"<b>Jedno rozhodnutí, tři problémy.</b> Zploštění VFR→CFR při generování proxy vyřeší proměnlivé snímkování, drahé seekování v dlouhých GOP a nespolehlivou identitu snímků najednou.",
+  dm:"<b>Hotovo když:</b> 200GB projekt se stříhá plynule a proxy jde generovat na externí disk.",
+  ts:["ProxyGenerator přes AVAssetReader → AVAssetWriter","ProRes 422 Proxy ('apco') v POLOVIČNÍM rozlišení","VFR → CFR při generování","Jedna časová základna projektu","Proxy na externí disk se security-scoped bookmarkem","Odhad místa při importu + varování","Profilování v Instruments"]},
+ {id:5,tag:"F5",t:"Projekt a export",w:"3 týdny",v:"v0.5 — MVP NULA",
+  note:"Export přes <code>AVAssetWriter</code>. <code>AVAssetExportSession</code> ignoruje <code>frameDuration</code> — kompozice, která hraje v 60 fps, se vyexportuje ve 30.",
+  dm:"<b>Hotovo když:</b> projekt přežije pád appky. Testuj <b>reálným</b> vypnutím napájení uprostřed exportu.",
+  ts:["ProjectModel + .projektkrasa document bundle","JSON schéma project.json, MediaIndex.json","Autosave + zálohy","UndoStack","ExportEngine přes AVAssetWriter","Profily exportu 1080p / 4K, H.264 / HEVC","Test: vypnutí napájení uprostřed exportu"]},
+ {id:6,tag:"F6",t:"Svatební asistent",w:"2 týdny",v:"v0.6",
+  note:"<b>Nejlevnější odlišení v celém produktu.</b> Čistý SwiftUI, žádné médiové API, žádné riziko — a jediná věc, kterou DaVinci ani CapCut nemají.",
+  dm:"",
+  ts:["ShotPlanModel","Interaktivní checklist: Přípravy → Obřad → Hostina → První tanec","Záběrový plán se zvýrazněním nepoužitých povinných záběrů","BPM detekce hudební stopy","Beat-markery na časové ose + přichytávání střihů"]},
+ {id:7,tag:"F7",t:"Audio engine",w:"3 týdny",v:"v0.7",
+  note:"Profily hlasitosti dle opravy ve specifikaci: <b>Web/sociální sítě −14 LUFS</b> (výchozí), <b>Vysílání −23 LUFS</b>.",
+  dm:"",
+  ts:["32-bit float přes AVAudioEngine","Gain bez zkreslení u přebuzených záznamů","LUFS normalizace — dva profily","Cross-korelační sync přes FFT","Odšumění"]},
+ {id:8,tag:"F8",t:"Titulky",w:"2 týdny",v:"v0.8",
+  note:"<b>WhisperKit, ne holý whisper.cpp.</b> Repo <code>github.com/argmaxinc/argmax-oss-swift</code>, MIT, Swift async API, stahuje modely samo. Whisper.cpp nemá v repu <code>Package.swift</code> — musel bys psát Swift↔C lepidlo. <b>Model: large-v3-turbo.</b>",
+  dm:"",
+  ts:["WhisperKit přes SPM","Stahování modelu on-demand do Application Support","Volba velikosti modelu v nastavení","Titulková stopa s časovými razítky","Export titulků + vypálené titulky"]},
+ {id:9,tag:"F9",t:"Distribuce",w:"3 týdny",v:"v1.0",
+  note:"<b>Korekce specifikace:</b> stahování modelů za běhu <b>není</b> překážkou pro Mac App Store — FreeChat i Whisper Mate tam takhle běží. Co appky vyhazuje, je Accessibility API pro vkládání textu do cizích aplikací. To nedělej.",
+  dm:"<b>Apple Developer Program:</b> 99 USD/rok, pokrývá MAS i Developer ID.",
+  ts:["Developer ID + hardened runtime","notarytool + stapler","Sparkle auto-updater","Licencování + freemium limit 3 minuty","Web, landing page, platební brána","Základní přístupnost: VoiceOver labely, klávesová navigace"]},
+ {id:10,tag:"F10",t:"AI analýza scén",w:"2 týdny",v:"v1.1",
+  note:"<b>Bezpečná AI</b> — žádná biometrika, žádné právní riziko, žádné licenční problémy.",
+  dm:"Pozor na správný název: <code>VNDetectFaceCaptureQualityRequest</code>, ne <code>VNGenerate…</code>",
+  ts:["SceneDetector — histogramy přes Vision","QualityFilter — rozostření, roztřesení, zakrytý objektiv","Generátor 48h teaseru","Chytré kolekce v knihovně"]},
+ {id:11,tag:"F11",t:"Rozpoznávání obličejů — PODMÍNĚNÁ",w:"8–12 týdnů",v:"v1.2",
+  note:"<b>Tohle není funkce, je to projekt uvnitř projektu.</b> Ente na tom pracovalo 21 měsíců s placeným týmem. Můj názor: odlož a zvaž, že to neuděláš nikdy — 80 % hodnoty dá detekce scén a ruční tagování za zlomek nákladů a s nulovým právním rizikem.",
+  dm:"<b>Známé limity:</b> ~20bodový propad přesnosti u východoasijských obličejů (čísla od výrobce modelu) a známý problém s dětmi.",
+  ts:["GATE 1: právní konzultace — Annex III(1)(a) post-RBI?","GATE 2: jen AuraFace-v1 (Apache 2.0), stáhnout POUZE glintr100.onnx","GATE 3: chtěl to aspoň jeden platící zákazník?","Vlastní zarovnání (Vision nemá špičku nosu)","AuraFace → Core ML mlprogram fp16","L2 normalizace ve Swiftu + cosine přes cblas_sgemm","DBSCAN psaný od nuly (ve Swiftu neexistuje)","UI pro ruční slučování a rozdělování skupin","GDPR opatření ze sekce 11 specifikace"]}
+];
+const GATES={5:{t:"KILL-GATE 1",q:"Sestříhej touhle appkou celou reálnou svatbu. Od začátku do konce. Bez cheatů.",
+  li:["Zvládl jsi to a nebylo to utrpení → pokračuj fází 6","Zvládl jsi to, ale bolelo to → 3 týdny jen na opravy, žádné nové funkce","Nezvládl jsi to → zastav a zúži produkt. Nejdůležitější rozhodnutí v plánu."]},
+ 9:{t:"KILL-GATE 2",q:"Prodej to. Deseti lidem, kteří tě neznají.",
+  li:["Prodáš → fáze 10","Neprodáš, ale víš proč → oprav to, nestavěj AI","Neprodáš a nikdo neví proč → problém je v pozicování. Žádná AI to nespraví."]}};
+const FIX=[
+ ["1","<b>AVMutableVideoComposition je od macOS 26 deprecated.</b> Náhrada <code>AVVideoComposition.Configuration</code>.","Píšeš proti nové API hned. Nemá smysl začínat na mrtvé větvi."],
+ ["2","<b>Whisper-small je pro češtinu nepoužitelný</b> — 34–38 % WER, každé třetí slovo špatně.","Model se mění na <b>large-v3-turbo</b> (~13 % WER, stejná velikost jako medium, násobně rychlejší)."],
+ ["3","<b>SpeechAnalyzer češtinu nepodporuje.</b> V seznamu 42 locale není <code>cs_CZ</code> ani <code>pl_PL</code>.","Sekce 4.3.1 specifikace se ruší. Whisper je jediná cesta, ne dočasné řešení."],
+ ["4","<b>Modely pro rozpoznávání obličejů jsou z velké části komerčně zakázané.</b> InsightFace, ArcFace, buffalo_l: „non-commercial research purposes only\".","Face grouping se odsouvá za v1.0. Jediný čistý model je AuraFace-v1 (Apache 2.0)."],
+ ["5","<b>EU AI Act: výjimka pro osobní použití nechrání tebe.</b> Čl. 2(10) je výslovně jen pro deployera, ne pro dodavatele software.","Face grouping dostává právní gate. Termín po Digital Omnibus: 2. 12. 2027."],
+ ["6","<b>MacBook Air M4 má hardwarový ProRes engine.</b> Chyběl jen základnímu M1.","Proxy workflow v ProRes 422 Proxy je na tvém stroji reálný. Jedna obava padá."],
+ ["7","<b>AVAssetExportSession ignoruje frameDuration.</b> Kompozice hrající v 60 fps se vyexportuje ve 30.","Export se od začátku píše přes <code>AVAssetWriter</code>."],
+ ["+","<code>scaleTimeRange</code> dělá <b>konstantní</b> změnu rychlosti. Vision <b>nemá</b> veřejné API pro otisk obličeje. <code>VNGenerateFaceCaptureQualityRequest</code> neexistuje.","Zjištění z minulé session, stále platná."]
+];
+
+const S={};PH.forEach(p=>S[p.id]=new Set());
+const el=id=>document.getElementById(id);
+
+function build(){
+  let h='';
+  PH.forEach(p=>{
+    h+=`<div class="ph" data-id="${p.id}">
+      <div class="ph-h"><span class="chev">▶</span><span class="tag">${p.tag}</span>
+        <span class="ph-t">${p.t}</span>
+        <span class="mini"><i data-m="${p.id}"></i></span>
+        <span class="ph-meta" data-c="${p.id}">0/${p.ts.length}</span>
+        <span class="ph-meta">${p.w}</span></div>
+      <div class="ph-b">
+        ${p.note?`<div class="note">${p.note}</div>`:''}
+        ${p.ts.map((t,i)=>`<div class="t" data-p="${p.id}" data-i="${i}"><span class="cb"></span><span>${t}</span></div>`).join('')}
+        ${p.dm?`<div class="dm">${p.dm}</div>`:''}
+      </div></div>`;
+    if(GATES[p.id]){const g=GATES[p.id];
+      h+=`<div class="gate"><div class="gate-t">${g.t}</div><div class="gate-q">${g.q}</div>
+        <ul>${g.li.map(x=>`<li>${x}</li>`).join('')}</ul></div>`;}
+  });
+  el('p1').innerHTML=h;
+
+  el('p3').innerHTML=`<div class="card"><h3><span class="dot" style="background:var(--acc2)"></span>Co se změnilo oproti specifikaci v2.0</h3>
+    <p>Rešerše z 25. 7. 2026 našla sedm věcí, které mění návrh. Řazeno podle dopadu.</p></div>
+    <table><thead><tr><th style="width:28px">#</th><th>Zjištění</th><th>Dopad na plán</th></tr></thead><tbody>
+    ${FIX.map(f=>`<tr><td style="color:var(--tx3);font-weight:700">${f[0]}</td><td>${f[1]}</td><td style="color:var(--tx2)">${f[2]}</td></tr>`).join('')}
+    </tbody></table>`;
+}
+
+function upd(){
+  let d=0,tt=0;
+  PH.forEach(p=>{
+    const n=S[p.id].size,m=p.ts.length;d+=n;tt+=m;
+    document.querySelector(`[data-c="${p.id}"]`).textContent=`${n}/${m}`;
+    document.querySelector(`[data-m="${p.id}"]`).style.width=(n/m*100)+'%';
+  });
+  const pc=Math.round(d/tt*100);
+  el('pct').textContent=pc+' %';el('fill').style.width=pc+'%';
+  el('miles').innerHTML=PH.filter(p=>p.v).map(p=>{
+    const done=S[p.id].size===p.ts.length;
+    return `<span class="ms${done?' done':''}">${p.v}</span>`;}).join('');
+}
+
+build();upd();
+
+el('p1').addEventListener('click',e=>{
+  const t=e.target.closest('.t');
+  if(t){const p=+t.dataset.p,i=+t.dataset.i;
+    S[p].has(i)?S[p].delete(i):S[p].add(i);
+    t.classList.toggle('on');upd();return;}
+  const hd=e.target.closest('.ph-h');
+  if(hd)hd.parentElement.classList.toggle('open');
+});
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');el(b.dataset.p).classList.add('on');});
+
+el('bAll').onclick=()=>{const any=document.querySelector('.ph:not(.open)');
+  document.querySelectorAll('.ph').forEach(p=>p.classList.toggle('open',!!any));
+  el('bAll').textContent=any?'Sbalit vše':'Rozbalit vše';};
+el('bRst').onclick=()=>{PH.forEach(p=>S[p.id].clear());
+  document.querySelectorAll('.t').forEach(t=>t.classList.remove('on'));
+  el('out').classList.remove('on');upd();};
+el('bExp').onclick=()=>{
+  let s='## ⏭️ Postup podle implementačního plánu\n';
+  let cur=null;
+  PH.forEach(p=>{
+    const n=S[p.id].size,m=p.ts.length;
+    const ico=n===m?'✅':n>0?'🔄':'⬜';
+    s+=`\n${ico} **${p.tag} — ${p.t}** (${n}/${m})`;
+    if(n>0&&n<m&&!cur)cur=p;
+    if(n>0&&n<m)p.ts.forEach((t,i)=>{if(!S[p.id].has(i))s+=`\n   - [ ] ${t}`;});
+  });
+  if(!cur)cur=PH.find(p=>S[p.id].size===0);
+  if(cur){const nx=cur.ts.find((t,i)=>!S[cur.id].has(i));
+    s=`## ⏭️ Příští krok\n**${nx}**\n_(${cur.tag} — ${cur.t})_\n\n`+s;}
+  el('out').textContent=s;el('out').classList.add('on');
+  navigator.clipboard&&navigator.clipboard.writeText(s).then(
+    ()=>el('bExp').textContent='Zkopírováno ✓',()=>{}).finally(
+    ()=>setTimeout(()=>el('bExp').textContent='Zkopírovat stav do PROJECT_STATUS.md',2000));
+};
+</script>
+</body>
+</html>

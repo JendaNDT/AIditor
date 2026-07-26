@@ -1,0 +1,20 @@
+# Co se na kterém klipu točilo.
+#
+# Tenhle soubor se edituje RUČNĚ. MediaProbe ho načte a poznámky vloží
+# do RESULTS.md — ten je generovaný, psát do něj přímo nemá smysl.
+#
+# Formát: nazev_souboru = poznámka
+# Prázdné řádky a řádky od # se ignorují.
+
+20260725_202947.mp4 = 4K/60 (naměřeno 59,68 fps), 44,9 s — ⚠ DOPLŇ co je na záběru
+20260725_203452.mp4 = 4K/30 (naměřeno 30,01 fps), 38,6 s — ⚠ DOPLŇ co je na záběru
+20260725_203813.mp4 = 120fps slow-mo (naměřeno 120,00 fps), 11,4 s — ⚠ DOPLŇ co je na záběru
+20260725_203901.mp4 = 4K/60 (naměřeno 60,00 fps), 31,7 s — ⚠ DOPLŇ co je na záběru
+20260725_204045.mp4 = 4K/60 (naměřeno 60,00 fps), 31,6 s — ⚠ DOPLŇ co je na záběru
+
+# ⚠ Nevyplněné: který klip má mluvenou češtinu a který má tlesknutí na
+# začátku a na konci. To z metadat vyčíst nejde — technické parametry výše
+# jsou naměřené, obsah záběru zná jen autor.
+#
+# Klip s tlesknutím je referenční pro kontrolu synchronu zvuku, takže
+# u něj musí být jistota, ne odhad.

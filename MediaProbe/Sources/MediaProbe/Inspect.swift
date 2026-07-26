@@ -15,7 +15,7 @@ enum ClipInspector {
 
     /// Prozkoumá jeden soubor. Chybu nevyhazuje — zabalí ji do výsledku,
     /// aby jeden rozbitý klip nezastavil celou dávku.
-    static func inspect(url: URL) async -> ClipReport {
+    static func inspect(url: URL, note: String? = nil) async -> ClipReport {
         let asset = AVURLAsset(url: url)
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? nil
 
@@ -33,9 +33,10 @@ enum ClipInspector {
                               formatName: url.pathExtension.uppercased(),
                               video: video,
                               audio: audio,
+                              note: note,
                               failure: nil)
         } catch {
-            return .failed(url: url, message: error.localizedDescription)
+            return .failed(url: url, message: error.localizedDescription, note: note)
         }
     }
 

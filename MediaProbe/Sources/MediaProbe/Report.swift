@@ -85,6 +85,7 @@ enum Report {
         var lines: [String] = []
         let size = clip.fileSize.map { " · \(fmt(Double($0) / 1_048_576, 1)) MB" } ?? ""
         lines.append("▸ \(clip.name)  (\(clip.formatName)\(size))")
+        lines.append("  Obsah      \(clip.note ?? "⚠ nevyplněno — doplň do MediaProbe/CLIPS.txt")")
 
         if let failure = clip.failure {
             lines.append("  ✗ Soubor se nepodařilo přečíst: \(failure)")

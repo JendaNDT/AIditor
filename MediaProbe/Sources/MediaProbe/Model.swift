@@ -426,13 +426,15 @@ struct ClipReport {
     let formatName: String
     let video: VideoTrackInfo?
     let audio: AudioTrackInfo?
+    /// Ručně psaná poznámka z CLIPS.txt — co se na klipu točilo.
+    let note: String?
     /// Vyplněné, když se soubor nepodařilo otevřít vůbec.
     let failure: String?
 
     var name: String { url.lastPathComponent }
 
-    static func failed(url: URL, message: String) -> ClipReport {
+    static func failed(url: URL, message: String, note: String? = nil) -> ClipReport {
         ClipReport(url: url, fileSize: nil, duration: .invalid, formatName: "—",
-                   video: nil, audio: nil, failure: message)
+                   video: nil, audio: nil, note: note, failure: message)
     }
 }

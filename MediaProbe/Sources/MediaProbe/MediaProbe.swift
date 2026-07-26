@@ -61,11 +61,19 @@ struct MediaProbe {
         print("MediaProbe — \(files.count) soubor(ů) ve složce \(folder.path)")
         print("Čtou se skutečné délky vzorků, u velkých klipů to chvíli trvá.\n")
 
+        // Poznámky, co se na kterém klipu točilo. RESULTS.md je generovaný,
+        // takže ručně psaný obsah musí přijít odjinud.
+        let notes = ClipNotes.load(from: packageRoot.appendingPathComponent("CLIPS.txt"))
+        if notes.isEmpty {
+            FileHandle.standardError.write(
+                Data("  (CLIPS.txt nenalezen nebo prázdný — poznámky ke klipům budou chybět)\n".utf8))
+        }
+
         var reports: [ClipReport] = []
         for (index, file) in files.enumerated() {
             FileHandle.standardError.write(
                 Data("  [\(index + 1)/\(files.count)] \(file.lastPathComponent)…\n".utf8))
-            reports.append(await ClipInspector.inspect(url: file))
+            reports.append(await ClipInspector.inspect(url: file, note: notes[file.lastPathComponent]))
         }
 
         printConsole(reports: reports)
@@ -157,6 +165,17 @@ struct MediaProbe {
         lines.append("časování je jinak klidné. Nic se ale nezahazuje potichu: okraje mají")
         lines.append("sloupec `Okraje` a vlastní řádek v detailu, zahozené snímky sloupec")
         lines.append("`Zahozeno`. Detail navíc vždy uvádí i číslo se vším dohromady.")
+        lines.append("")
+        lines.append("## Co je na klipech")
+        lines.append("")
+        lines.append("Ručně udržované v `MediaProbe/CLIPS.txt` — názvy souborů jsou časová")
+        lines.append("razítka a obsah záběru z metadat vyčíst nejde.")
+        lines.append("")
+        lines.append("| Soubor | Co se točilo |")
+        lines.append("|---|---|")
+        for report in reports {
+            lines.append("| \(report.name) | \(report.note ?? "⚠ nevyplněno") |")
+        }
         lines.append("")
         lines.append("## Souhrn")
         lines.append("")

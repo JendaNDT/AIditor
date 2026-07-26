@@ -68,12 +68,23 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
   | 120 fps | 0,25× | 0,2× |
   | 240 fps | 0,125× | 0,1× |
 
-- **Nižší výstupní frekvence dává hlubší čisté zpomalení.** 24 fps je navíc běžná volba pro svatební film kvůli filmovému dojmu — **zvážit jako výchozí časovou základnu projektu místo 30 fps.** Ze 120fps zdroje dostaneš 0,2× místo 0,25×, tedy o pětinu hlubší zpomalení zadarmo.
 
 - **Persony to nemají stejně.** [Filip](Projekt_Krasa_Specifikace_Aplikace_v2.html) (primární) točí sám a může se zařídit — jemu limit stačí říct dopředu a on natočí 120 fps. [Alena](Projekt_Krasa_Specifikace_Aplikace_v2.html) (sekundární) skládá film z cizích videí od hostů, typicky 30 fps, a zařídit se nemůže. **Pro ni je duplikace snímků s přiznaným varováním legitimní chování, ne nedodělek** — ale přiznané být musí. Nikdy jí netvrď, že výsledek je plynulý, když není.
 - **Vlastní `AVVideoCompositing` speed ramping neřeší — segmentace je jediná cesta.** Compositor dostane přes `sourceFrame(byTrackID:)` snímek, který kompozice pro daný `compositionTime` **už vybrala**; požádat o jiný zdrojový čas nejde. Časování určuje `CMTimeMapping` stopy, a ten je dvojice `CMTimeRange` — afinní z definice. Compositor je na pixely (efekty, prolínačky, Metal), ne na čas.
 - **Proxy: ProRes 422 Proxy (`'apco'`) v polovičním rozlišení**, a při generování zploštit VFR na CFR.
 - **Jedna časová základna projektu.** Nikdy neodvozuj čísla snímků ze zdrojových časových značek.
+- **Časová základna projektu: 30 fps.** Rozhodnuto 26. 07. 2026.
+  Kandidátem bylo 24 fps, protože dává hlubší čisté zpomalení (ze 120fps zdroje 0,2× místo 0,25×) a je filmovější. **Rozhodl ale převod při NORMÁLNÍ rychlosti**, ne ve zpomalených úsecích:
+
+  | zdroj → základna | poměr | výsledek |
+  |---|---|---|
+  | 60 → 30 | **2:1** | čisté, každý druhý snímek |
+  | 120 → 30 | **4:1** | čisté |
+  | 120 → 24 | 5:1 | čisté |
+  | **60 → 24** | **2,5:1** | ⚠️ nerovnoměrné zahazování, viditelné trhání při panorámování |
+  | 30 → 24 | 1,25:1 | ⚠️ totéž, ještě horší |
+
+  **Naměřené klipy jsou většinou 60 fps.** Při 24 fps by tedy trhaly běžné záběry — a to kvůli výhodě, která se projeví jen ve zpomalených úsecích. Zpomalené záběry jsou menšina stopáže, panorámování ne.
 - **Seek se zero tolerance + coalescing** podle Apple QA1820.
 - **WhisperKit** (`argmaxinc/argmax-oss-swift`), model `large-v3-turbo`. Ne whisper-small — pro češtinu má 34–38 % chybovost.
 - Minimální macOS 14.0 pro běh, novější API runtime gatovaná.

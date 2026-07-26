@@ -20,7 +20,6 @@ Jediné nezměřené kritérium je plynulost náhledu 4K/60 — nešlo změřit,
 Xcode projekt, sandbox entitlements, `MediaImporter`, `PlaybackController`, `VFRDetector`.
 
 ⚠️ **Deployment target nastav ručně na macOS 14.0**, výchozí by byl 26.0.
-⚠️ **Rozhodni časovou základnu projektu: 24 nebo 30 fps.** 24 dá ze 120fps zdroje čisté zpomalení 0,2× místo 0,25× a je filmovější. Měnit později znamená přepočítat všechny projekty.
 ⚠️ `VFRDetector` může vyjít z hotového `ProbeKit` — měřicí jádro už existuje a je ověřené.
 
 První otázka fáze 1, kterou spike zdědil: **utáhne `AVPlayer` náhled 4K/60 klipu?**
@@ -91,7 +90,8 @@ První otázka fáze 1, kterou spike zdědil: **utáhne `AVPlayer` náhled 4K/60
 - **Timeline v AppKitu, zbytek v SwiftUI.** SwiftUI nemá recyklaci buněk ani viditelnost do drag session. Riverside má SwiftUI chrome + samostatný timeline engine, Recut je celý AppKit.
 - **Kompozice přes `AVMutableVideoComposition`** pro spike i MVP. `AVVideoComposition.Configuration` až jako druhá větev před vydáním (fáze 9), runtime gatovaná přes `if #available(macOS 26.0, *)`.
 - **Speed ramping a `Configuration` spolu nesouvisí.** `Configuration` neobsahuje žádné časování — jen instrukce, transformace, průhlednost, ořez, barvy.
-- **Jedna časová základna projektu.** Nikdy neodvozovat čísla snímků ze zdrojových časových značek.
+- **Jedna časová základna projektu, 30 fps.** Nikdy neodvozovat čísla snímků ze zdrojových časových značek.
+  Kandidátem bylo 24 fps kvůli hlubšímu čistému zpomalení, ale **rozhodl převod při normální rychlosti**: 60 → 24 je poměr 2,5:1, tedy nerovnoměrné zahazování snímků a viditelné trhání při panorámování. 60 → 30 je 2:1 a 120 → 30 je 4:1, obojí čisté. Většina klipů je 60 fps, takže 24 by trhalo běžné záběry kvůli výhodě jen ve zpomalených úsecích.
 - **VFR→CFR při generování proxy.** Jedno rozhodnutí řeší tři problémy naráz.
 - **ProRes 422 Proxy v polovičním rozlišení**, ne plném. M4 Air má hardwarový ProRes engine — chyběl jen základnímu M1.
 - **Export přes `AVAssetWriter`.**

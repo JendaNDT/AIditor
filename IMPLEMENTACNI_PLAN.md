@@ -38,7 +38,7 @@ A jedno zjištění z měření ve Spiku 0 (26. 07. 2026), které mění produkt
 
 - **Zpomalení potřebuje dost snímků ve zdroji: `zdrojFps × nejnižšíRychlost ≥ výstupFps`.** Jinak se snímky duplikují a zpomalený úsek trhá. Naměřeno: 120 fps zdroj → 0 % duplikátů, 59,7 fps → 13,5 %, 30,0 fps → 37,5 %. Teorie (`průměr z max(0, 1 − v(t)·zdrojFps/výstupFps)`) sedí na 0,04 %.
   - **Plyne z toho tvrdý limit, ne varování:** `maximální čisté zpomalení = výstupFps / zdrojFps`. Posuvník rychlosti dostane pod tou hranicí **žlutou zónu**. Při výstupu 30 fps: zdroj 60 → 0,5×, 120 → 0,25×, 240 → 0,125×.
-  - **Nižší výstupní frekvence dává hlubší čisté zpomalení.** Při 24 fps: 60 → 0,4×, 120 → 0,2×, 240 → 0,1×. A 24 fps je zároveň běžná volba pro svatební film kvůli filmovému dojmu. **Zvážit jako výchozí časovou základnu projektu místo 30 fps** — je to o pětinu hlubší zpomalení zadarmo. Rozhodnout do fáze 1, protože časová základna prorůstá vším.
+  - **Nižší výstupní frekvence by dala hlubší čisté zpomalení** (při 24 fps: 60 → 0,4×, 120 → 0,2×). **Zvažovalo se a zamítlo:** základna je 30 fps, protože 60 → 24 je poměr 2,5:1 a trhalo by to při panorámování. Viz tabulka v `CLAUDE.md`.
   - **Filipa to řeší, Alenu ne.** Filip točí sám a může se zařídit — jemu stačí limit říct dopředu (a checklist ve fázi 6 mu to řekne). Alena skládá film z cizích videí od hostů na 30 fps a zařídit se nemůže. Pro ni je duplikace s přiznaným varováním **legitimní chování, ne nedodělek** — ale musí být v UI přiznané. Tvrdit jí, že výstup je plynulý, když není, je horší než ta duplikace sama.
 - Vision **nemá** veřejné API pro otisk obličeje. `VNGenerateFaceCaptureQualityRequest` navíc neexistuje — správně je `VNDetectFaceCaptureQualityRequest`.
 
@@ -360,7 +360,7 @@ Fixní testovací sada od fáze 1: 4K/60 CFR, 4K/30 VFR z mobilu, 120fps slow-mo
 |---|---|---|
 | AppKit timeline | Fáze 2 | Přepis z SwiftUI později = týdny |
 | Jedna časová základna projektu | Fáze 1 | Prorůstá vším |
-| **24 nebo 30 fps jako výchozí** | Fáze 1 | 24 dá hlubší čisté zpomalení (0,2× vs 0,25× ze 120fps zdroje) a je to filmovější. Měnit později = přepočítat všechny projekty. |
+| ~~24 nebo 30 fps jako výchozí~~ **✅ 30 fps** | rozhodnuto 26. 07. 2026 | 24 dá hlubší čisté zpomalení, ale 60 → 24 je poměr 2,5:1 = trhání při panorámování. 60 → 30 je 2:1, 120 → 30 je 4:1. Většina zdrojů je 60 fps. |
 | `AVMutableVideoComposition` jako hlavní cesta | Fáze 3 | `Configuration` na macOS 14–25 neexistuje |
 | VFR→CFR v proxy | Fáze 4 | Mění datový model |
 | `AVAssetWriter` místo ExportSession | Fáze 5 | Jinak přepisuješ export |

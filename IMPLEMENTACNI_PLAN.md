@@ -33,6 +33,13 @@ Plus dvě věci z minula, které zůstávají v platnosti:
 
 - `scaleTimeRange` dělá **konstantní** změnu rychlosti. Plynulá křivka = **segmentace, a nic jiného.** `CMTimeMapping` je dvojice `CMTimeRange`, takže mapování je afinní z definice. Vlastní compositor to neřeší: `sourceFrame(byTrackID:)` mu vrátí snímek, který kompozice pro daný `compositionTime` už vybrala, a požádat o jiný zdrojový čas nejde. Compositor je na pixely, ne na čas.
 - `AVVideoComposition.Configuration` **neobsahuje žádné časování** — jen instrukce, transformace, průhlednost, ořez a barvy. S rychlostní křivkou nemá nic společného a nikdy mít nebude. Ať to nikoho příště nemate.
+
+A jedno zjištění z měření ve Spiku 0 (26. 07. 2026), které mění produkt, ne jen kód:
+
+- **Zpomalení potřebuje dost snímků ve zdroji: `zdrojFps × nejnižšíRychlost ≥ výstupFps`.** Jinak se snímky duplikují a zpomalený úsek trhá. Naměřeno: 120 fps zdroj → 0 % duplikátů, 59,7 fps → 13,5 %, 30,0 fps → 37,5 %. Teorie (`průměr z max(0, 1 − v(t)·zdrojFps/výstupFps)`) sedí na 0,04 %.
+  - **Plyne z toho tvrdý limit, ne varování:** `maximální čisté zpomalení = výstupFps / zdrojFps`. Posuvník rychlosti dostane pod tou hranicí **žlutou zónu**. Při výstupu 30 fps: zdroj 60 → 0,5×, 120 → 0,25×, 240 → 0,125×.
+  - **Nižší výstupní frekvence dává hlubší čisté zpomalení.** Při 24 fps: 60 → 0,4×, 120 → 0,2×, 240 → 0,1×. A 24 fps je zároveň běžná volba pro svatební film kvůli filmovému dojmu. **Zvážit jako výchozí časovou základnu projektu místo 30 fps** — je to o pětinu hlubší zpomalení zadarmo. Rozhodnout do fáze 1, protože časová základna prorůstá vším.
+  - **Filipa to řeší, Alenu ne.** Filip točí sám a může se zařídit — jemu stačí limit říct dopředu (a checklist ve fázi 6 mu to řekne). Alena skládá film z cizích videí od hostů na 30 fps a zařídit se nemůže. Pro ni je duplikace s přiznaným varováním **legitimní chování, ne nedodělek** — ale musí být v UI přiznané. Tvrdit jí, že výstup je plynulý, když není, je horší než ta duplikace sama.
 - Vision **nemá** veřejné API pro otisk obličeje. `VNGenerateFaceCaptureQualityRequest` navíc neexistuje — správně je `VNDetectFaceCaptureQualityRequest`.
 
 ---
@@ -156,6 +163,7 @@ Klíčové detaily:
 - Na klipech bez efektu nastav **`passthroughTrackID`** — compositor se pro ně vůbec nespustí. Zadarmo získaný výkon.
 - Pokud tvoje instrukce potřebuje volání pro každý snímek, nastav **`containsTweening = true`**. Tohle je vysvětlení „vynechaných snímků", na které lidé naráží a hlásí je jako bug — AVFoundation správně přeskakuje volání, když ví, že by výstup byl identický.
 - Pro náhled nastav **`renderScale < 1.0`**. Největší jediný výkonový zisk u 4K. Funguje jen na `AVPlayerItem`, export renderuje vždy plně.
+- **`SpeedRampEditor` musí kreslit žlutou zónu pod `výstupFps / zdrojFps`.** Pod tou hranicí se snímky duplikují (viz sekce 1). Limit se počítá per klip ze změřené frekvence zdroje, ne z nominální — `MediaProbe`/`VFRDetector` ji už umí. Uživatel to má vidět při tažení křivky, ne až po exportu.
 
 **Hotovo když:** nakreslíš křivku myší, náhled ji ukáže, zvuk drží.
 
@@ -204,6 +212,18 @@ Ne test, ne ukázka. Reálná zakázka nebo reálná rodinná svatba.
 `ShotPlanModel` + SwiftUI. Checklist, záběrový plán, BPM plánovač.
 
 **Nejlevnější odlišení v celém produktu.** Čistý SwiftUI, žádné médiové API, žádné riziko. Zároveň je to jediná věc, kterou DaVinci ani CapCut nemají.
+
+**Konkrétní obsah, který vypadl z měření ve Spiku 0:** u záběrů, které se typicky zpomalují, musí checklist říct **„toč na 120 fps"**. Jmenovitě:
+
+- hod kyticí
+- první pohled (*first look*)
+- první polibek
+- výměna prstýnků
+- první tanec
+
+Důvod je měřený, ne estetický: ramp na 0,25× při výstupu 30 fps potřebuje zdroj 120 fps, jinak se každý třetí až osmý snímek duplikuje (viz sekce 1). **Tím se ze svatebního asistenta stává zároveň podmínka funkčnosti hlavní funkce produktu**, ne jen odlišovač. Kdo checklist nedodrží, dostane trhaný ramp — a je lepší mu to říct týden před svatbou než po ní.
+
+Tohle je taky argument pro to nedávat asistenta až do fáze 6, kdyby se plán někdy zkracoval: bez něj hlavní funkce tiše nefunguje pro polovinu vstupů.
 
 ---
 
@@ -336,6 +356,7 @@ Fixní testovací sada od fáze 1: 4K/60 CFR, 4K/30 VFR z mobilu, 120fps slow-mo
 |---|---|---|
 | AppKit timeline | Fáze 2 | Přepis z SwiftUI později = týdny |
 | Jedna časová základna projektu | Fáze 1 | Prorůstá vším |
+| **24 nebo 30 fps jako výchozí** | Fáze 1 | 24 dá hlubší čisté zpomalení (0,2× vs 0,25× ze 120fps zdroje) a je to filmovější. Měnit později = přepočítat všechny projekty. |
 | `AVMutableVideoComposition` jako hlavní cesta | Fáze 3 | `Configuration` na macOS 14–25 neexistuje |
 | VFR→CFR v proxy | Fáze 4 | Mění datový model |
 | `AVAssetWriter` místo ExportSession | Fáze 5 | Jinak přepisuješ export |

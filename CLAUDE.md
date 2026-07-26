@@ -44,7 +44,19 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
   | 59,7 fps | 120 (chybí 2×) | 13,5 % |
   | 30,0 fps | 120 (chybí 4×) | 37,5 % |
 
-  Podíl duplikátů = průměr z `max(0, 1 − v(t)·zdrojFps/výstupFps)` přes časovou osu. U zdroje na úrovni výstupu vyjde `1 − průměrná rychlost` = 37,5 %, protože průměrná rychlost klasického rampu je 0,625. **V UI to musí být vidět dopředu** — uživatel má vědět, že tenhle klip na tenhle ramp nemá dost snímků, ne to zjistit až z výsledku.
+  Podíl duplikátů = průměr z `max(0, 1 − v(t)·zdrojFps/výstupFps)` přes časovou osu. U zdroje na úrovni výstupu vyjde `1 − průměrná rychlost` = 37,5 %, protože průměrná rychlost klasického rampu je 0,625.
+
+- **Z toho pravidla plyne LIMIT, ne jen varování: `maximální čisté zpomalení = výstupFps / zdrojFps`.** Posuvník rychlosti má mít pod tou hranicí **žlutou zónu** — uživatel to musí vidět předem, ne zjistit po exportu.
+
+  | zdroj | při výstupu 30 fps | při výstupu 24 fps |
+  |---|---|---|
+  | 60 fps | 0,5× | 0,4× |
+  | 120 fps | 0,25× | 0,2× |
+  | 240 fps | 0,125× | 0,1× |
+
+- **Nižší výstupní frekvence dává hlubší čisté zpomalení.** 24 fps je navíc běžná volba pro svatební film kvůli filmovému dojmu — **zvážit jako výchozí časovou základnu projektu místo 30 fps.** Ze 120fps zdroje dostaneš 0,2× místo 0,25×, tedy o pětinu hlubší zpomalení zadarmo.
+
+- **Persony to nemají stejně.** [Filip](Projekt_Krasa_Specifikace_Aplikace_v2.html) (primární) točí sám a může se zařídit — jemu limit stačí říct dopředu a on natočí 120 fps. [Alena](Projekt_Krasa_Specifikace_Aplikace_v2.html) (sekundární) skládá film z cizích videí od hostů, typicky 30 fps, a zařídit se nemůže. **Pro ni je duplikace snímků s přiznaným varováním legitimní chování, ne nedodělek** — ale přiznané být musí. Nikdy jí netvrď, že výsledek je plynulý, když není.
 - **Vlastní `AVVideoCompositing` speed ramping neřeší — segmentace je jediná cesta.** Compositor dostane přes `sourceFrame(byTrackID:)` snímek, který kompozice pro daný `compositionTime` **už vybrala**; požádat o jiný zdrojový čas nejde. Časování určuje `CMTimeMapping` stopy, a ten je dvojice `CMTimeRange` — afinní z definice. Compositor je na pixely (efekty, prolínačky, Metal), ne na čas.
 - **Proxy: ProRes 422 Proxy (`'apco'`) v polovičním rozlišení**, a při generování zploštit VFR na CFR.
 - **Jedna časová základna projektu.** Nikdy neodvozuj čísla snímků ze zdrojových časových značek.

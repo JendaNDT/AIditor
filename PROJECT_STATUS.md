@@ -1,10 +1,10 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 26. 07. 2026*
+*Naposled aktualizováno: 27. 07. 2026*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0 uzavřen, hlavní technické riziko zavřené. Pět ověřených modulů (`SpeedRampEngine`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). Appka zatím neexistuje — žádné UI, žádný Xcode projekt.**
+**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní pět ověřených modulů (`SpeedRampEngine`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Timeline zatím žádná — to je fáze 2.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -13,22 +13,23 @@ Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal,
 
 Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, staví se dál.** Detaily a vyplněná kritéria v `SPIKE_0.md`.
 
-Jediné nezměřené kritérium je plynulost náhledu 4K/60 — nešlo změřit, protože přehrávač neexistuje. Ta otázka patří do fází 1–4, ne do spiku.
+**Poslední otevřené kritérium je zavřené.** Plynulost náhledu 4K/60 se ve spiku změřit nedala (přehrávač neexistoval) — fáze 1 ji zodpověděla: **60,3 fps, tedy strop 60Hz displeje, bez sekání.**
 
 ## ⏭️ Příští krok
-**Fáze 1 — kostra a přehrávač (2 týdny) → v0.1.**
-Xcode projekt, sandbox entitlements, `MediaImporter`, `PlaybackController`, `VFRDetector`.
+**Fáze 2 — timeline v AppKitu (4–5 týdnů) → v0.2.** Nejtěžší UI v projektu.
 
-⚠️ **Deployment target nastav ručně na macOS 14.0**, výchozí by byl 26.0.
-⚠️ `VFRDetector` může vyjít z hotového `ProbeKit` — měřicí jádro už existuje a je ověřené.
+`TimelineModel` (čistá logika, testy první), pak `TimelineView` v AppKitu.
 
-První otázka fáze 1, kterou spike zdědil: **utáhne `AVPlayer` náhled 4K/60 klipu?**
+🚩 **Podmínka, ne nápad: datový model nese u každého assetu dvě cesty** — originál a volitelnou proxy — a přehrávání musí umět vybrat, kterou použije. Generovat se proxy nemusí až do fáze 4, ale struktura tam musí být hned. Doplnit ji později znamená přepsat model i playback.
+
+⚠️ **Přeměřit náhled na celou obrazovku.** Fáze 1 měřila v okně 1280×1192 px; na plné ploše můžou být čísla horší.
 
 ## ✅ Hotovo
 - **`SpeedRampEngine` — první modul, zkompilovaný a otestovaný.** **41 testů**, 0 selhání, Swift 6.3.3. Bézier easing, integrace rychlostní křivky, inverzní mapování pro scrubbing, segmentace pro `scaleTimeRange` zarovnaná na hranice snímků a řízená mezí skoku rychlosti, `Codable` pro `project.json`. Ověřeno proti nezávislé Python referenci na analyticky spočitatelných případech.
 - **`MediaProbe` — sonda na vlastnosti klipů.** Rozlišení, orientace, kodeky, fps, edit list a hlavně **skutečné délky vzorků přes `AVSampleCursor`** (fallback `AVAssetReader`). Rozlišuje zaokrouhlení / zahozený snímek / proměnlivé časování. Naměřené hodnoty v `MediaProbe/RESULTS.md`. První kód, který sáhl na AVFoundation.
 - **`Flatten` — zploštění VFR na pevnou snímkovou mřížku.** Krok 3 spiku. Cílová frekvence z měřeného modu, čtení přes `AVComposition` (edit list), zero-order hold převzorkování, ProRes 422 Proxy v plném rozlišení, zvuk LPCM. **Ověřeno na třech klipech: všechny `CFR` s kolísáním 0,00 %, synchron tlesknutí 0,00 ms, kódování 257–426 fps.**
 - **`Ramp` — plynulá rychlostní křivka segmentací.** Krok 4 spiku, jádro produktu. `scaleTimeRange` pozpátku, časy kumulativně v celých tickách, segmentace podle meze skoku rychlosti (výchozí 1,5 %), korekce výšky `.timeDomain`. **Ověřeno na třech klipech: `CFR` 30 fps, kolísání 0,00 %, délky sedí do jednoho snímku, žádné lupance ani při 545 segmentech.**
+- **Aplikace `Krasa` — fáze 1 hotová.** Xcode projekt (deployment target 14.0, sandbox, bundle `cz.projektkrasa.Krasa`), `MediaImporter` se security-scoped bookmarky, `VFRDetector` nad `ProbeKit`, `PlaybackController` se seekem podle QA1820 a `PlaybackBenchmark`. **Naměřeno: AVPlayer utáhne 4K/60 i 4K/120 na 60,3 a 60,7 fps; scrubování 48,3 ms HEVC vs 6,2 ms ProRes.**
 - **`ProbeKit` — sdílené měřicí a renderovací jádro.** Klasifikace délek vzorků, verdikt CFR/VFR, edit list, `CFRRenderer`. Používají ho všechny tři nástroje, takže měří a renderují stejným kódem.
 - Produktová a technická specifikace v2.0 (HTML + PDF)
 - **Implementační plán** — 12 fází, 3 kill-gates, modulová mapa, session protokol (`IMPLEMENTACNI_PLAN.md`)
@@ -37,13 +38,13 @@ První otázka fáze 1, kterou spike zdědil: **utáhne `AVPlayer` náhled 4K/60
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 1 — kostra a přehrávač.** Nezačato. Xcode projekt zatím neexistuje.
+- **Fáze 2 — timeline.** Nezačato.
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
 ### Cesta k v0.5 „MVP nula" (~6 měsíců při 30 h/týdně)
 - **F0** Spike 0 — ověření speed rampingu — ✅ **HOTOVO 26. 07. 2026**, hlavní riziko zavřené
-- **F1** Kostra, import, přehrávač, VFRDetector *(2 týdny)*
+- **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)*
 - **F3** Speed ramping ostrý *(3 týdny)*
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)*

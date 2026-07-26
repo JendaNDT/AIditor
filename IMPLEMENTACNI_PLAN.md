@@ -135,6 +135,36 @@ Klíčové detaily:
 
 **Hotovo když:** otevřeš 4K/60 klip, krokuješ po snímcích, appka ti řekne CFR/VFR a snímkovou frekvenci.
 
+#### Naměřeno 26. 07. 2026 — utáhne `AVPlayer` náhled 4K?
+
+Otázka, kterou Spike 0 nemohl zodpovědět, protože přehrávač neexistoval.
+
+| soubor | zdroj | ustálený stav | odchylka | medián seeku | p95 |
+|---|---|---|---|---|---|
+| `202947.mp4` | HEVC 4K/60 | **60,3 fps** | 3,6 | **48,3 ms** | 92,3 ms |
+| `202947_cfr.mov` | ProRes Proxy 4K/60 | **60,1 fps** | 3,6 | **6,2 ms** | 7,5 ms |
+| `203813.mp4` | HEVC 4K/120 | **60,7 fps** | 5,0 | **97,0 ms** | 170,8 ms |
+
+**Ano, utáhne.** Všechny tři na stropu 60Hz displeje, doručování vyrovnané — v ustáleném stavu nespadlo žádné jednosekundové okno pod 59.
+
+**Omezení, se kterými ta čísla platí:**
+
+- ⚠️ **Okno bylo 640×596 bodů, tedy 1280×1192 px.** Přehrávač dostal jen část minimálního okna. Škálování 4K na 1280 je míň GPU práce než na celou obrazovku — **na celoobrazovkovém náhledu můžou být čísla horší. PŘEMĚŘIT VE FÁZI 2**, až timeline zabere zbytek plochy.
+- **Strop je 60 Hz displeje.** U 120fps klipu se nedá zjistit, kolik by doručil na rychlejším panelu — jen že drží 60. Pro editaci na 30fps základně je to jedno.
+- **Závěr platí i pod škrcením.** První běh proběhl na baterce se zapnutým úsporným režimem a dal 58,5 fps, tedy pořád ✅. Finální čísla jsou ze sítě bez škrcení.
+
+> #### Poučení: bez předem napsaného prahu by z toho vyšel věrohodný nesmysl
+>
+> První běh dal u 120fps klipu **45,5 fps** a verdikt „použitelné, ale proxy pomůže".
+>
+> Bylo to špatně. Měřilo se 15 s, ale klip má 11,36 s — poslední tři jednosekundová okna (`0 0 0`) nebyly zádrhely, ale **konec videa**. Průměr je stáhl dolů.
+>
+> **Nebezpečné na tom je, že to znělo věrohodně.** „120 fps je náročnější, proto míň snímků" dává smysl, sedí to na intuici a zapsalo by se to jako nález. Odhalilo to jen porovnání s **prahem napsaným dopředu**: 45,5 nesedělo do žádné kategorie, která by u téhle třídy souborů dávala smysl, a to donutilo podívat se na syrová data místo na průměr.
+>
+> Po opravě: **60,7 fps**. Verdikt se otočil.
+>
+> Praxe, která z toho plyne: **napiš prahy dřív, než uvidíš čísla** — a když číslo nesedí do očekávání, nejdřív zkontroluj měřidlo, teprve pak vykládej výsledek.
+
 ---
 
 ### FÁZE 2 — Timeline (4–5 týdnů) → v0.2
@@ -142,6 +172,20 @@ Klíčové detaily:
 Nejtěžší UI v celém projektu. Nepodceňuj to.
 
 `TimelineModel` (čistá logika, testy první), pak `TimelineView` v AppKitu.
+
+> ### 🚩 PODMÍNKA, ne nápad: dvojí cesta k assetu od začátku
+>
+> **Datový model musí u každého assetu nést dvě cesty — originál a volitelnou proxy — a přehrávání musí umět vybrat, kterou použije.**
+>
+> Proxy se **generovat nemusí** až do fáze 4. Ale ta struktura tam musí být **hned**, protože doplnit ji dodatečně znamená přepsat datový model i playback, a to je v půlce nejtěžší fáze projektu.
+>
+> Konkrétně:
+> - `Asset` má `originalURL` a `proxyURL: URL?`
+> - k tomu volbu, která se má použít — per projekt, ne per klip (přepínač „pracovat s proxy" je jedna věc, ne tisíc)
+> - `PlaybackController` a `CompositionBuilder` berou **rozhodnutou URL**, ne asset — ať se ta volba dělá na jednom místě
+> - časová základna se bere z **originálu**, ne z proxy; proxy je jen jiná reprezentace téhož
+>
+> Důvod je měřený: proxy je kvůli odezvě seeku (6 ms vs 48 ms, viz fáze 4), a odezva seeku je přesně to, co dělá timeline použitelnou nebo nepoužitelnou. Bez dvojí cesty v modelu se ta výhoda nedá zapnout, až bude potřeba.
 
 Klíčové detaily:
 - Jeden `NSView` v `NSScrollView`, klipy jako `CALayer`. Ne `drawRect:` per klip.
@@ -176,6 +220,22 @@ Klíčové detaily:
 ### FÁZE 4 — Proxy a výkon (2 týdny) → v0.4
 
 `ProxyGenerator`. Tahle fáze řeší tři problémy jedním rozhodnutím.
+
+> **⚠️ Zdůvodnění proxy se po měření ve fázi 1 změnilo. Ne kvůli přehrávání — kvůli scrubování.**
+>
+> `AVPlayer` utáhne 4K/60 i 4K/120 HEVC bez problémů: **60,3 a 60,7 fps** ustáleného stavu, tedy strop 60Hz displeje. Proxy kvůli plynulosti přehrávání **není potřeba**.
+>
+> Rozdíl je v **odezvě seeku**:
+>
+> | zdroj | medián seeku |
+> |---|---|
+> | HEVC 4K/60 | **48,3 ms** |
+> | ProRes 422 Proxy 4K/60 | **6,2 ms** |
+> | HEVC 4K/120 | **97,0 ms** |
+>
+> **Osmkrát rychleji.** ProRes je intra-only — každý snímek je samostatný. HEVC musí při skoku dekódovat od nejbližšího klíčového snímku dopředu, a se zero tolerance (kterou v editoru mít musíme, jinak skáče na klíčové snímky) se to obejít nedá.
+>
+> 48 ms je pořád svižné, ale u timeline s tisíci klipy se to sčítá — a 97 ms u 120fps zdroje je už na hraně prahu. **Proxy je tedy o odezvě editace, ne o plynulosti obrazu.** Argumentovat jinak by znamenalo řešit problém, který neexistuje.
 
 Klíčové detaily:
 - **ProRes 422 Proxy (`'apco'`) v polovičním rozlišení.** Ne plné — plné 4K proxy má 182 Mbit/s, což není žádná úspora. FCP dělá půlrozlišení, dělej to taky.
@@ -390,6 +450,13 @@ Poctivě, ať víš, kde stojíš na měkkém:
 - Odhady časů jsou moje, ne měřené. Násobek 1,7 je odhad odhadu.
 - ~~Zda `AVAssetWriter` s ProRes Proxy skutečně zapne hardwarový engine, nejde přes API zjistit. Změř to.~~ **✅ Změřeno 26. 07. 2026:** zploštění do ProRes 422 Proxy ve 4K běželo **257–426 fps** podle klipu, tedy 4–7× reálný čas. Softwarové kódování by tohle nedalo. Přes API to pořád zjistit nejde, ale číslo mluví jasně.
 - Rychlost Whisperu na bezventilátorovém Airu — všechna publikovaná čísla jsou z aktivně chlazených strojů. Počítej s horším koncem rozsahu.
+- **Výkon náhledu na celou obrazovku.** Změřeno jen v okně 1280×1192 px (fáze 1). Přeměřit ve fázi 2.
+
+### Známé drobnosti, které nikoho netlačí
+
+Věci, na které se narazilo a nechaly se být. Ne chyby k opravě dnes, ale ať se na ně nezapomene.
+
+- **`open Krasa.app --args --benchmark` se zasekne.** Appka nastartuje, ale měření nedoběhne a report nevznikne — po 15 minutách pořád běžela. Spuštění binárky přímo (`Krasa.app/Contents/MacOS/Krasa --benchmark …`) funguje spolehlivě a navíc je vidět stdout. Příčina nezjištěná. Netlačí to, protože přímé spuštění stačí — ale kdyby se měření mělo pouštět pravidelně nebo z CI, bude to potřeba vyřešit.
 
 ---
 

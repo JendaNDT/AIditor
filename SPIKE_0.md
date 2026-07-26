@@ -227,12 +227,29 @@ Zapiš si čísla. Bez nich to není spike, ale hraní.
 | 2 | Zvuk je na konci klipu pořád v synchronu (test s tlesknutím) | ✅ **0,00 ms** na začátku i na konci. Ne „v jednotkách ms" — přesně nula |
 | 3 | Ve zvuku nejsou lupance na hranicích segmentů | ✅ **žádné, ani při 545 segmentech.** Ověřeno poslechem na dvou klipech s nejvyšším podílem ticha (41 % a 38 %) |
 | 4 | Hlas není „čipmank" | ✅ korekce výšky funguje. ⚠️ **`AVAudioUnitTimePitch` se nepoužil** — to je pro `AVAudioEngine`, ne pro tuhle cestu. Správně je `AVAssetReaderTrackOutput.audioTimePitchAlgorithm` |
-| 5 | Náhled 4K/60 — seká se? Kolik fps? | ⏸ **nezměřeno, a nešlo to.** Přehrávač neexistuje — viz níž |
+| 5 | Náhled 4K/60 — seká se? Kolik fps? | ✅ **ZODPOVĚZENO VE FÁZI 1 (26. 07. 2026): 60,3 fps**, tedy strop displeje. Nesekalo se. Viz níž |
 | 6 | Jak dlouho trval export 60s klipu? | ✅ **4,3 s** za 71,9 s výstupu (2157 snímků). ~17× rychleji než reálný čas |
 | 7 | Choval se VFR klip jinak než CFR? | ✅ **zásadně.** Všech 5 zdrojů bylo VFR; zploštění se kvůli tomu stalo samostatným krokem 3 |
 | + | *(přibylo)* Má zdroj dost snímků na zpomalení? | 🚩 **`zdrojFps × nejnižšíRychlost ≥ výstupFps`.** 120 fps → 0 % duplikátů, 59,7 → 13,5 %, 30,0 → 37,5 % |
 
-### Ke kritériu 5: proč zůstalo prázdné
+### Ke kritériu 5: ✅ zodpovězeno ve fázi 1
+
+**`AVPlayer` náhled 4K utáhne.** Změřeno 26. 07. 2026 v aplikaci `Krasa`, jakmile existoval přehrávač:
+
+| soubor | ustálený stav | medián seeku |
+|---|---|---|
+| HEVC 4K/60 | **60,3 fps** | 48,3 ms |
+| ProRes Proxy 4K/60 | **60,1 fps** | **6,2 ms** |
+| HEVC 4K/120 | **60,7 fps** | 97,0 ms |
+
+Všechny tři na stropu 60Hz displeje, doručování vyrovnané (odchylka 3,6–5,0).
+
+**S jedním omezením:** okno mělo 640×596 bodů (1280×1192 px), takže se 4K škálovalo na menší plochu, než jaká bude v ostré appce. **Na celoobrazovkovém náhledu můžou být čísla horší — přeměřit ve fázi 2.**
+
+**Vedlejší nález, který mění zdůvodnění fáze 4:** proxy není kvůli přehrávání, ale kvůli scrubování. 6,2 ms proti 48,3 ms, protože ProRes je intra-only.
+
+<details>
+<summary>Původní zdůvodnění, proč kritérium zůstalo ve spiku prázdné</summary>
 
 **Plynulost náhledu 4K/60 nelze v tomhle spiku změřit, protože přehrávač neexistuje.** Spike šel cestou soubor → soubor (`AVAssetReader` → `AVAssetWriter`); žádný `AVPlayer`, žádné UI, nic, co by se dalo pozorovat při přehrávání.
 
@@ -246,11 +263,13 @@ Do těch fází ta otázka patří a tam se zodpoví. Zápis „nesplněno" by t
 
 Co spike o výkonu **říct umí**: kódování ProRes 422 Proxy ve 4K běželo **257–426 fps**, tedy 4–7× reálný čas. To je o zápisu, ne o přehrávání, ale znamená to, že hardwarový engine je zapnutý a stroj na tenhle formát stačí.
 
+</details>
+
 ---
 
 ## Rozhodovací bod — ✅ VYHODNOCENO 26. 07. 2026
 
-**Výsledek: všechno zelené, kromě jednoho bodu, který nešlo změřit.**
+**Výsledek: všechno zelené.** Poslední bod, který spike nemohl změřit (plynulost náhledu), **zodpovědila fáze 1: 60,3 fps, tedy strop displeje.** Spike tím nemá žádné otevřené kritérium.
 
 ### Odpověď na otázku spiku
 
@@ -272,7 +291,7 @@ Tři věci se ale spikem změnily a promítly se do plánu:
 
 | Otázka | Kam patří |
 |---|---|
-| Utáhne `AVPlayer` náhled 4K/60? | fáze 1 |
+| ~~Utáhne `AVPlayer` náhled 4K/60?~~ **✅ ano, 60,3 fps** | zodpovězeno 26. 07. 2026 |
 | Utáhne náhled kompozici s rampem, i s `renderScale < 1.0`? | fáze 3 |
 | Spraví to proxy v polovičním rozlišení, když ne? | fáze 4 |
 | Utáhne to timeline s tisíci klipy? | fáze 2 |

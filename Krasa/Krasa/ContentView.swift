@@ -70,13 +70,39 @@ final class AppModel: ObservableObject {
 
     // MARK: Měření
 
-    func runBenchmark() async {
-        guard let hostView else {
-            status = "Přehrávač ještě není připravený."
+    /// Čeká, až bude přehrávač v okně. Display link se rozjede až tam,
+    /// takže dřív by se měřilo do prázdna.
+    private func waitForPlayerWindow(timeout: TimeInterval = 10) async -> PlayerHostView? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let view = hostView, view.window != nil { return view }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        return nil
+    }
+
+    /// Změří konkrétní soubory. Prázdný seznam = všechny načtené klipy.
+    /// Cesty musí ležet uvnitř složky, na kterou máme bookmark.
+    func runBenchmark(only paths: [String] = []) async {
+        guard let hostView = await waitForPlayerWindow() else {
+            status = "Přehrávač se nedostal do okna, měření by měřilo prázdno."
             return
         }
-        guard !clips.isEmpty else {
-            status = "Nejdřív načti klipy."
+
+        var targets: [ClipTiming] = clips
+        if !paths.isEmpty {
+            targets = []
+            for path in paths {
+                let url = URL(fileURLWithPath: path)
+                switch await VFRDetector.inspect(url: url) {
+                case .success(let timing): targets.append(timing)
+                case .failure(let error):
+                    status = "\(url.lastPathComponent): \(error.localizedDescription)"
+                }
+            }
+        }
+        guard !targets.isEmpty else {
+            status = "Není co měřit."
             return
         }
 
@@ -85,7 +111,7 @@ final class AppModel: ObservableObject {
         defer { isMeasuring = false }
 
         var lines: [String] = ["═══ MĚŘENÍ NÁHLEDU ═══", ""]
-        for clip in clips {
+        for clip in targets {
             status = "Měřím \(clip.name)…"
             let benchmark = PlaybackBenchmark()
             var result = await benchmark.run(url: clip.url, timing: clip,
@@ -96,8 +122,10 @@ final class AppModel: ObservableObject {
 
             // Mezi běhy pauza, ať se stroj vrátí blíž k výchozí teplotě.
             // Bez toho druhý běh měří teplejší Air, ne pomalejší kodek.
-            status = "Chladnu mezi běhy…"
-            try? await Task.sleep(nanoseconds: 20_000_000_000)
+            if clip.url != targets.last?.url {
+                status = "Chladnu mezi běhy…"
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+            }
         }
         reportLines = lines
         status = "Hotovo."
@@ -126,6 +154,7 @@ extension BenchmarkResult {
                         backingScale: backingScale,
                         windowPointSize: windowPointSize,
                         deliveredPerSecond: deliveredPerSecond,
+                        measuredSeconds: measuredSeconds,
                         droppedFramesFromAccessLog: droppedFramesFromAccessLog,
                         seekLatencies: seekLatencies,
                         coalescedSeeks: coalescedSeeks,
@@ -145,7 +174,17 @@ struct ContentView: View {
                 .frame(minWidth: 640)
         }
         .frame(minWidth: 1000, minHeight: 640)
-        .task { await model.restoreAndScan() }
+        .task {
+            await model.restoreAndScan()
+            // Bez GUI: `--benchmark [cesty…]` spustí měření samo a skončí.
+            // Sandbox drží, přístup se obnovuje z uloženého bookmarku.
+            let arguments = CommandLine.arguments.dropFirst()
+            if arguments.contains("--benchmark") {
+                let explicit = arguments.filter { !$0.hasPrefix("--") }
+                await model.runBenchmark(only: Array(explicit))
+                NSApplication.shared.terminate(nil)
+            }
+        }
     }
 
     private var sidebar: some View {

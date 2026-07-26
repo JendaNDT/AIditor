@@ -42,6 +42,8 @@ struct BenchmarkResult {
 
     /// Doručené snímky po jednosekundových oknech.
     let deliveredPerSecond: [Int]
+    /// Jak dlouho se doopravdy měřilo. U krátkých klipů míň než `playbackSeconds`.
+    let measuredSeconds: Double
     let droppedFramesFromAccessLog: Int
     let seekLatencies: [TimeInterval]
     let coalescedSeeks: Int
@@ -57,6 +59,20 @@ struct BenchmarkResult {
     }
 
     var minDeliveredFPS: Double { Double(deliveredPerSecond.min() ?? 0) }
+
+    /// Ustálený stav: bez prvního okna (rozjezd přehrávání) a bez posledního
+    /// (nekompletní sekunda). Tohle je číslo, které odpovídá tomu, co divák vidí
+    /// při souvislém přehrávání — proto se podle něj rozhoduje verdikt.
+    var steadyStateWindows: [Int] {
+        guard deliveredPerSecond.count > 2 else { return deliveredPerSecond }
+        return Array(deliveredPerSecond.dropFirst().dropLast())
+    }
+
+    var steadyStateFPS: Double {
+        let windows = steadyStateWindows
+        guard !windows.isEmpty else { return 0 }
+        return Double(windows.reduce(0, +)) / Double(windows.count)
+    }
 
     /// Rovnoměrnost doručování. Vysoký rozptyl znamená škubání i při
     /// slušném průměru — 60 a 20 střídavě dá průměr 40, ale kouká se to blbě.
@@ -85,7 +101,7 @@ struct BenchmarkResult {
     // MARK: Verdikty
 
     var playbackVerdict: String {
-        let fps = meanDeliveredFPS
+        let fps = steadyStateFPS
         if fps >= BenchmarkThresholds.fpsGood {
             return "✅ NÁHLED STAČÍ — proxy kvůli přehrávání není potřeba"
         } else if fps >= BenchmarkThresholds.fpsUsable {
@@ -120,9 +136,11 @@ struct BenchmarkResult {
                    + ", okno \(Int(windowPointSize.width))×\(Int(windowPointSize.height)) bodů")
         lines.append("  Strop      \(fmt(deliveryCeiling, 1)) fps — víc se doručit nedá")
         lines.append("")
-        lines.append("  DORUČENO   průměr \(fmt(meanDeliveredFPS, 1)) fps"
-                   + " · minimum \(fmt(minDeliveredFPS, 0)) fps"
-                   + " · odchylka \(fmt(deliveredStdDev, 1))")
+        lines.append("  DORUČENO   ustálený stav \(fmt(steadyStateFPS, 1)) fps"
+                   + "  (průměr včetně rozjezdu \(fmt(meanDeliveredFPS, 1)))")
+        lines.append("             minimum \(fmt(minDeliveredFPS, 0)) fps"
+                   + " · odchylka \(fmt(deliveredStdDev, 1))"
+                   + " · měřeno \(fmt(measuredSeconds, 1)) s")
         lines.append("             po sekundách: \(deliveredPerSecond.map(String.init).joined(separator: " "))")
         lines.append("             zahozeno podle access logu: \(droppedFramesFromAccessLog)"
                    + (droppedFramesFromAccessLog == 0 ? "  (u lokálních souborů bývá 0 i při problémech — neber jako důkaz)" : ""))
@@ -192,7 +210,13 @@ final class PlaybackBenchmark {
         controller.seek(to: .zero)
         controller.play()
 
-        try? await Task.sleep(nanoseconds: UInt64(Self.playbackSeconds) * 1_000_000_000)
+        // Nikdy neměřit déle, než klip trvá — jinak se do průměru započítají
+        // nuly za koncem videa a vyjde z toho zdánlivé zadrhávání.
+        let clipSeconds = controller.duration.seconds
+        let measureSeconds = clipSeconds.isFinite && clipSeconds > 0
+            ? max(3.0, min(Double(Self.playbackSeconds), clipSeconds - 0.5))
+            : Double(Self.playbackSeconds)
+        try? await Task.sleep(nanoseconds: UInt64(measureSeconds * 1_000_000_000))
 
         controller.pause()
         hostView.onDisplayTick = nil
@@ -221,6 +245,7 @@ final class PlaybackBenchmark {
             backingScale: hostView.backingScale,
             windowPointSize: hostView.bounds.size,
             deliveredPerSecond: deliveredPerSecond,
+            measuredSeconds: measureSeconds,
             droppedFramesFromAccessLog: dropped,
             seekLatencies: latencies,
             coalescedSeeks: controller.coalescedSeekCount,
@@ -255,7 +280,8 @@ final class PlaybackBenchmark {
                         displayRefreshRate: hostView.displayRefreshRate,
                         backingScale: hostView.backingScale,
                         windowPointSize: hostView.bounds.size,
-                        deliveredPerSecond: [], droppedFramesFromAccessLog: 0,
+                        deliveredPerSecond: [], measuredSeconds: 0,
+                        droppedFramesFromAccessLog: 0,
                         seekLatencies: [], coalescedSeeks: 0,
                         conditionsBefore: conditions, conditionsAfter: conditions)
     }

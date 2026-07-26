@@ -8,13 +8,23 @@ let package = Package(
         .library(name: "ProbeKit", targets: ["ProbeKit"]),
         .executable(name: "MediaProbe", targets: ["MediaProbe"]),
         .executable(name: "Flatten", targets: ["Flatten"]),
+        .executable(name: "Ramp", targets: ["Ramp"]),
+    ],
+    dependencies: [
+        // Matematika rychlostní křivky. Hotová a ověřená 31 testy.
+        .package(path: "../SpeedRampEngine"),
     ],
     targets: [
-        // Měřicí jádro. Sdílené, ať sonda a zplošťovač počítají modus stejně.
+        // Měřicí a renderovací jádro. Sdílené všemi nástroji.
         .target(name: "ProbeKit"),
         // Sonda: přečti soubor a řekni, co v něm je.
         .executableTarget(name: "MediaProbe", dependencies: ["ProbeKit"]),
         // Zplošťovač: přepiš VFR na pevnou mřížku.
         .executableTarget(name: "Flatten", dependencies: ["ProbeKit"]),
+        // Ramp: rychlostní křivka segmentací na mikro-úseky.
+        .executableTarget(name: "Ramp", dependencies: [
+            "ProbeKit",
+            .product(name: "SpeedRampEngine", package: "SpeedRampEngine"),
+        ]),
     ]
 )

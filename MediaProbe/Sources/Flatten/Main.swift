@@ -84,21 +84,22 @@ struct FlattenTool {
 
     static func printResult(_ r: FlattenResult) {
         let fd = r.frameDuration
+        let render = r.render
         print("  Zdroj      \(r.sourceVerdict.shortLabel) · \(r.sourceFrameCount) vzorků"
-            + " · \(fmt(r.sourceDuration.seconds, 3)) s")
+            + " · \(fmt(render.sourceDuration.seconds, 3)) s")
         print("  Mřížka     \(fd.value)/\(fd.timescale) = \(fmt(r.measuredFrameRate, 4)) fps"
             + "  (z modu, ne z nominalFrameRate)")
-        print("  Zapsáno    \(r.writtenFrameCount) snímků, z toho \(r.heldFrames) podržených")
-        print("  Obraz      ProRes 422 Proxy, plné rozlišení, pixely \(r.pixelFormat)"
-            + ", \(r.bitDepth) bit\(r.bitDepthWasDetected ? "" : " (odhad — BitsPerComponent chybí)")")
-        if r.audioSampleRate > 0 {
-            print("  Zvuk       LPCM \(r.audioChannels) kanál(ů) \(fmt(r.audioSampleRate / 1000, 1)) kHz"
+        print("  Zapsáno    \(render.writtenFrameCount) snímků, z toho \(render.heldFrames) podržených")
+        print("  Obraz      ProRes 422 Proxy, plné rozlišení, pixely \(render.pixelFormat)"
+            + ", \(render.bitDepth) bit\(render.bitDepthWasDetected ? "" : " (odhad — BitsPerComponent chybí)")")
+        if render.audioSampleRate > 0 {
+            print("  Zvuk       LPCM \(render.audioChannels) kanál(ů) \(fmt(render.audioSampleRate / 1000, 1)) kHz"
                 + " — schválně ne AAC, ten by přidal vlastní priming")
         }
-        print("  Délka      zdroj \(fmt(r.sourceDuration.seconds, 3)) s"
-            + " → výstup \(fmt(r.outputDuration.seconds, 3)) s"
-            + " (rozdíl \(fmt((r.outputDuration.seconds - r.sourceDuration.seconds) * 1000, 1)) ms)")
-        print("  Trvalo     \(fmt(r.elapsedSeconds, 1)) s")
+        print("  Délka      zdroj \(fmt(render.sourceDuration.seconds, 3)) s"
+            + " → výstup \(fmt(render.outputDuration.seconds, 3)) s"
+            + " (rozdíl \(fmt((render.outputDuration.seconds - render.sourceDuration.seconds) * 1000, 1)) ms)")
+        print("  Trvalo     \(fmt(render.elapsedSeconds, 1)) s")
         print("  Soubor     \(r.outputURL.path)")
     }
 

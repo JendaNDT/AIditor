@@ -98,12 +98,50 @@ Zploštění je navíc v plánu stejně (fáze 4, součást generování proxy),
 >
 > **Absence lupanců na tomhle materiálu tedy není důkaz, že tam nejsou.** Je to jen důkaz, že je na něm neslyšíš.
 >
-> Citlivější test je **řeč nebo hudba**:
-> - mezi slovy jsou pauzy s nízkou energií, kde cvaknutí nemá co maskovat
-> - v držených tónech a samohláskách je signál úzkopásmový a periodický, takže se širokopásmový transient odlepí od pozadí
-> - sluch je navíc na artefakty v hlase citlivější než na artefakty v ruchu
+> ### Kritérium na testovací materiál: ticho, ne obsah záběru
 >
-> **Proto se dělá druhé kolo na klipu s mluvenou češtinou.** Závěr o hraniční hodnotě `framesPerSegment` se bere z něj, ne z 203813. Ruchový klip slouží k ověření, že řetěz vůbec funguje — ne k určení prahu.
+> **Cvaknutí je slyšet jen tam, kam má kam spadnout.** Rozhodující jsou dvě měřitelné vlastnosti zvuku:
+>
+> 1. **Podíl pauz** — kolik času je pod prahem ticha. Tam nemá transient co maskovat.
+> 2. **Dynamický rozsah** — rozdíl mezi hlasitými a tichými místy.
+>
+> **Ne obsah záběru.** Pauzy mezi slovy jsou jeden způsob, jak ticho vyrobit; dozvuk po ráně sekerou je jiný a stejně dobrý. Původně tu stálo „potřebujeme klip s řečí" — to byla špatně položená otázka. Řeč je jen jedna z cest k tichu, ne podmínka.
+>
+> Naměřeno na testovací sadě (`swift run Flatten --speech` vypisuje obojí):
+>
+> | Klip | pauzy | dynamika | vhodnost |
+> |---|---|---|---|
+> | 202947 | **41,0 %** | **41,9 dB** | ✅ testovací materiál |
+> | 203452 | **38,0 %** | **42,5 dB** | ✅ testovací materiál |
+> | 203901 | 15,2 % | 31,4 dB | slabé |
+> | 204045 | 12,5 % | 30,8 dB | slabé |
+> | **203813** | **6,1 %** | 28,5 dB | ❌ nejhorší z pěti |
+>
+> **203813 má 6,1 % pauz — nejmíň ze všech.** Přesně to vysvětluje, proč byl první poslech slabý test: na tom klipu není ticho, do kterého by cvaknutí bylo slyšet.
+>
+> **Proto se druhé kolo pouští na 202947 i 203452.** Oba mají zhruba trojnásobek ticha a o 10 dB větší rozsah než zbytek. Dva nezávislé posudky místo hádání, který je „ten správný" — a není to práce navíc. Závěr o hraniční hodnotě `framesPerSegment` se bere z nich, ne z 203813. Ten posloužil k ověření, že řetěz vůbec funguje.
+
+#### Naměřeno (26. 07. 2026)
+
+Tři klipy × čtyři jemnosti segmentace. **Všech dvanáct výstupů: `CFR` 30 fps, kolísání 0,00 %, délka sedí na očekávanou hodnotu do jednoho snímku.**
+
+| klip | zdroj fps | délka | snímků | segmentů (8/4/2/1) | skok rychlosti (8→1) | **duplikátů** |
+|---|---|---|---|---|---|---|
+| 203813 | 120,0 | 18,167 s | 545 | 69 / 137 / 273 / 545 | 0,0379× → 0,0047× | **0,0 %** |
+| 202947 | 59,7 | 71,900 s | 2157 | 270 / 540 / 1079 / 2157 | 0,0096× → 0,0012× | **13,5 %** |
+| 203452 | 30,0 | 61,800 s | 1854 | 232 / 464 / 927 / 1854 | 0,0112× → 0,0014× | **37,5 %** |
+
+> ### 🚩 Nález důležitější než lupance: zdroj musí mít dost snímků
+>
+> **`zdrojFps × nejnižšíRychlost ≥ výstupFps`**, jinak se snímky duplikují a zpomalený úsek trhá.
+>
+> Pro ramp na 0,25× při výstupu 30 fps to znamená **zdroj 120 fps**. Klip 203813 ho má, a proto má nula duplikátů. Klipy 202947 (59,7 fps) a 203452 (30,0 fps) ho nemají, a proto má každý osmý resp. každý třetí snímek zpomaleného úseku duplikát.
+>
+> Teorie: podíl duplikátů = průměr z `max(0, 1 − v(t)·zdrojFps/výstupFps)`. U zdroje na úrovni výstupu vyjde `1 − 0,625 = 37,5 %`, protože průměrná rychlost klasického rampu je 0,625. **Naměřeno 37,54 %.**
+>
+> Důsledek pro produkt: **tohle patří do UI jako varování dopředu.** Uživatel má vědět, že na tenhle klip tenhle ramp nemá dost snímků, ještě než ho pustí — ne to zjistit z trhaného výsledku. Zároveň je to argument pro pravidlo „na zpomalované záběry toč 120 fps", které patří do svatebního asistenta.
+>
+> Souvisí to se škrtnutým optical flow: dopočet mezisnímků je přesně to, co by tenhle problém řešilo — a je to výzkumný problém, ne funkce. Duplikace snímků je poctivá náhrada, jen se musí přiznat.
 
 **Pozor, tohle je jádro spiku:** `scaleTimeRange` dělá konstantní změnu rychlosti přes daný úsek — vytvoří lineární časové mapování. Plynulý Bézier se z jednoho volání udělat nedá.
 

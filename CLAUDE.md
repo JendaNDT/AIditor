@@ -36,6 +36,15 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
 - **⚠️ Vždy nastav `videoInput.mediaTimeScale = frameDuration.timescale`.** Bez instrukce si `AVAssetWriter` zvolí timescale 600 a zapisované časy do ní kvantizuje. U celočíselných frekvencí to projde (1500/90000 = 10/600), u **29,97 / 59,94 / 23,976 i naší naměřené 30,01 fps** ne — 2999/90000 je v šestistovkách 19,993 ticku a výstup vyleze jako `CFR≈` s 5% rozptylem místo `CFR`. **Na zvukovém vstupu se `mediaTimeScale` nastavovat NESMÍ, vyhodí výjimku.** Platí pro zplošťovač, pro proxy generátor (fáze 4) i pro export (fáze 5) — všude, kde se zapisuje video.
 - **Zvuk v proxy a zploštěných souborech zapisuj jako LPCM, ne AAC.** AAC by přidal vlastní priming delay, a tím rozbil přesně to, kvůli čemu se ty soubory dělají. LPCM žádný nemá.
 - **`scaleTimeRange` umí jen konstantní rychlost.** Plynulá křivka = segmentace na mikro-úseky. Hotové v `SpeedRampEngine.segments(outputFrameRate:framesPerSegment:)`.
+- **⚠️ Zpomalení potřebuje dost snímků ve zdroji: `zdrojFps × nejnižšíRychlost ≥ výstupFps`.** Jinak se snímky duplikují a zpomalený úsek trhá. Pro ramp na 0,25× při výstupu 30 fps je potřeba **zdroj 120 fps** — a to je přesně důvod, proč telefony nabízejí slow-mo režim, ne libovůle výrobce. Naměřeno na třech klipech, teorie sedí na desetinu procenta:
+
+  | zdroj | potřeba | duplikátů |
+  |---|---|---|
+  | 120,0 fps | 120 | **0,0 %** |
+  | 59,7 fps | 120 (chybí 2×) | 13,5 % |
+  | 30,0 fps | 120 (chybí 4×) | 37,5 % |
+
+  Podíl duplikátů = průměr z `max(0, 1 − v(t)·zdrojFps/výstupFps)` přes časovou osu. U zdroje na úrovni výstupu vyjde `1 − průměrná rychlost` = 37,5 %, protože průměrná rychlost klasického rampu je 0,625. **V UI to musí být vidět dopředu** — uživatel má vědět, že tenhle klip na tenhle ramp nemá dost snímků, ne to zjistit až z výsledku.
 - **Vlastní `AVVideoCompositing` speed ramping neřeší — segmentace je jediná cesta.** Compositor dostane přes `sourceFrame(byTrackID:)` snímek, který kompozice pro daný `compositionTime` **už vybrala**; požádat o jiný zdrojový čas nejde. Časování určuje `CMTimeMapping` stopy, a ten je dvojice `CMTimeRange` — afinní z definice. Compositor je na pixely (efekty, prolínačky, Metal), ne na čas.
 - **Proxy: ProRes 422 Proxy (`'apco'`) v polovičním rozlišení**, a při generování zploštit VFR na CFR.
 - **Jedna časová základna projektu.** Nikdy neodvozuj čísla snímků ze zdrojových časových značek.

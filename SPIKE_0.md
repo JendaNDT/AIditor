@@ -90,6 +90,21 @@ Zploštění je navíc v plánu stejně (fáze 4, součást generování proxy),
 
 **Pouštěj to na zploštěném souboru z kroku 3, ne na originálu.** Jinak měříš dvě proměnné najednou.
 
+> ### ⚠️ Poznámka k metodice: na čem se lupance testují
+>
+> **Klip 203813 je slow-mo s ruchovým zvukem, a to je pro tenhle test špatný materiál.**
+>
+> Lupnutí na hranici segmentu je **širokopásmový transient** — krátké cvaknutí přes celé spektrum. V širokopásmovém šumu (vítr, sekání dřeva, ruch dvora) se takový transient ztratí, protože šum má energii na stejných frekvencích a maskuje ho.
+>
+> **Absence lupanců na tomhle materiálu tedy není důkaz, že tam nejsou.** Je to jen důkaz, že je na něm neslyšíš.
+>
+> Citlivější test je **řeč nebo hudba**:
+> - mezi slovy jsou pauzy s nízkou energií, kde cvaknutí nemá co maskovat
+> - v držených tónech a samohláskách je signál úzkopásmový a periodický, takže se širokopásmový transient odlepí od pozadí
+> - sluch je navíc na artefakty v hlase citlivější než na artefakty v ruchu
+>
+> **Proto se dělá druhé kolo na klipu s mluvenou češtinou.** Závěr o hraniční hodnotě `framesPerSegment` se bere z něj, ne z 203813. Ruchový klip slouží k ověření, že řetěz vůbec funguje — ne k určení prahu.
+
 **Pozor, tohle je jádro spiku:** `scaleTimeRange` dělá konstantní změnu rychlosti přes daný úsek — vytvoří lineární časové mapování. Plynulý Bézier se z jednoho volání udělat nedá.
 
 **Cesta je jedna: segmentace na mikro-úseky.** Klip se nakrájí na desítky krátkých úseků a každý dostane vlastní `scaleTimeRange` podle křivky. Segmenty ti spočítá hotový `SpeedRampEngine.segments(outputFrameRate:framesPerSegment:)` — zarovnané na hranice snímků, ověřené 31 testy.

@@ -38,6 +38,11 @@ struct FlattenTool {
                 ? URL(fileURLWithPath: arguments[1])
                 : defaultClipsFolder()
             await runTransients(folder: folder)
+        case "--speech":
+            let folder = arguments.count > 1
+                ? URL(fileURLWithPath: arguments[1])
+                : defaultClipsFolder()
+            await runSpeech(folder: folder)
         case "--frames":
             guard arguments.count >= 2 else {
                 fail("--frames potřebuje soubor.")
@@ -101,6 +106,58 @@ struct FlattenTool {
             + " (rozdíl \(fmt((render.outputDuration.seconds - render.sourceDuration.seconds) * 1000, 1)) ms)")
         print("  Trvalo     \(fmt(render.elapsedSeconds, 1)) s")
         print("  Soubor     \(r.outputURL.path)")
+    }
+
+    // MARK: - Detekce řeči
+
+    static func runSpeech(folder: URL) async {
+        guard let files = mediaFiles(in: folder), !files.isEmpty else {
+            fail("Ve složce \(folder.path) nejsou žádné mediální soubory.")
+        }
+
+        print("═══ DETEKCE ŘEČI ═══\n")
+        print("  Lupnutí na hranici segmentu je širokopásmový transient a v ruchu")
+        print("  se ztratí. Test lupanců má smysl jen na klipu s řečí — tohle hledá,")
+        print("  který to je.\n")
+        print("  Řeč pozná podle: modulace na slabikové frekvenci (2–8 Hz),")
+        print("  pauz mezi slovy a větší dynamiky než u souvislého ruchu.\n")
+
+        var results: [SpeechAnalysis] = []
+        for file in files {
+            do {
+                let analysis = try await SpeechProbe.analyze(url: file)
+                printSpeech(analysis)
+                results.append(analysis)
+            } catch {
+                print("  ✗ \(file.lastPathComponent): \(error.localizedDescription)\n")
+            }
+        }
+
+        print("═══ POŘADÍ ═══\n")
+        for analysis in results.sorted(by: { $0.score > $1.score }) {
+            print("  \(fmt(analysis.score, 1))  \(analysis.name)"
+                + (analysis.looksLikeSpeech ? "  ← kandidát na řeč" : ""))
+        }
+
+        let candidates = results.filter(\.looksLikeSpeech)
+        print("")
+        if candidates.isEmpty {
+            print("  Žádný klip neprošel prahem. Nejvyšší skóre má ten první v pořadí,")
+            print("  ale je to slabý signál — rozhodne poslech.")
+        } else {
+            print("  Kandidát: " + candidates.map(\.name).joined(separator: ", "))
+        }
+        print("\n  ⚠ Je to heuristika, ne přepis. Než se na tom klipu bude cokoli měřit,")
+        print("    potvrď ho poslechem — u referenčního materiálu se hádat nemá.")
+    }
+
+    static func printSpeech(_ a: SpeechAnalysis) {
+        print("▸ \(a.name)  (\(fmt(a.duration, 2)) s)")
+        print("  Modulace   vrchol na \(fmt(a.modulationPeakHz, 2)) Hz"
+            + ", podíl slabikového pásma 2–8 Hz: \(fmt(a.syllableBandRatio * 100, 1)) %")
+        print("  Pauzy      \(fmt(a.pauseFraction * 100, 1)) % času pod prahem ticha")
+        print("  Dynamika   \(fmt(a.dynamicRangeDb, 1)) dB mezi hlasitými a tichými místy")
+        print("  → \(a.looksLikeSpeech ? "VYPADÁ jako řeč" : "spíš souvislý ruch")\n")
     }
 
     // MARK: - Snímky na oční kontrolu

@@ -69,20 +69,31 @@ struct AudioAnalysis {
     }
 }
 
+/// Amplitudová obálka zvuku: jedna hodnota na snímek, maximum přes kanály.
+struct AudioEnvelope {
+    let values: [Float]
+    let sampleRate: Double
+    let channels: Int
+    let rms: Double
+
+    var duration: Double { Double(values.count) / sampleRate }
+}
+
 enum SyncProbe {
 
     /// Délka okna na začátku i na konci, ve kterém se transient hledá.
     static let windowSeconds: Double = 5.0
 
-    // MARK: - Analýza jednoho souboru
+    // MARK: - Načtení obálky
 
-    static func analyze(url: URL) async throws -> AudioAnalysis {
+    /// Načte amplitudovou obálku **přes AVComposition**, aby se aplikoval
+    /// edit list. Bez toho by se měřil priming AAC, ne skutečný obsah.
+    static func loadEnvelope(url: URL) async throws -> AudioEnvelope {
         let asset = AVURLAsset(url: url)
         guard let sourceAudio = try await asset.loadTracks(withMediaType: .audio).first else {
             throw ProbeError.message("\(url.lastPathComponent) nemá zvukovou stopu.")
         }
 
-        // Kompozice kvůli edit listu — jinak by se měřil priming, ne synchron.
         let composition = AVMutableComposition()
         let timeRange = try await sourceAudio.load(.timeRange)
         guard let compAudio = composition.addMutableTrack(withMediaType: .audio,
@@ -116,7 +127,6 @@ enum SyncProbe {
         }
         defer { reader.cancelReading() }
 
-        // Obálka: jedna hodnota na snímek, maximum přes kanály.
         var envelope: [Float] = []
         var sumOfSquares = 0.0
 
@@ -151,23 +161,32 @@ enum SyncProbe {
             throw ProbeError.message("Zvuková stopa nevrátila žádné vzorky.")
         }
 
-        let rms = (sumOfSquares / Double(envelope.count)).squareRoot()
-        let duration = Double(envelope.count) / sampleRate
+        return AudioEnvelope(values: envelope,
+                             sampleRate: sampleRate,
+                             channels: channels,
+                             rms: (sumOfSquares / Double(envelope.count)).squareRoot())
+    }
+
+    // MARK: - Analýza jednoho souboru
+
+    static func analyze(url: URL) async throws -> AudioAnalysis {
+        let env = try await loadEnvelope(url: url)
+        let duration = env.duration
 
         let window = min(windowSeconds, duration / 2)
-        let start = transient(in: envelope, sampleRate: sampleRate, rms: rms,
+        let start = transient(in: env.values, sampleRate: env.sampleRate, rms: env.rms,
                               from: 0, to: window, label: "začátek",
                               edgeTime: 0)
-        let end = transient(in: envelope, sampleRate: sampleRate, rms: rms,
+        let end = transient(in: env.values, sampleRate: env.sampleRate, rms: env.rms,
                             from: duration - window, to: duration, label: "konec",
                             edgeTime: duration)
 
         return AudioAnalysis(url: url,
                              duration: duration,
-                             sampleRate: sampleRate,
-                             channels: channels,
-                             frameCount: envelope.count,
-                             overallRMS: rms,
+                             sampleRate: env.sampleRate,
+                             channels: env.channels,
+                             frameCount: env.values.count,
+                             overallRMS: env.rms,
                              start: start,
                              end: end)
     }

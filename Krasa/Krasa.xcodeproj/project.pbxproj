@@ -1,0 +1,319 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	rootObject = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		5A8B7A9F858B0D17DE3ECAD7 /* KrasaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7374B0D5EC1DDCB8C979DA /* KrasaApp.swift */; };
+		2A8F5CFFD87674FB2B9862C3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16260C585190F1B74295BB31 /* ContentView.swift */; };
+		4B5D8B6164C2AA68F3B7B073 /* MediaImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAEE8DA94BE24BFA4C09F61 /* MediaImporter.swift */; };
+		10018FACF7C253DE3EA2AF0F /* VFRDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F5DB175B37741ADE928956 /* VFRDetector.swift */; };
+		B83C201C79F8240BBCBB539B /* PlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87BEF812E75F65304C3D45FF /* PlaybackController.swift */; };
+		2D92BF1645FAEB9D099F10E6 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99311C7072B0DEAD06939D03 /* PlayerView.swift */; };
+		1F9F8B29E107494593AB0078 /* SystemConditions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A457BB75BADC45205B9B3F69 /* SystemConditions.swift */; };
+		D8D296ED416C1618E779BF80 /* PlaybackBenchmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9168C630193BE62D64B5B960 /* PlaybackBenchmark.swift */; };
+		35F555F0783E426C92AA424B /* ProbeKit in Frameworks */ = {isa = PBXBuildFile; productRef = B0DAC348D3FBC2130428908B /* ProbeKit */; };
+		D37162A8507F2462184062CA /* SpeedRampEngine in Frameworks */ = {isa = PBXBuildFile; productRef = AF884B639665597476B455E5 /* SpeedRampEngine */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		7D1043473D55BFA90E8530D3 /* Krasa.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Krasa.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5B7374B0D5EC1DDCB8C979DA /* KrasaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KrasaApp.swift; sourceTree = "<group>"; };
+		16260C585190F1B74295BB31 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		DEAEE8DA94BE24BFA4C09F61 /* MediaImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaImporter.swift; sourceTree = "<group>"; };
+		60F5DB175B37741ADE928956 /* VFRDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VFRDetector.swift; sourceTree = "<group>"; };
+		87BEF812E75F65304C3D45FF /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
+		99311C7072B0DEAD06939D03 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
+		A457BB75BADC45205B9B3F69 /* SystemConditions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemConditions.swift; sourceTree = "<group>"; };
+		9168C630193BE62D64B5B960 /* PlaybackBenchmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackBenchmark.swift; sourceTree = "<group>"; };
+		E8CE4721331CF75E9478C7F2 /* Krasa.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Krasa.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		7561BFB015D8F536760CB671 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				35F555F0783E426C92AA424B /* ProbeKit in Frameworks */,
+				D37162A8507F2462184062CA /* SpeedRampEngine in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		DF891E785808226D241F246E /* Krasa */ = {
+			isa = PBXGroup;
+			children = (
+				CF8D0BD4B75E8C2C174692A5 /* Krasa */,
+				00C45FD35CB0F9C5F764F070 /* Products */,
+			);
+			name = Krasa;
+			sourceTree = "<group>";
+		};
+		00C45FD35CB0F9C5F764F070 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7D1043473D55BFA90E8530D3 /* Krasa.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CF8D0BD4B75E8C2C174692A5 /* Krasa */ = {
+			isa = PBXGroup;
+			children = (
+				5B7374B0D5EC1DDCB8C979DA /* KrasaApp.swift */,
+				16260C585190F1B74295BB31 /* ContentView.swift */,
+				BD13434066203B2825EE5A5F /* Media */,
+				34AA73FFCE9BBCC557385235 /* Measure */,
+				E8CE4721331CF75E9478C7F2 /* Krasa.entitlements */,
+			);
+			path = Krasa;
+			sourceTree = "<group>";
+		};
+		BD13434066203B2825EE5A5F /* Media */ = {
+			isa = PBXGroup;
+			children = (
+				DEAEE8DA94BE24BFA4C09F61 /* MediaImporter.swift */,
+				60F5DB175B37741ADE928956 /* VFRDetector.swift */,
+				87BEF812E75F65304C3D45FF /* PlaybackController.swift */,
+				99311C7072B0DEAD06939D03 /* PlayerView.swift */,
+			);
+			path = Media;
+			sourceTree = "<group>";
+		};
+		34AA73FFCE9BBCC557385235 /* Measure */ = {
+			isa = PBXGroup;
+			children = (
+				A457BB75BADC45205B9B3F69 /* SystemConditions.swift */,
+				9168C630193BE62D64B5B960 /* PlaybackBenchmark.swift */,
+			);
+			path = Measure;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0E8A3AD980EC179856012B7E /* Krasa */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ED59008E052259AC151C5C09 /* Build configuration list for PBXNativeTarget "Krasa" */;
+			buildPhases = (
+				BCE16DD0260827ECF338C787 /* Sources */,
+				7561BFB015D8F536760CB671 /* Frameworks */,
+				0189424A5A60FED329FA868E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Krasa;
+			packageProductDependencies = (
+				B0DAC348D3FBC2130428908B /* ProbeKit */,
+				AF884B639665597476B455E5 /* SpeedRampEngine */,
+			);
+			productName = Krasa;
+			productReference = 7D1043473D55BFA90E8530D3 /* Krasa.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		98F54143AB4E86B28C3AFEE0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					0E8A3AD980EC179856012B7E = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = 7198B1A165AEE41CD0DEE38D /* Build configuration list for PBXProject "Krasa" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = DF891E785808226D241F246E /* Krasa */;
+			packageReferences = (
+				3035421092D70BB86EE474F3 /* XCLocalSwiftPackageReference "../MediaProbe" */,
+				2BCE1BA8852C9332D0F8EFE2 /* XCLocalSwiftPackageReference "../SpeedRampEngine" */,
+			);
+			productRefGroup = 00C45FD35CB0F9C5F764F070 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0E8A3AD980EC179856012B7E /* Krasa */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0189424A5A60FED329FA868E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BCE16DD0260827ECF338C787 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A8B7A9F858B0D17DE3ECAD7 /* KrasaApp.swift in Sources */,
+				2A8F5CFFD87674FB2B9862C3 /* ContentView.swift in Sources */,
+				4B5D8B6164C2AA68F3B7B073 /* MediaImporter.swift in Sources */,
+				10018FACF7C253DE3EA2AF0F /* VFRDetector.swift in Sources */,
+				B83C201C79F8240BBCBB539B /* PlaybackController.swift in Sources */,
+				2D92BF1645FAEB9D099F10E6 /* PlayerView.swift in Sources */,
+				1F9F8B29E107494593AB0078 /* SystemConditions.swift in Sources */,
+				D8D296ED416C1618E779BF80 /* PlaybackBenchmark.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		855D4B0C75ECD556474FD8F5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		4E74312DBBD620AE1CB5D771 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		112DB64EE5DD2663C7F9CA6C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Krasa/Krasa.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = cz.projektkrasa.Krasa;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		1DD7FB0A527F4C0E67C68D57 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Krasa/Krasa.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = cz.projektkrasa.Krasa;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7198B1A165AEE41CD0DEE38D /* Build configuration list for PBXProject "Krasa" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				855D4B0C75ECD556474FD8F5 /* Debug */,
+				4E74312DBBD620AE1CB5D771 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ED59008E052259AC151C5C09 /* Build configuration list for PBXNativeTarget "Krasa" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				112DB64EE5DD2663C7F9CA6C /* Debug */,
+				1DD7FB0A527F4C0E67C68D57 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		3035421092D70BB86EE474F3 /* XCLocalSwiftPackageReference "../MediaProbe" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../MediaProbe;
+		};
+		2BCE1BA8852C9332D0F8EFE2 /* XCLocalSwiftPackageReference "../SpeedRampEngine" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../SpeedRampEngine;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B0DAC348D3FBC2130428908B /* ProbeKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ProbeKit;
+		};
+		AF884B639665597476B455E5 /* SpeedRampEngine */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SpeedRampEngine;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+}

@@ -26,8 +26,11 @@ struct RampTool {
         let source = arguments.first.map { URL(fileURLWithPath: $0) } ?? defaultSource()
         let fps = doubleOption("--fps", in: arguments) ?? 30
         let slow = doubleOption("--slow", in: arguments) ?? 0.25
-        let steps = listOption("--segments", in: arguments) ?? [8, 4, 2, 1]
         let pitch = pitchOption(in: arguments)
+        // Výchozí cesta je mez skoku rychlosti. --segments je legacy varianta
+        // pro srovnávací měření, ne doporučený způsob použití.
+        let legacySteps = listOption("--segments", in: arguments)
+        let steps = doubleListOption("--maxstep", in: arguments) ?? (legacySteps == nil ? [0.015] : [])
 
         guard FileManager.default.fileExists(atPath: source.path) else {
             fail("Soubor \(source.path) neexistuje. Nejdřív ho zploštit: swift run Flatten")
@@ -36,29 +39,49 @@ struct RampTool {
         print("▸ Zdroj: \(source.lastPathComponent)")
         await printSourceInfo(source)
         print("  Ramp:  1,0 → \(fmt(slow, 2))× → 1,0, výstup \(fmt(fps, 0)) fps")
-        print("  Běhy:  framesPerSegment \(steps.map(String.init).joined(separator: ", "))")
+        if !steps.isEmpty {
+            print("  Běhy:  mez skoku \(steps.map { fmt($0 * 100, 2) + " %" }.joined(separator: ", "))")
+        }
+        if let legacySteps {
+            print("  Běhy:  framesPerSegment \(legacySteps.map(String.init).joined(separator: ", ")) (legacy)")
+        }
         print("  Zvuk:  korekce výšky \(shortPitch(pitch))\n")
 
         var results: [RampResult] = []
-        for framesPerSegment in steps {
-            print("── framesPerSegment \(framesPerSegment) ──")
-            let output = defaultOutput(for: source, framesPerSegment: framesPerSegment, pitch: pitch)
-            do {
-                let result = try await Ramper.run(source: source,
-                                                  to: output,
-                                                  outputFrameRate: fps,
-                                                  framesPerSegment: framesPerSegment,
-                                                  slowSpeed: slow,
-                                                  pitchAlgorithm: pitch)
-                printResult(result)
-                results.append(result)
-            } catch {
-                print("  ✗ selhalo: \(error.localizedDescription)")
-            }
-            print("")
+        for maxStep in steps {
+            print("── mez skoku \(fmt(maxStep * 100, 2)) % ──")
+            let output = defaultOutput(for: source, label: "step\(Int(maxStep * 1000))", pitch: pitch)
+            await runOne(source: source, output: output, fps: fps, slow: slow, pitch: pitch,
+                         framesPerSegment: nil, maxSpeedStep: maxStep, into: &results)
+        }
+        for framesPerSegment in legacySteps ?? [] {
+            print("── framesPerSegment \(framesPerSegment) (legacy) ──")
+            let output = defaultOutput(for: source, label: "seg\(framesPerSegment)", pitch: pitch)
+            await runOne(source: source, output: output, fps: fps, slow: slow, pitch: pitch,
+                         framesPerSegment: framesPerSegment, maxSpeedStep: nil, into: &results)
         }
 
         printComparison(results)
+    }
+
+    static func runOne(source: URL, output: URL, fps: Double, slow: Double,
+                       pitch: AVAudioTimePitchAlgorithm,
+                       framesPerSegment: Int?, maxSpeedStep: Double?,
+                       into results: inout [RampResult]) async {
+        do {
+            let result = try await Ramper.run(source: source,
+                                              to: output,
+                                              outputFrameRate: fps,
+                                              framesPerSegment: framesPerSegment,
+                                              maxSpeedStep: maxSpeedStep,
+                                              slowSpeed: slow,
+                                              pitchAlgorithm: pitch)
+            printResult(result)
+            results.append(result)
+        } catch {
+            print("  ✗ selhalo: \(error.localizedDescription)")
+        }
+        print("")
     }
 
     // MARK: - Výpis
@@ -77,9 +100,19 @@ struct RampTool {
         let measured = render.outputDuration.seconds
         let delta = (measured - r.expectedOutputDuration) * 1000
 
-        print("  Segmentů   \(r.segmentCount)"
+        print("  Segmentů   \(r.segmentCount) po \(r.framesPerSegment) snímcích"
             + "  ·  rychlost \(fmt(r.slowestSpeed, 4))× až \(fmt(r.fastestSpeed, 4))×")
-        print("  Skok       největší rozdíl rychlosti mezi sousedy \(fmt(r.largestSpeedStep, 4))×")
+        if let requested = r.requestedMaxStep {
+            let mark = r.limitedByFrameRate ? "  ⚠ NEDOSAŽENO" : "  ✓"
+            print("  Skok       \(fmt(r.largestSpeedStep * 100, 3)) %"
+                + " při mezi \(fmt(requested * 100, 2)) %\(mark)")
+            if r.limitedByFrameRate {
+                print("             Ani jeden snímek na úsek nestačí — mez je při téhle")
+                print("             snímkové frekvenci a délce klipu nedosažitelná.")
+            }
+        } else {
+            print("  Skok       největší rozdíl rychlosti mezi sousedy \(fmt(r.largestSpeedStep, 4))×")
+        }
         print("  Délka      čekáno \(fmt(r.expectedOutputDuration, 4)) s"
             + " · kompozice \(fmt(r.compositionDuration.seconds, 4)) s"
             + " · výstup \(fmt(measured, 4)) s"
@@ -98,10 +131,11 @@ struct RampTool {
         guard !results.isEmpty else { return }
         print("═══ POROVNÁNÍ ═══\n")
 
-        let header = ["fr/seg", "segmentů", "délka", "snímků", "podrž.", "skok rychl.", "velikost"]
+        let header = ["mez", "fr/seg", "segmentů", "délka", "snímků", "podrž.", "skok rychl.", "velikost"]
         var rows: [[String]] = []
         for r in results {
             rows.append([
+                r.requestedMaxStep.map { fmt($0 * 100, 2) + " %" } ?? "—",
                 String(r.framesPerSegment),
                 String(r.segmentCount),
                 "\(fmt(r.render.outputDuration.seconds, 3)) s",
@@ -157,18 +191,26 @@ struct RampTool {
     /// Algoritmus se do názvu dostane jen když není výchozí — ať se A/B
     /// nesloučí do jednoho souboru a nepřepíše se dosavadní měření.
     static func defaultOutput(for source: URL,
-                              framesPerSegment: Int,
+                              label: String,
                               pitch: AVAudioTimePitchAlgorithm) -> URL {
-        let suffix = pitch == .spectral ? "" : "_" + shortPitch(pitch)
+        let suffix = pitch == .timeDomain ? "" : "_" + shortPitch(pitch)
         return source.deletingLastPathComponent()
             .appendingPathComponent("ramped")
             .appendingPathComponent(source.deletingPathExtension().lastPathComponent
-                                    + "_ramp_seg\(framesPerSegment)\(suffix).mov")
+                                    + "_ramp_\(label)\(suffix).mov")
+    }
+
+    static func doubleListOption(_ name: String, in arguments: [String]) -> [Double]? {
+        guard let index = arguments.firstIndex(of: name), index + 1 < arguments.count else { return nil }
+        let values = arguments[index + 1]
+            .split(separator: ",")
+            .compactMap { Double($0.replacingOccurrences(of: ",", with: ".")) }
+        return values.isEmpty ? nil : values
     }
 
     static func pitchOption(in arguments: [String]) -> AVAudioTimePitchAlgorithm {
         guard let index = arguments.firstIndex(of: "--pitch"), index + 1 < arguments.count else {
-            return .spectral
+            return .timeDomain
         }
         switch arguments[index + 1].lowercased() {
         case "timedomain": return .timeDomain

@@ -36,8 +36,20 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
 - **⚠️ Vždy nastav `videoInput.mediaTimeScale = frameDuration.timescale`.** Bez instrukce si `AVAssetWriter` zvolí timescale 600 a zapisované časy do ní kvantizuje. U celočíselných frekvencí to projde (1500/90000 = 10/600), u **29,97 / 59,94 / 23,976 i naší naměřené 30,01 fps** ne — 2999/90000 je v šestistovkách 19,993 ticku a výstup vyleze jako `CFR≈` s 5% rozptylem místo `CFR`. **Na zvukovém vstupu se `mediaTimeScale` nastavovat NESMÍ, vyhodí výjimku.** Platí pro zplošťovač, pro proxy generátor (fáze 4) i pro export (fáze 5) — všude, kde se zapisuje video.
 - **Zvuk v proxy a zploštěných souborech zapisuj jako LPCM, ne AAC.** AAC by přidal vlastní priming delay, a tím rozbil přesně to, kvůli čemu se ty soubory dělají. LPCM žádný nemá.
 - **`scaleTimeRange` umí jen konstantní rychlost.** Plynulá křivka = segmentace na mikro-úseky. Hotové v `SpeedRampEngine.segments(outputFrameRate:framesPerSegment:)`.
-- **`framesPerSegment = 8` jako výchozí, nastavitelné.** Spike 0 poslechem ověřil, že **zvuk je na jemnosti segmentace nezávislý** — lupance nejsou ani při 545 segmentech. Rozhoduje proto velikost kompozice: pětiminutový ramp při 30 fps je 1 125 volání `scaleTimeRange` při osmi místo 9 000 při jednom. Skok rychlosti ~1 % je pod prahem viditelnosti. U krátkých klipů skok roste (11s klip měl při osmi 3,79 %), proto to nesmí být konstanta.
-- **Algoritmus korekce výšky patří do nastavení.** `.spectral` výchozí, `.timeDomain` a `.varispeed` volitelné. Zpomalené záběry se ve svatebních filmech typicky podkládají hudbou, takže kvalita roztaženého zvuku je v praxi méně kritická — ale kdo nechá původní zvuk, pro toho důležitá je.
+- **Segmentuj podle meze skoku rychlosti, ne podle počtu snímků.** `SpeedRamp.segmentation(outputFrameRate:maxSpeedStep:)`, **výchozí mez 0,015** (1,5 procentního bodu). Engine si počet úseků dopočítá sám z maximální strmosti křivky.
+  Pevný `framesPerSegment` je špatná veličina: skok rychlosti závisí na délce klipu, takže `8` dá na 45s klipu 0,96 % a na 11s klipu 3,79 %. Mez skoku je naopak vlastnost výsledku, ne vstupu:
+
+  | klip | `framesPerSegment = 8` | `maxSpeedStep = 1,5 %` |
+  |---|---|---|
+  | 11,4 s | 69 úseků, skok **3,79 %** | 182 úseků po 3 snímcích, **1,42 %** |
+  | 44,9 s | 270 úseků, skok 0,96 % | 180 úseků po 12 snímcích, **1,44 %** |
+
+  Krátký klip dostane jemnější dělení, dlouhý hrubší, oba stejnou kvalitu. Varianta s `framesPerSegment` zůstala pro srovnávací měření, ale není výchozí.
+  ⚠️ **Mez nemusí být vždy dosažitelná.** Při jednom snímku na úsek je podlaha `max|dv/dt| / fps` — krátký a strmý ramp na nízké fps se pod ni nedostane. `SegmentationPlan.limitedByFrameRate` to hlásí a **UI to musí umět zobrazit**, ne to spolknout.
+
+- **Korekce výšky: `.timeDomain` jako výchozí.** `.spectral` je fázový vokodér a **rozmazává transienty** — rána sekerou je čistý transient a to rozmazání je slyšet jako plechovost. `.timeDomain` transienty zachovává.
+  Na drženém hudebním tónu by to dopadlo obráceně (tam je fázový vokodér lepší), **proto zůstává volitelné** — `.spectral` i `.varispeed` (bez korekce, výška se mění s rychlostí).
+  Zpomalené záběry se ve svatebních filmech typicky podkládají hudbou, takže kvalita roztaženého zvuku je v praxi méně kritická — ale kdo nechá původní zvuk, pro toho důležitá je.
 - **⚠️ Zpomalení potřebuje dost snímků ve zdroji: `zdrojFps × nejnižšíRychlost ≥ výstupFps`.** Jinak se snímky duplikují a zpomalený úsek trhá. Pro ramp na 0,25× při výstupu 30 fps je potřeba **zdroj 120 fps** — a to je přesně důvod, proč telefony nabízejí slow-mo režim, ne libovůle výrobce. Naměřeno na třech klipech, teorie sedí na desetinu procenta:
 
   | zdroj | potřeba | duplikátů |
@@ -87,11 +99,12 @@ Pět klipů ze Samsungu, 4K HEVC. Čísla a metoda v `MediaProbe/RESULTS.md`.
 ## Hotové moduly
 
 ### `SpeedRampEngine/`
-Matematika rychlostní křivky. Čistý Swift, žádné závislosti. **31 testů, ověřeno.**
+Matematika rychlostní křivky. Čistý Swift, žádné závislosti. **41 testů, ověřeno.**
 
 ```swift
 let ramp = try SpeedRamp.classicSlowMotion(sourceDuration: 8.0, slowSpeed: 0.25)
-let segments = try ramp.segments(outputFrameRate: 60, framesPerSegment: 2)
+let plan = try ramp.segmentation(outputFrameRate: 30, maxSpeedStep: 0.015)
+// plan.segments, plan.framesPerSegment, plan.limitedByFrameRate
 ```
 
 Referenční hodnota: ramp 1,0 → 0,25 → 1,0 přes 5 s spotřebuje **přesně 3,125 s** zdroje. Když ti při stavbě kompozice vyjde jiné číslo, chyba je v převodu na `CMTime`, ne v matematice.

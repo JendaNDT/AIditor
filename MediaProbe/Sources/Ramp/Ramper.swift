@@ -29,6 +29,9 @@ struct RampResult {
     let outputURL: URL
     let framesPerSegment: Int
     let segmentCount: Int
+    /// Zadaná mez skoku rychlosti, když se segmentovalo podle ní.
+    let requestedMaxStep: Double?
+    let limitedByFrameRate: Bool
     let outputFrameRate: Double
     let expectedOutputDuration: Double
     let compositionDuration: CMTime
@@ -48,9 +51,10 @@ enum Ramper {
     static func run(source: URL,
                     to outputURL: URL,
                     outputFrameRate: Double,
-                    framesPerSegment: Int,
+                    framesPerSegment: Int?,
+                    maxSpeedStep: Double?,
                     slowSpeed: Double,
-                    pitchAlgorithm: AVAudioTimePitchAlgorithm = .spectral) async throws -> RampResult {
+                    pitchAlgorithm: AVAudioTimePitchAlgorithm = .timeDomain) async throws -> RampResult {
 
         let asset = AVURLAsset(url: source)
         guard let sourceVideo = try await asset.loadTracks(withMediaType: .video).first else {
@@ -63,8 +67,25 @@ enum Ramper {
         //    nesmlouvá, jen se převádí na CMTime.
         let ramp = try SpeedRamp.classicSlowMotion(sourceDuration: sourceDuration.seconds,
                                                    slowSpeed: slowSpeed)
-        let segments = try ramp.segments(outputFrameRate: outputFrameRate,
-                                         framesPerSegment: framesPerSegment)
+        // Výchozí cesta je mez skoku rychlosti. Pevný počet snímků na úsek
+        // je špatná veličina — skok závisí na délce klipu, takže stejná
+        // hodnota dá na 45s klipu 0,96 % a na 11s klipu 3,79 %.
+        let segments: [RampSegment]
+        let chosenFramesPerSegment: Int
+        let limited: Bool
+        if let maxSpeedStep {
+            let plan = try ramp.segmentation(outputFrameRate: outputFrameRate,
+                                             maxSpeedStep: maxSpeedStep)
+            segments = plan.segments
+            chosenFramesPerSegment = plan.framesPerSegment
+            limited = plan.limitedByFrameRate
+        } else {
+            let perSegment = framesPerSegment ?? 8
+            segments = try ramp.segments(outputFrameRate: outputFrameRate,
+                                         framesPerSegment: perSegment)
+            chosenFramesPerSegment = perSegment
+            limited = false
+        }
         guard !segments.isEmpty else {
             throw ProbeError.message("Segmentace vrátila prázdný seznam.")
         }
@@ -96,7 +117,7 @@ enum Ramper {
         }
 
         // 4) Převod úseků na celé ticky, kumulativně.
-        let plan = tickPlan(segments: segments,
+        let ticks = tickPlan(segments: segments,
                             timescale: timescale,
                             frameTicks: frameTicks,
                             outputFrameRate: outputFrameRate,
@@ -104,7 +125,7 @@ enum Ramper {
 
         // 5) scaleTimeRange POZPÁTKU. Škálování úseku posune všechno za ním,
         //    ale nic před ním — proto od konce.
-        for step in plan.reversed() {
+        for step in ticks.reversed() {
             guard step.sourceTicks > 0, step.outputTicks > 0 else { continue }
             composition.scaleTimeRange(
                 CMTimeRange(start: CMTime(value: step.sourceStartTicks, timescale: timescale),
@@ -131,8 +152,10 @@ enum Ramper {
         let size = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int64) ?? nil
 
         return RampResult(outputURL: outputURL,
-                          framesPerSegment: framesPerSegment,
+                          framesPerSegment: chosenFramesPerSegment,
                           segmentCount: segments.count,
+                          requestedMaxStep: maxSpeedStep,
+                          limitedByFrameRate: limited,
                           outputFrameRate: outputFrameRate,
                           expectedOutputDuration: ramp.outputDuration,
                           compositionDuration: compositionDuration,

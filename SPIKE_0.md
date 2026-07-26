@@ -153,20 +153,32 @@ Poslechnuty všechny čtyři jemnosti na obou citlivých klipech (202947, 203452
 
 **Hypotéza „víc hranic = víc lupanců" se nepotvrdila.** To je dobrá zpráva: znamená to, že jemnost segmentace **není omezená zvukem** a dá se volit podle jiného kritéria.
 
-#### ✅ Výchozí hodnota: `framesPerSegment = 8`
+#### ✅ Výchozí: mez skoku rychlosti 1,5 %, ne pevný počet snímků
 
-Když zvuk nerozhoduje, rozhoduje **velikost kompozice**. Pětiminutový ramp při 30 fps je 9000 snímků:
+První závěr zněl „`framesPerSegment = 8`". **Byl špatně** — a odhalilo to vlastní měření: skok rychlosti při osmi snímcích vyšel 0,96 % na 45s klipu, ale 3,79 % na 11s klipu. Pevný počet snímků na úsek je **špatná veličina**, protože skok závisí na délce klipu.
 
-| framesPerSegment | volání `scaleTimeRange` | skok rychlosti (klip 40–70 s) |
+Správná veličina je **mez skoku samotná**. `SpeedRampEngine` dostal variantu `segmentation(outputFrameRate:maxSpeedStep:)`, která si z maximální strmosti křivky dopočítá počet úseků sama:
+
+| klip | `framesPerSegment = 8` | `maxSpeedStep = 1,5 %` |
 |---|---|---|
-| **8** | **1 125** | **~1 %** |
-| 4 | 2 250 | ~0,5 % |
-| 2 | 4 500 | ~0,25 % |
-| 1 | 9 000 | ~0,12 % |
+| 11,4 s | 69 úseků, skok **3,79 %** | 182 úseků po **3** snímcích, **1,42 %** |
+| 44,9 s | 270 úseků, skok 0,96 % | 180 úseků po **12** snímcích, **1,44 %** |
 
-Skok rychlosti kolem 1 % je pod prahem viditelnosti a zvuk ho neřeší. Osm snímků na úsek tedy dává **osmkrát menší kompozici zadarmo**.
+Krátký klip dostane jemnější dělení, dlouhý hrubší, **oba stejnou kvalitu a skoro stejný počet úseků** (182 vs 180) přes čtyřnásobný rozdíl v délce. Přesně to, co má segmentace dělat.
 
-⚠️ **Nezadrátovat — nechat nastavitelné.** Skok rychlosti závisí na délce klipu: na 45s a 39s klipu vyšel při osmi snímcích 0,96 % a 1,12 %, ale na 11s klipu 3,79 %. **U krátkých záběrů může být potřeba jemnější hodnota**, a to je přesně důvod, proč to nesmí být konstanta v kódu.
+**Mez 1,5 %** je nad naměřenými 0,96 a 1,12 % u klipů, které zněly čistě, a pod 3,79 % u toho krátkého.
+
+⚠️ **Mez nemusí být dosažitelná.** Při jednom snímku na úsek je podlaha `max|dv/dt| / fps`. Krátký a strmý ramp na nízké snímkové frekvenci se pod ni nedostane — 11s klip při 24 fps se nedostane pod 0,59 %. To není chyba, je to hustota mřížky. `SegmentationPlan.limitedByFrameRate` to hlásí a **UI to musí zobrazit**, ne spolknout.
+
+Varianta s `framesPerSegment` zůstala pro srovnávací měření, ale není výchozí.
+
+#### Korekce výšky: `.timeDomain`, ne `.spectral`
+
+A/B poslech na klipu 202947 (rána sekerou v úseku 0:15–0:22):
+
+> **`.timeDomain` zní líp.** `.spectral` je fázový vokodér a **rozmazává transienty** — rána sekerou je čistý transient a to rozmazání je přesně ta plechovost, která byla slyšet. `.timeDomain` transienty zachovává.
+
+**Na drženém hudebním tónu by to dopadlo obráceně** — tam je fázový vokodér lepší. Proto zůstává volitelné, ne zadrátované.
 
 #### Produktová poznámka: kvalita roztaženého zvuku
 

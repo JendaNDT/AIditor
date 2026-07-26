@@ -23,6 +23,7 @@ public enum SpeedRampError: Error, Equatable, CustomStringConvertible {
     case nonIncreasingTime(index: Int)
     case nonPositiveSpeed(index: Int, speed: Double)
     case invalidFrameRate(Double)
+    case invalidSpeedStep(Double)
 
     public var description: String {
         switch self {
@@ -36,6 +37,8 @@ public enum SpeedRampError: Error, Equatable, CustomStringConvertible {
             return "Uzel \(i) má rychlost \(v). Rychlost musí být kladná — nula je freeze frame, což je jiná funkce."
         case .invalidFrameRate(let f):
             return "Neplatná snímková frekvence \(f)."
+        case .invalidSpeedStep(let s):
+            return "Neplatná mez skoku rychlosti \(s). Musí být kladná."
         }
     }
 }
@@ -316,6 +319,125 @@ public struct SpeedRamp: Equatable, Codable, Sendable {
             previousSource = sourceEnd
         }
         return result
+    }
+
+    // MARK: Segmentace podle skoku rychlosti
+
+    /// Výsledek segmentace řízené mezí skoku rychlosti.
+    public struct SegmentationPlan: Sendable {
+        public let segments: [RampSegment]
+        /// Kolik výstupních snímků engine nakonec zvolil na jeden úsek.
+        public let framesPerSegment: Int
+        public let requestedMaxStep: Double
+        /// Skutečně dosažený největší skok mezi sousedními úseky.
+        public let achievedMaxStep: Double
+        /// `true`, když ani jeden snímek na úsek nestačí — mez je při téhle
+        /// snímkové frekvenci nedosažitelná. Volající to musí umět zobrazit.
+        public let limitedByFrameRate: Bool
+
+        public var segmentCount: Int { segments.count }
+    }
+
+    /// Největší strmost křivky, `max |dv/dt|`.
+    ///
+    /// Zjišťuje se hustým vzorkováním, ne analyticky — easing je libovolná
+    /// Bézierova křivka a číselné vzorkování je vůči ní robustní.
+    /// Vzorkuje se jemněji než snímková mřížka, jinak by se strmost podcenila.
+    public func maxSpeedSlope(outputFrameRate: Double) -> Double {
+        guard outputDuration > 0, outputFrameRate > 0 else { return 0 }
+
+        let samples = max(2048, Int((outputDuration * outputFrameRate * 4).rounded()))
+        let dt = outputDuration / Double(samples)
+        var maxSlope = 0.0
+        var previous = speed(atOutput: 0)
+
+        for index in 1...samples {
+            let current = speed(atOutput: outputDuration * Double(index) / Double(samples))
+            maxSlope = max(maxSlope, abs(current - previous) / dt)
+            previous = current
+        }
+        return maxSlope
+    }
+
+    /// Rozkrájí ramp tak, aby skok rychlosti mezi sousedními úseky nikde
+    /// nepřekročil `maxSpeedStep`.
+    ///
+    /// **Tohle je preferovaná varianta** oproti `segments(outputFrameRate:framesPerSegment:)`.
+    /// Pevný počet snímků na úsek je špatná veličina: skok rychlosti závisí na
+    /// délce klipu, takže stejná hodnota dá na 45s klipu 0,96 % a na 11s klipu
+    /// 3,79 %. Mez skoku je naopak vlastnost výsledku, ne vstupu — dlouhý klip
+    /// dostane hrubé dělení, krátký jemné, oba se stejnou kvalitou.
+    ///
+    /// - Parameters:
+    ///   - outputFrameRate: snímková frekvence časové osy
+    ///   - maxSpeedStep: největší přípustný **absolutní** rozdíl rychlosti mezi
+    ///     sousedními úseky. `0.015` znamená, že se rychlost nikde neskokne
+    ///     o víc než 0,015× (tedy 1,5 procentního bodu).
+    ///
+    /// - Note: Mez je absolutní, ne relativní k rychlosti. Skok 0,015 při
+    ///   rychlosti 1,0 je 1,5 %, ale při 0,25 už 6 %. U klasického rampu to
+    ///   nevadí, protože křivka je v okolí minima plochá a největší skoky
+    ///   vznikají v přechodech, kde je rychlost prostřední.
+    public func segmentation(outputFrameRate: Double,
+                             maxSpeedStep: Double) throws -> SegmentationPlan {
+        guard outputFrameRate > 0, outputFrameRate.isFinite else {
+            throw SpeedRampError.invalidFrameRate(outputFrameRate)
+        }
+        guard maxSpeedStep > 0, maxSpeedStep.isFinite else {
+            throw SpeedRampError.invalidSpeedStep(maxSpeedStep)
+        }
+
+        let totalFrames = max(1, Int((outputDuration * outputFrameRate).rounded()))
+        let slope = maxSpeedSlope(outputFrameRate: outputFrameRate)
+
+        // Odhad prvního řádu: skok ≈ |dv/dt| · délka úseku.
+        // Použije se MAXIMÁLNÍ strmost, takže odhad je konzervativní —
+        // skutečný skok vyjde nejvýš takový, obvykle menší.
+        var chosen: Int
+        if slope <= 0 {
+            chosen = totalFrames        // konstantní rychlost, dělit není proč
+        } else {
+            chosen = Int((maxSpeedStep * outputFrameRate / slope).rounded(.down))
+        }
+        chosen = min(totalFrames, max(1, chosen))
+
+        // Odhad se ověří na skutečných úsecích. Tím se z něj stává záruka,
+        // ne přibližný výpočet. Kvůli konzervativnosti odhadu se cyklus
+        // skoro nikdy nespustí — je to pojistka, ne hlavní cesta.
+        var result = try segments(outputFrameRate: outputFrameRate, framesPerSegment: chosen)
+        var achieved = Self.largestSpeedStep(in: result)
+
+        while achieved > maxSpeedStep && chosen > 1 {
+            chosen = max(1, chosen / 2)
+            result = try segments(outputFrameRate: outputFrameRate, framesPerSegment: chosen)
+            achieved = Self.largestSpeedStep(in: result)
+        }
+
+        return SegmentationPlan(segments: result,
+                                framesPerSegment: chosen,
+                                requestedMaxStep: maxSpeedStep,
+                                achievedMaxStep: achieved,
+                                limitedByFrameRate: achieved > maxSpeedStep)
+    }
+
+    /// Zkratka k `segmentation(outputFrameRate:maxSpeedStep:)`, když stačí úseky.
+    ///
+    /// Pozor: takhle se ztratí informace o tom, jestli se mez povedlo dodržet.
+    /// Když na tom záleží, sáhni po `segmentation(...)` a podívej se na
+    /// `limitedByFrameRate`.
+    public func segments(outputFrameRate: Double,
+                         maxSpeedStep: Double) throws -> [RampSegment] {
+        try segmentation(outputFrameRate: outputFrameRate, maxSpeedStep: maxSpeedStep).segments
+    }
+
+    /// Největší rozdíl rychlosti mezi sousedními úseky.
+    public static func largestSpeedStep(in segments: [RampSegment]) -> Double {
+        guard segments.count > 1 else { return 0 }
+        var largest = 0.0
+        for index in 1..<segments.count {
+            largest = max(largest, abs(segments[index].speed - segments[index - 1].speed))
+        }
+        return largest
     }
 
     /// Vzorky rychlosti pro vykreslení křivky v UI.

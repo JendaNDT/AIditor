@@ -327,3 +327,161 @@ final class SpeedRampCodableTests: XCTestCase {
         XCTAssertThrowsError(try JSONDecoder().decode(SpeedRamp.self, from: Data(json.utf8)))
     }
 }
+
+// MARK: - Segmentace podle meze skoku rychlosti
+
+/// Pevný počet snímků na úsek je špatná veličina: skok rychlosti závisí na
+/// délce klipu. Tyhle testy ověřují variantu, kde si engine počet úseků
+/// dopočítá sám tak, aby skok nikde nepřekročil zadanou mez.
+final class SpeedRampAdaptiveSegmentTests: XCTestCase {
+
+    /// Kontrakt zní: **buď se mez dodrží, nebo se přizná, že nešla dodržet** —
+    /// a přiznat ji smí jen tehdy, když se došlo až na jeden snímek na úsek.
+    /// Tichý návrat něčeho horšího je to jediné, co je zakázané.
+    func testMezSeDodrziNeboSePrizna() throws {
+        for sourceDuration in [11.358, 38.620, 44.938, 300.0] {
+            for fps in [24.0, 30.0, 60.0] {
+                for limit in [0.005, 0.015, 0.05] {
+                    let ramp = try SpeedRamp.classicSlowMotion(sourceDuration: sourceDuration,
+                                                               slowSpeed: 0.25)
+                    let plan = try ramp.segmentation(outputFrameRate: fps, maxSpeedStep: limit)
+                    let popis = "zdroj \(sourceDuration) s, \(fps) fps, mez \(limit)"
+
+                    if plan.limitedByFrameRate {
+                        XCTAssertEqual(plan.framesPerSegment, 1,
+                                       "vzdát to smí až na jednom snímku — \(popis)")
+                        XCTAssertGreaterThan(plan.achievedMaxStep, limit, popis)
+                    } else {
+                        XCTAssertLessThanOrEqual(plan.achievedMaxStep, limit, popis)
+                    }
+                }
+            }
+        }
+    }
+
+    /// U typických svatebních délek a 30 fps musí mez 1,5 % vyjít vždy.
+    /// Kdyby ne, výchozí hodnota v produktu je špatně zvolená.
+    func testVychoziMezVychaziNaBeznychDelkach() throws {
+        for sourceDuration in [5.0, 11.358, 20.0, 38.620, 44.938, 120.0, 300.0] {
+            let ramp = try SpeedRamp.classicSlowMotion(sourceDuration: sourceDuration,
+                                                       slowSpeed: 0.25)
+            let plan = try ramp.segmentation(outputFrameRate: 30, maxSpeedStep: 0.015)
+            XCTAssertFalse(plan.limitedByFrameRate,
+                           "výchozí mez 1,5 % nevyšla na \(sourceDuration) s")
+            XCTAssertLessThanOrEqual(plan.achievedMaxStep, 0.015)
+        }
+    }
+
+    /// Kde je hranice dosažitelnosti: krátký klip na nízké fps má míň snímků,
+    /// takže minimální krok je hrubší. Tohle je vlastnost mřížky, ne chyba.
+    func testNizsiFpsMaHrubsiPodlahu() throws {
+        let ramp = try SpeedRamp.classicSlowMotion(sourceDuration: 11.358, slowSpeed: 0.25)
+
+        let podlaha24 = try ramp.segmentation(outputFrameRate: 24, maxSpeedStep: 1e-9).achievedMaxStep
+        let podlaha60 = try ramp.segmentation(outputFrameRate: 60, maxSpeedStep: 1e-9).achievedMaxStep
+
+        XCTAssertGreaterThan(podlaha24, podlaha60,
+                             "míň snímků za sekundu = hrubší nejmenší možný krok")
+    }
+
+    /// Tohle je jádro změny: stejná mez má na různě dlouhých klipech dát
+    /// různý počet snímků na úsek. Kdyby to vracelo pořád stejné číslo,
+    /// nová varianta by nic neřešila.
+    func testDelsiKlipDostaneHrubsiDeleni() throws {
+        let kratky = try SpeedRamp.classicSlowMotion(sourceDuration: 11.358, slowSpeed: 0.25)
+        let dlouhy = try SpeedRamp.classicSlowMotion(sourceDuration: 44.938, slowSpeed: 0.25)
+
+        let planKratky = try kratky.segmentation(outputFrameRate: 30, maxSpeedStep: 0.015)
+        let planDlouhy = try dlouhy.segmentation(outputFrameRate: 30, maxSpeedStep: 0.015)
+
+        XCTAssertGreaterThan(planDlouhy.framesPerSegment, planKratky.framesPerSegment,
+                             "delší klip snese hrubší dělení při stejné kvalitě")
+        XCTAssertLessThanOrEqual(planKratky.achievedMaxStep, 0.015)
+        XCTAssertLessThanOrEqual(planDlouhy.achievedMaxStep, 0.015)
+    }
+
+    /// Přísnější mez nesmí dát míň úseků.
+    func testPrisnejsiMezNedaMeneUseku() throws {
+        let ramp = try SpeedRamp.classicSlowMotion(sourceDuration: 44.938, slowSpeed: 0.25)
+        var predchozi = Int.max
+
+        for limit in [0.05, 0.02, 0.01, 0.005, 0.002] {
+            let plan = try ramp.segmentation(outputFrameRate: 30, maxSpeedStep: limit)
+            XCTAssertLessThanOrEqual(plan.segmentCount, predchozi == Int.max ? Int.max : predchozi * 4,
+                                     "skok v počtu úseků je nečekaně velký")
+            XCTAssertGreaterThanOrEqual(plan.segmentCount, 1)
+            if predchozi != Int.max {
+                XCTAssertGreaterThanOrEqual(plan.segmentCount, predchozi,
+                                            "přísnější mez \(limit) dala míň úseků")
+            }
+            predchozi = plan.segmentCount
+        }
+    }
+
+    /// Krátký a strmý ramp mez nemusí splnit ani při jednom snímku na úsek.
+    /// Engine to musí přiznat, ne tiše vrátit něco horšího.
+    func testNedosazitelnaMezSePrizna() throws {
+        // 1,5 s zdroje → 2,4 s výstupu, celá křivka v pár snímcích.
+        let ramp = try SpeedRamp.classicSlowMotion(sourceDuration: 1.5, slowSpeed: 0.25)
+        let plan = try ramp.segmentation(outputFrameRate: 30, maxSpeedStep: 0.001)
+
+        XCTAssertEqual(plan.framesPerSegment, 1, "mělo se dojít až na jeden snímek")
+        XCTAssertTrue(plan.limitedByFrameRate, "nedosažitelná mez se musí přiznat")
+        XCTAssertGreaterThan(plan.achievedMaxStep, plan.requestedMaxStep)
+    }
+
+    /// Konstantní rychlost nemá co segmentovat — jeden úsek stačí.
+    func testKonstantniRychlostNepotrebujeDeleni() throws {
+        let ramp = try SpeedRamp.constant(speed: 0.5, outputDuration: 10)
+        let plan = try ramp.segmentation(outputFrameRate: 30, maxSpeedStep: 0.015)
+
+        XCTAssertEqual(plan.segmentCount, 1, "konstantní rychlost se nemá proč krájet")
+        XCTAssertEqual(plan.achievedMaxStep, 0, accuracy: 1e-12)
+        XCTAssertFalse(plan.limitedByFrameRate)
+    }
+
+    /// Invarianty z původní segmentace musí platit i tady: úseky na sebe
+    /// navazují bez mezer a součty sedí.
+    func testSouctySediANavazujiNaSebe() throws {
+        let ramp = try SpeedRamp.classicSlowMotion(sourceDuration: 44.938, slowSpeed: 0.25)
+        let plan = try ramp.segmentation(outputFrameRate: 30, maxSpeedStep: 0.015)
+        let segments = plan.segments
+
+        let sourceTotal = segments.reduce(0) { $0 + $1.sourceDuration }
+        let outputTotal = segments.reduce(0) { $0 + $1.outputDuration }
+        XCTAssertEqual(sourceTotal, ramp.sourceConsumed, accuracy: 1e-9)
+        XCTAssertEqual(outputTotal, ramp.outputDuration, accuracy: 1e-9)
+
+        for i in 0..<(segments.count - 1) {
+            XCTAssertEqual(segments[i].sourceStart + segments[i].sourceDuration,
+                           segments[i + 1].sourceStart, accuracy: 1e-12,
+                           "mezera mezi segmenty \(i) a \(i+1)")
+        }
+        for s in segments {
+            XCTAssertGreaterThan(s.sourceDuration, 0)
+            XCTAssertGreaterThan(s.outputDuration, 0)
+        }
+    }
+
+    func testOdmitneNeplatnouMez() throws {
+        let ramp = try SpeedRamp.classicSlowMotion(sourceDuration: 10, slowSpeed: 0.25)
+        for mez in [0.0, -0.01, Double.nan] {
+            XCTAssertThrowsError(try ramp.segmentation(outputFrameRate: 30, maxSpeedStep: mez),
+                                 "mez \(mez) měla být odmítnutá")
+        }
+    }
+
+    /// Strmost křivky se musí měřit jemněji než snímková mřížka, jinak by
+    /// se podcenila a mez by se tiše překročila.
+    func testStrmostOdpovidaKrivce() throws {
+        let ramp = try SpeedRamp.classicSlowMotion(sourceDuration: 44.938, slowSpeed: 0.25)
+        let slope = ramp.maxSpeedSlope(outputFrameRate: 30)
+
+        // Hrubá kontrola proti ručnímu odhadu: rozsah rychlosti 0,75
+        // přes polovinu výstupu, easeInOut zvedá špičkovou strmost
+        // zhruba 1,5–2× nad průměr.
+        let prumernaStrmost = 0.75 / (ramp.outputDuration / 2)
+        XCTAssertGreaterThan(slope, prumernaStrmost)
+        XCTAssertLessThan(slope, prumernaStrmost * 3)
+    }
+}

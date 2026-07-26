@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: specifikace v2.0 + implementační plán hotové. Žádný kód.**
+**Stav: specifikace a plán hotové, dva ověřené moduly (`SpeedRampEngine`, `MediaProbe`). Appka zatím neexistuje — žádné UI, žádný Xcode projekt.**
 
 ## ⏭️ Příští krok
 **Spike 0, krok 3 — zploštění VFR → CFR.**
@@ -28,7 +28,7 @@ Příprava hotová: Xcode nainstalovaný, git repozitář založený, klipy v `T
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 0 — Spike 0.** Matematika hotová, zbytek (přehrávač, kompozice, export, měření) čeká.
+- **Fáze 0 — Spike 0.** Matematika (`SpeedRampEngine`) a sonda (`MediaProbe`) hotové. Čeká: zploštění VFR→CFR (krok 3), přehrávač (1), konstantní zpomalení (2), ramp (4), měření (5).
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO

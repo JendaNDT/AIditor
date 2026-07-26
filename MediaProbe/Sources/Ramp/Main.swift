@@ -27,6 +27,7 @@ struct RampTool {
         let fps = doubleOption("--fps", in: arguments) ?? 30
         let slow = doubleOption("--slow", in: arguments) ?? 0.25
         let steps = listOption("--segments", in: arguments) ?? [8, 4, 2, 1]
+        let pitch = pitchOption(in: arguments)
 
         guard FileManager.default.fileExists(atPath: source.path) else {
             fail("Soubor \(source.path) neexistuje. Nejdřív ho zploštit: swift run Flatten")
@@ -35,18 +36,20 @@ struct RampTool {
         print("▸ Zdroj: \(source.lastPathComponent)")
         await printSourceInfo(source)
         print("  Ramp:  1,0 → \(fmt(slow, 2))× → 1,0, výstup \(fmt(fps, 0)) fps")
-        print("  Běhy:  framesPerSegment \(steps.map(String.init).joined(separator: ", "))\n")
+        print("  Běhy:  framesPerSegment \(steps.map(String.init).joined(separator: ", "))")
+        print("  Zvuk:  korekce výšky \(shortPitch(pitch))\n")
 
         var results: [RampResult] = []
         for framesPerSegment in steps {
             print("── framesPerSegment \(framesPerSegment) ──")
-            let output = defaultOutput(for: source, framesPerSegment: framesPerSegment)
+            let output = defaultOutput(for: source, framesPerSegment: framesPerSegment, pitch: pitch)
             do {
                 let result = try await Ramper.run(source: source,
                                                   to: output,
                                                   outputFrameRate: fps,
                                                   framesPerSegment: framesPerSegment,
-                                                  slowSpeed: slow)
+                                                  slowSpeed: slow,
+                                                  pitchAlgorithm: pitch)
                 printResult(result)
                 results.append(result)
             } catch {
@@ -151,11 +154,33 @@ struct RampTool {
             .appendingPathComponent("TestClips/flattened/20260725_203813_cfr.mov")
     }
 
-    static func defaultOutput(for source: URL, framesPerSegment: Int) -> URL {
-        source.deletingLastPathComponent()
+    /// Algoritmus se do názvu dostane jen když není výchozí — ať se A/B
+    /// nesloučí do jednoho souboru a nepřepíše se dosavadní měření.
+    static func defaultOutput(for source: URL,
+                              framesPerSegment: Int,
+                              pitch: AVAudioTimePitchAlgorithm) -> URL {
+        let suffix = pitch == .spectral ? "" : "_" + shortPitch(pitch)
+        return source.deletingLastPathComponent()
             .appendingPathComponent("ramped")
             .appendingPathComponent(source.deletingPathExtension().lastPathComponent
-                                    + "_ramp_seg\(framesPerSegment).mov")
+                                    + "_ramp_seg\(framesPerSegment)\(suffix).mov")
+    }
+
+    static func pitchOption(in arguments: [String]) -> AVAudioTimePitchAlgorithm {
+        guard let index = arguments.firstIndex(of: "--pitch"), index + 1 < arguments.count else {
+            return .spectral
+        }
+        switch arguments[index + 1].lowercased() {
+        case "timedomain": return .timeDomain
+        case "varispeed":  return .varispeed
+        case "spectral":   return .spectral
+        default:
+            fail("Neznámý algoritmus. Na macOS jsou: spectral, timeDomain, varispeed.")
+        }
+    }
+
+    static func shortPitch(_ pitch: AVAudioTimePitchAlgorithm) -> String {
+        pitch.rawValue.replacingOccurrences(of: "AVAudioTimePitchAlgorithm", with: "")
     }
 
     // MARK: - Drobnosti

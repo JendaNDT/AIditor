@@ -49,7 +49,8 @@ enum Ramper {
                     to outputURL: URL,
                     outputFrameRate: Double,
                     framesPerSegment: Int,
-                    slowSpeed: Double) async throws -> RampResult {
+                    slowSpeed: Double,
+                    pitchAlgorithm: AVAudioTimePitchAlgorithm = .spectral) async throws -> RampResult {
 
         let asset = AVURLAsset(url: source)
         guard let sourceVideo = try await asset.loadTracks(withMediaType: .video).first else {
@@ -119,7 +120,7 @@ enum Ramper {
                                                   videoTrack: compVideo,
                                                   audioTrack: compAudio,
                                                   frameDuration: frameDuration,
-                                                  audioTimePitchAlgorithm: .spectral,
+                                                  audioTimePitchAlgorithm: pitchAlgorithm,
                                                   to: outputURL)
 
         let speeds = segments.map(\.speed)

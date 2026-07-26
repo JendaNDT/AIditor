@@ -143,6 +143,37 @@ Tři klipy × čtyři jemnosti segmentace. **Všech dvanáct výstupů: `CFR` 30
 >
 > Souvisí to se škrtnutým optical flow: dopočet mezisnímků je přesně to, co by tenhle problém řešilo — a je to výzkumný problém, ne funkce. Duplikace snímků je poctivá náhrada, jen se musí přiznat.
 
+#### Výsledek poslechu (26. 07. 2026): žádné lupance na žádné granularitě
+
+Poslechnuty všechny čtyři jemnosti na obou citlivých klipech (202947, 203452 — 41 % a 38 % pauz).
+
+> **Všechny čtyři znějí stejně. Lupance nejsou ani při 545 segmentech.** V obraze taky nic.
+>
+> Jediný slyšitelný artefakt je **lehce plechový zvuk** ve zpomaleném úseku — a je ve všech čtyřech stejně, takže **není od segmentace**. Je to charakteristika fázového vokodéru (`.spectral`) při 4× roztažení.
+
+**Hypotéza „víc hranic = víc lupanců" se nepotvrdila.** To je dobrá zpráva: znamená to, že jemnost segmentace **není omezená zvukem** a dá se volit podle jiného kritéria.
+
+#### ✅ Výchozí hodnota: `framesPerSegment = 8`
+
+Když zvuk nerozhoduje, rozhoduje **velikost kompozice**. Pětiminutový ramp při 30 fps je 9000 snímků:
+
+| framesPerSegment | volání `scaleTimeRange` | skok rychlosti (klip 40–70 s) |
+|---|---|---|
+| **8** | **1 125** | **~1 %** |
+| 4 | 2 250 | ~0,5 % |
+| 2 | 4 500 | ~0,25 % |
+| 1 | 9 000 | ~0,12 % |
+
+Skok rychlosti kolem 1 % je pod prahem viditelnosti a zvuk ho neřeší. Osm snímků na úsek tedy dává **osmkrát menší kompozici zadarmo**.
+
+⚠️ **Nezadrátovat — nechat nastavitelné.** Skok rychlosti závisí na délce klipu: na 45s a 39s klipu vyšel při osmi snímcích 0,96 % a 1,12 %, ale na 11s klipu 3,79 %. **U krátkých záběrů může být potřeba jemnější hodnota**, a to je přesně důvod, proč to nesmí být konstanta v kódu.
+
+#### Produktová poznámka: kvalita roztaženého zvuku
+
+Ve svatebních filmech se **zpomalené záběry typicky podkládají hudbou, ne původním zvukem**. Kvalita 4× roztaženého zvuku je proto v praxi méně kritická, než se z téhle zkoušky zdá — plechový artefakt se ve výsledném filmu často vůbec neuslyší, protože ta stopa tam nebude.
+
+Neznamená to, že na algoritmu nezáleží. Znamená to, že **volba algoritmu patří do nastavení, ne natvrdo do kódu** — někdo původní zvuk nechá (proslov, přípitek, smích) a pro toho to bude důležité.
+
 **Pozor, tohle je jádro spiku:** `scaleTimeRange` dělá konstantní změnu rychlosti přes daný úsek — vytvoří lineární časové mapování. Plynulý Bézier se z jednoho volání udělat nedá.
 
 **Cesta je jedna: segmentace na mikro-úseky.** Klip se nakrájí na desítky krátkých úseků a každý dostane vlastní `scaleTimeRange` podle křivky. Segmenty ti spočítá hotový `SpeedRampEngine.segments(outputFrameRate:framesPerSegment:)` — zarovnané na hranice snímků, ověřené 31 testy.
@@ -161,27 +192,72 @@ Zapiš si čísla. Bez nich to není spike, ale hraní.
 
 ---
 
-## Kritéria úspěchu — vyplň po víkendu
+## Kritéria úspěchu — ✅ VYPLNĚNO 26. 07. 2026
 
 | # | Co | Výsledek |
 |---|-----|----------|
-| 0 | Zploštění VFR→CFR proběhlo a `MediaProbe` na výstupu hlásí `CFR` | ✅ 3 klipy, kolísání 0,00 % |
-| 1 | Export doběhl bez pádu | ☐ |
-| 2 | Zvuk je na konci klipu pořád v synchronu (test s tlesknutím) | ☐ |
-| 3 | Ve zvuku nejsou lupance na hranicích segmentů | ☐ |
-| 4 | Hlas není „čipmank" (`AVAudioUnitTimePitch` funguje) | ☐ |
-| 5 | Náhled 4K/60 — seká se? Kolik fps? | ___ |
-| 6 | Jak dlouho trval export 60s klipu? | ___ min |
-| 7 | Choval se VFR klip jinak než CFR? | ___ |
+| 0 | Zploštění VFR→CFR proběhlo a `MediaProbe` na výstupu hlásí `CFR` | ✅ **4 klipy, kolísání 0,00 %**, jediná délka vzorku v histogramu |
+| 1 | Export doběhl bez pádu | ✅ **17 exportů, 0 pádů.** 4 zploštění + 12 rampů + 1 A/B varianta |
+| 2 | Zvuk je na konci klipu pořád v synchronu (test s tlesknutím) | ✅ **0,00 ms** na začátku i na konci. Ne „v jednotkách ms" — přesně nula |
+| 3 | Ve zvuku nejsou lupance na hranicích segmentů | ✅ **žádné, ani při 545 segmentech.** Ověřeno poslechem na dvou klipech s nejvyšším podílem ticha (41 % a 38 %) |
+| 4 | Hlas není „čipmank" | ✅ korekce výšky funguje. ⚠️ **`AVAudioUnitTimePitch` se nepoužil** — to je pro `AVAudioEngine`, ne pro tuhle cestu. Správně je `AVAssetReaderTrackOutput.audioTimePitchAlgorithm` |
+| 5 | Náhled 4K/60 — seká se? Kolik fps? | ⏸ **nezměřeno, a nešlo to.** Přehrávač neexistuje — viz níž |
+| 6 | Jak dlouho trval export 60s klipu? | ✅ **4,3 s** za 71,9 s výstupu (2157 snímků). ~17× rychleji než reálný čas |
+| 7 | Choval se VFR klip jinak než CFR? | ✅ **zásadně.** Všech 5 zdrojů bylo VFR; zploštění se kvůli tomu stalo samostatným krokem 3 |
+| + | *(přibylo)* Má zdroj dost snímků na zpomalení? | 🚩 **`zdrojFps × nejnižšíRychlost ≥ výstupFps`.** 120 fps → 0 % duplikátů, 59,7 → 13,5 %, 30,0 → 37,5 % |
+
+### Ke kritériu 5: proč zůstalo prázdné
+
+**Plynulost náhledu 4K/60 nelze v tomhle spiku změřit, protože přehrávač neexistuje.** Spike šel cestou soubor → soubor (`AVAssetReader` → `AVAssetWriter`); žádný `AVPlayer`, žádné UI, nic, co by se dalo pozorovat při přehrávání.
+
+**Není to nesplněný bod, je to špatně zařazený bod.** Otázka „utáhne to náhled" se dá zodpovědět až tam, kde je co přehrávat:
+
+- **fáze 1** — přehrávač a `PlaybackController`: utáhne `AVPlayer` samotný 4K/60 klip?
+- **fáze 3** — `renderScale < 1.0` na `AVPlayerItem`: utáhne náhled kompozici s rampem?
+- **fáze 4** — proxy: a když ne, spraví to poloviční rozlišení?
+
+Do těch fází ta otázka patří a tam se zodpoví. Zápis „nesplněno" by tvrdil, že se něco nepovedlo — nepovedlo se nic, jen se to neměřilo.
+
+Co spike o výkonu **říct umí**: kódování ProRes 422 Proxy ve 4K běželo **257–426 fps**, tedy 4–7× reálný čas. To je o zápisu, ne o přehrávání, ale znamená to, že hardwarový engine je zapnutý a stroj na tenhle formát stačí.
 
 ---
 
-## Rozhodovací bod (neděle večer)
+## Rozhodovací bod — ✅ VYHODNOCENO 26. 07. 2026
 
-- **Všechno zelené** → stavíš dál podle sekce 8.1 specifikace. Rozsah MVP je reálný.
-- **Zvuk lupe nebo ujíždí** → řešitelné, ale znamená to vlastní audio pipeline přes `AVAudioEngine` místo AVFoundation zkratky. Připočti si týdny, ne dny. Uprav plán, ne ambici.
-- **Náhled se seká i po vygenerování proxy** → proxy workflow povyšuješ z „nice to have" na povinnou součást MVP, případně přehodnoť rozsah.
-- **Nedostal ses ani ke kroku 4 (rampu)** → to je taky odpověď, a ta nejdůležitější. Znamená to, že cesta vede přes užší produkt (jedna mini-appka „Speed Ramp") místo celého NLE.
+**Výsledek: všechno zelené, kromě jednoho bodu, který nešlo změřit.**
+
+### Odpověď na otázku spiku
+
+> *Dá se v AVFoundation udělat plynulá rychlostní křivka na reálném klipu z mého telefonu tak, aby zvuk seděl, nelupal a export nespadl — na MacBooku Air M3/M4?*
+
+**Ano.** Zvuk sedí na 0,00 ms, nelupe ani při 545 segmentech, export nespadl ani jednou ze sedmnácti a běží 4–7× rychleji než reálný čas.
+
+### Co to znamená pro pokračování
+
+**Stavíš dál. Rozsah MVP je reálný** a hlavní technické riziko projektu je zavřené.
+
+Tři věci se ale spikem změnily a promítly se do plánu:
+
+1. **Zploštění VFR→CFR není volitelné.** Všech pět testovacích klipů bylo VFR. Bylo v plánu jako součást fáze 4 (proxy) — po tomhle měření je jasné, že bez něj neplatí nic dalšího.
+2. **Zpomalení má tvrdý limit daný snímkovou frekvencí zdroje.** To není chyba k opravě, je to fyzika materiálu. Mění to UI (žlutá zóna na posuvníku, fáze 3), obsah svatebního asistenta (fáze 6) a možná i výchozí časovou základnu projektu (24 vs 30 fps, fáze 1).
+3. **Svatební asistent přestal být „nejlevnější odlišení".** Je to podmínka funkčnosti hlavní funkce — kdo netočí na 120 fps, dostane trhaný ramp.
+
+### Co spike nezodpověděl a kdo to zdědí
+
+| Otázka | Kam patří |
+|---|---|
+| Utáhne `AVPlayer` náhled 4K/60? | fáze 1 |
+| Utáhne náhled kompozici s rampem, i s `renderScale < 1.0`? | fáze 3 |
+| Spraví to proxy v polovičním rozlišení, když ne? | fáze 4 |
+| Utáhne to timeline s tisíci klipy? | fáze 2 |
+
+Žádná z nich nebyla spikem řešitelná a žádná neblokuje start.
+
+### Původní varianty rozhodovacího bodu
+
+- ~~**Zvuk lupe nebo ujíždí** → vlastní audio pipeline přes `AVAudioEngine`, připočti týdny.~~ **Nenastalo.** Zvuk drží na nulu a nelupe.
+- ~~**Nedostal ses ani ke kroku 4** → užší produkt, mini-appka „Speed Ramp".~~ **Nenastalo.** Krok 4 doběhl a měří se.
+- **Náhled se seká i po proxy** → proxy povyšuješ na povinnou součást MVP. **Otevřené, přesunuto do fází 1–4.**
 
 Žádný z těch výsledků není neúspěch. Neúspěch by bylo zjistit to samé po půl roce psaní timeline.
 

@@ -4,25 +4,33 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: specifikace a plán hotové, dva ověřené moduly (`SpeedRampEngine`, `MediaProbe`). Appka zatím neexistuje — žádné UI, žádný Xcode projekt.**
+**Stav: Spike 0 uzavřen, hlavní technické riziko zavřené. Pět ověřených modulů (`SpeedRampEngine`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). Appka zatím neexistuje — žádné UI, žádný Xcode projekt.**
+
+## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
+
+> **Dá se v AVFoundation udělat plynulá rychlostní křivka tak, aby zvuk seděl, nelupal a export nespadl?**
+> **Ano.** Synchron 0,00 ms, žádné lupance ani při 545 segmentech, 17 exportů bez pádu, kódování 4–7× rychleji než reálný čas.
+
+Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, staví se dál.** Detaily a vyplněná kritéria v `SPIKE_0.md`.
+
+Jediné nezměřené kritérium je plynulost náhledu 4K/60 — nešlo změřit, protože přehrávač neexistuje. Ta otázka patří do fází 1–4, ne do spiku.
 
 ## ⏭️ Příští krok
-**Spike 0, krok 4 — plynulá rychlostní křivka. Jádro celého spiku.**
-Ramp **120 → 0,25× → 30 fps** segmentací na mikro-úseky. Segmenty spočítá hotový `SpeedRampEngine.segments(outputFrameRate:framesPerSegment:)`, kompozice přes `AVMutableVideoComposition`, export přes `AVAssetWriter`.
+**Fáze 1 — kostra a přehrávač (2 týdny) → v0.1.**
+Xcode projekt, sandbox entitlements, `MediaImporter`, `PlaybackController`, `VFRDetector`.
 
-**Vstup je připravený:** `TestClips/flattened/20260725_203813_cfr.mov` — 120,0000 fps, `CFR`, kolísání 0,00 %, 1363 snímků, 11,358 s.
+⚠️ **Deployment target nastav ručně na macOS 14.0**, výchozí by byl 26.0.
+⚠️ **Rozhodni časovou základnu projektu: 24 nebo 30 fps.** 24 dá ze 120fps zdroje čisté zpomalení 0,2× místo 0,25× a je filmovější. Měnit později znamená přepočítat všechny projekty.
+⚠️ `VFRDetector` může vyjít z hotového `ProbeKit` — měřicí jádro už existuje a je ověřené.
 
-Žádné další nástroje se nepíšou. Sonda i zplošťovač jsou hotové a ověřené — teď jde o tu otázku, kvůli které spike vznikl: **jde plynulý ramp v AVFoundation vůbec udělat tak, aby zvuk neujel a export nespadl?**
-
-⚠️ Hlavní riziko: **lupance na hranicích segmentů.** To je to, co se má změřit, ne jestli se ramp „povede".
-⚠️ Při zápisu videa nastav `videoInput.mediaTimeScale` — viz technická rozhodnutí v `CLAUDE.md`.
-
-Kroky 1 a 2 spiku (přehrávač, konstantní zpomalení) zůstávají otevřené. Až se bude zakládat Xcode projekt: **deployment target nastav ručně na macOS 14.0**, výchozí by byl 26.0.
+První otázka fáze 1, kterou spike zdědil: **utáhne `AVPlayer` náhled 4K/60 klipu?**
 
 ## ✅ Hotovo
 - **`SpeedRampEngine` — první modul, zkompilovaný a otestovaný.** 31 testů, 0 selhání, Swift 6.3.3. Bézier easing, integrace rychlostní křivky, inverzní mapování pro scrubbing, segmentace pro `scaleTimeRange` zarovnaná na hranice snímků, `Codable` pro `project.json`. Ověřeno proti nezávislé Python referenci na analyticky spočitatelných případech.
 - **`MediaProbe` — sonda na vlastnosti klipů.** Rozlišení, orientace, kodeky, fps, edit list a hlavně **skutečné délky vzorků přes `AVSampleCursor`** (fallback `AVAssetReader`). Rozlišuje zaokrouhlení / zahozený snímek / proměnlivé časování. Naměřené hodnoty v `MediaProbe/RESULTS.md`. První kód, který sáhl na AVFoundation.
 - **`Flatten` — zploštění VFR na pevnou snímkovou mřížku.** Krok 3 spiku. Cílová frekvence z měřeného modu, čtení přes `AVComposition` (edit list), zero-order hold převzorkování, ProRes 422 Proxy v plném rozlišení, zvuk LPCM. **Ověřeno na třech klipech: všechny `CFR` s kolísáním 0,00 %, synchron tlesknutí 0,00 ms, kódování 257–426 fps.**
+- **`Ramp` — plynulá rychlostní křivka segmentací.** Krok 4 spiku, jádro produktu. `scaleTimeRange` pozpátku, časy kumulativně v celých tickách, korekce výšky přes `.spectral`. **Ověřeno na třech klipech × čtyřech jemnostech: všech 12 výstupů `CFR` 30 fps, kolísání 0,00 %, délky sedí do jednoho snímku, žádné lupance ani při 545 segmentech.**
+- **`ProbeKit` — sdílené měřicí a renderovací jádro.** Klasifikace délek vzorků, verdikt CFR/VFR, edit list, `CFRRenderer`. Používají ho všechny tři nástroje, takže měří a renderují stejným kódem.
 - Produktová a technická specifikace v2.0 (HTML + PDF)
 - **Implementační plán** — 12 fází, 3 kill-gates, modulová mapa, session protokol (`IMPLEMENTACNI_PLAN.md`)
 - **Interaktivní tracker** — odškrtávací postup s progress barem (`krasa-tracker.html`)
@@ -30,12 +38,12 @@ Kroky 1 a 2 spiku (přehrávač, konstantní zpomalení) zůstávají otevřené
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 0 — Spike 0.** Matematika (`SpeedRampEngine`) a sonda (`MediaProbe`) hotové. Čeká: zploštění VFR→CFR (krok 3), přehrávač (1), konstantní zpomalení (2), ramp (4), měření (5).
+- **Fáze 1 — kostra a přehrávač.** Nezačato. Xcode projekt zatím neexistuje.
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
 ### Cesta k v0.5 „MVP nula" (~6 měsíců při 30 h/týdně)
-- **F0** Spike 0 — ověření speed rampingu *(1 týden)* — 🔄 matematika a sonda hotové, příští je zploštění VFR→CFR (krok 3)
+- **F0** Spike 0 — ověření speed rampingu — ✅ **HOTOVO 26. 07. 2026**, hlavní riziko zavřené
 - **F1** Kostra, import, přehrávač, VFRDetector *(2 týdny)*
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)*
 - **F3** Speed ramping ostrý *(3 týdny)*
@@ -44,7 +52,7 @@ Kroky 1 a 2 spiku (přehrávač, konstantní zpomalení) zůstávají otevřené
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
 ### Cesta k v1.0 (+~4 měsíce)
-- **F6** Svatební asistent *(2 týdny)* — nejlevnější odlišení v produktu
+- **F6** Svatební asistent *(2 týdny)* — **podmínka funkčnosti hlavní funkce**, ne jen odlišení: bez pravidla „zpomalované záběry toč na 120 fps" dostane uživatel trhaný ramp
 - **F7** Audio engine, 32-bit float, LUFS *(3 týdny)*
 - **F8** Titulky přes WhisperKit *(2 týdny)*
 - **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — **+ migrace na `AVVideoComposition.Configuration`** jako druhá větev pod `if #available(macOS 26.0, *)`. Ne dřív.

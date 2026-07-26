@@ -33,6 +33,8 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
 - **Dvojí implementace přes `if #available(macOS 26.0, *)` je úkol před vydáním, ne teď.** Zapsané ve fázi 9 plánu. Do spiku ani MVP nepatří.
 - **Timeline v AppKitu** (NSView v NSScrollView, klipy jako CALayer), zbytek v SwiftUI. SwiftUI nemá recyklaci buněk ani viditelnost do drag session.
 - **Export přes `AVAssetWriter`**, ne `AVAssetExportSession` — ta ignoruje `frameDuration`.
+- **⚠️ Vždy nastav `videoInput.mediaTimeScale = frameDuration.timescale`.** Bez instrukce si `AVAssetWriter` zvolí timescale 600 a zapisované časy do ní kvantizuje. U celočíselných frekvencí to projde (1500/90000 = 10/600), u **29,97 / 59,94 / 23,976 i naší naměřené 30,01 fps** ne — 2999/90000 je v šestistovkách 19,993 ticku a výstup vyleze jako `CFR≈` s 5% rozptylem místo `CFR`. **Na zvukovém vstupu se `mediaTimeScale` nastavovat NESMÍ, vyhodí výjimku.** Platí pro zplošťovač, pro proxy generátor (fáze 4) i pro export (fáze 5) — všude, kde se zapisuje video.
+- **Zvuk v proxy a zploštěných souborech zapisuj jako LPCM, ne AAC.** AAC by přidal vlastní priming delay, a tím rozbil přesně to, kvůli čemu se ty soubory dělají. LPCM žádný nemá.
 - **`scaleTimeRange` umí jen konstantní rychlost.** Plynulá křivka = segmentace na mikro-úseky. Hotové v `SpeedRampEngine.segments(outputFrameRate:framesPerSegment:)`.
 - **Vlastní `AVVideoCompositing` speed ramping neřeší — segmentace je jediná cesta.** Compositor dostane přes `sourceFrame(byTrackID:)` snímek, který kompozice pro daný `compositionTime` **už vybrala**; požádat o jiný zdrojový čas nejde. Časování určuje `CMTimeMapping` stopy, a ten je dvojice `CMTimeRange` — afinní z definice. Compositor je na pixely (efekty, prolínačky, Metal), ne na čas.
 - **Proxy: ProRes 422 Proxy (`'apco'`) v polovičním rozlišení**, a při generování zploštit VFR na CFR.
@@ -49,6 +51,7 @@ Pět klipů ze Samsungu, 4K HEVC. Čísla a metoda v `MediaProbe/RESULTS.md`.
 - **Zvuk NIKDY nečti ze syrové tabulky vzorků.** Všech pět klipů má na zvukové stopě edit list, který zahazuje prvních **44 ms** (priming AAC kodéru). Čti přes `AVComposition` nebo respektuj `AVAssetTrack.segments` — obojí edit list ctí. Kdo ho ignoruje, dostane zvuk posunutý o 44 ms a bude tu chybu hledat v synchronizaci, ne ve čtení.
 - **`nominalFrameRate` lže.** U slow-mo klipu hlásí 119,369 fps, naměřeno 120,000. Je to metadata, ne měření. **Časovou základnu projektu z něj neodvozuj** — to je jen jiná formulace už platného pravidla o jedné časové základně.
 - **Slow-mo klip je opravdové 120 fps**, ne 30fps stopa se zpomalením v edit listu. Edit list obrazu je u všech pěti klipů 1:1. Ta druhá varianta ale existuje a `VFRDetector` s ní musí počítat — u klipů z iPhonu bývá běžná.
+- **Hardwarový ProRes engine potvrzen měřením.** Zploštění do ProRes 422 Proxy ve 4K běželo **257–426 fps** podle klipu, tedy 4–7× rychleji než reálný čas. Softwarové kódování by takhle rychlé nebylo. Otevřená otázka z plánu (sekce 9) je zodpovězená.
 - **Rozlišuj zahozený snímek od proměnlivého časování.** Vzorek, který je celočíselným násobkem délky snímku, je zahozený snímek — opraví se doplněním duplikátu. Skutečně nepravidelná délka vyžaduje přepočet časování. Je to rozdíl v ceně opravy o řád. `MediaProbe` to už rozlišuje.
 
 ## Prostředí (ověřeno 25. 07. 2026)

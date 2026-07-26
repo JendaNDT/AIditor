@@ -1,6 +1,6 @@
 # MediaProbe — naměřené vlastnosti testovacích klipů
 
-*Vygenerováno 2026-07-26T09:21:41Z nástrojem `MediaProbe`.*
+*Vygenerováno 2026-07-26T10:15:31Z nástrojem `MediaProbe`.*
 
 Klipy samotné jsou v `.gitignore` (jsou to gigabajty videa), takže tenhle
 soubor je jediný záznam o tom, na čem se měřilo. Negeneruj ho ručně —
@@ -46,8 +46,8 @@ razítka a obsah záběru z metadat vyčíst nejde.
 |---|---|
 | 20260725_202947.mp4 | 4K/60 (naměřeno 59,68 fps), 44,9 s — ⚠ DOPLŇ co je na záběru |
 | 20260725_203452.mp4 | 4K/30 (naměřeno 30,01 fps), 38,6 s — ⚠ DOPLŇ co je na záběru |
-| 20260725_203813.mp4 | 120fps slow-mo (naměřeno 120,00 fps), 11,4 s — ⚠ DOPLŇ co je na záběru |
-| 20260725_203901.mp4 | 4K/60 (naměřeno 60,00 fps), 31,7 s — ⚠ DOPLŇ co je na záběru |
+| 20260725_203813.mp4 | 120fps slow-mo (naměřeno 120,00 fps), 11,3 s — vstup pro krok 4 spiku (ramp 120 → 0,25× → 30 fps). ⚠ DOPLŇ co je na záběru |
+| 20260725_203901.mp4 | 4K/60 (naměřeno 60,00 fps), 31,7 s — REFERENČNÍ KLIP NA SYNCHRON. Detekce transientů ho označila jako klip s tlesknutím: vrchol 0,33 s od začátku a 1,02 s od konce, ostatní klipy mají nejhlasitější místo uprostřed. ⚠ POTVRĎ uchem |
 | 20260725_204045.mp4 | 4K/60 (naměřeno 60,00 fps), 31,6 s — ⚠ DOPLŇ co je na záběru |
 
 ## Souhrn
@@ -150,7 +150,7 @@ dostane zvuk posunutý o tenhle offset — a bude ho hledat jinde.
 
 ```
 ▸ 20260725_203813.mp4  (MP4 · 109,9 MB)
-  Obsah      120fps slow-mo (naměřeno 120,00 fps), 11,4 s — ⚠ DOPLŇ co je na záběru
+  Obsah      120fps slow-mo (naměřeno 120,00 fps), 11,3 s — vstup pro krok 4 spiku (ramp 120 → 0,25× → 30 fps). ⚠ DOPLŇ co je na záběru
   Obraz      3840×2160 nativně, transform ↻0° → zobrazeno 3840×2160 (na šířku)
              kodek HEVC (hvc1), datový tok 80,5 Mbit/s
   Deklarace  nominální fps 119,369, minFrameDuration 750/90000 (8,333 ms)
@@ -181,7 +181,7 @@ dostane zvuk posunutý o tenhle offset — a bude ho hledat jinde.
 
 ```
 ▸ 20260725_203901.mp4  (MP4 · 455,6 MB)
-  Obsah      4K/60 (naměřeno 60,00 fps), 31,7 s — ⚠ DOPLŇ co je na záběru
+  Obsah      4K/60 (naměřeno 60,00 fps), 31,7 s — REFERENČNÍ KLIP NA SYNCHRON. Detekce transientů ho označila jako klip s tlesknutím: vrchol 0,33 s od začátku a 1,02 s od konce, ostatní klipy mají nejhlasitější místo uprostřed. ⚠ POTVRĎ uchem
   Obraz      3840×2160 nativně, transform ↻0° → zobrazeno 3840×2160 (na šířku)
              kodek HEVC (hvc1), datový tok 120,0 Mbit/s
   Deklarace  nominální fps 59,794, minFrameDuration 1495/90000 (16,611 ms)

@@ -42,7 +42,35 @@ Tohle je celý smysl — když se to rozbije, přijdeš o víkend, ne o čtvrt r
 ✅ Hotovo, když soubor vyleze a jde přehrát v QuickTimu.
 ⚠️ Tady poprvé poslouchej zvuk. Lupance na začátku/konci?
 
-### Krok 3 – Zploštit VFR → CFR (**nově před rampem, nepřeskakuj**)
+### Krok 3 – Zploštit VFR → CFR — ✅ **HOTOVO 26. 07. 2026**
+
+Nástroj: `MediaProbe/Sources/Flatten/`, spouští se `swift run Flatten <soubor>`.
+Zploštěné soubory: `TestClips/flattened/*_cfr.mov`.
+
+**Naměřeno na třech klipech:**
+
+| | 203901 (60p) | 203452 (30p) | 203813 (120p) |
+|---|---|---|---|
+| zdroj | VFR, 1897 vzorků | CFR±, 1159 vzorků | VFR, 1356 vzorků |
+| mřížka | 1500/90000 = 60,0000 | 2999/90000 = 30,0100 | 750/90000 = 120,0000 |
+| zapsáno | 1903 sn., 7 podržených | 1159 sn., 1 podržený | 1363 sn., 8 podržených |
+| rozdíl délky | −8,7 ms | −25,6 ms | −1,4 ms |
+| kódování | 257 fps | 258 fps | 426 fps |
+| **verdikt výstupu** | **CFR, kolísání 0,00 %** | **CFR, kolísání 0,00 %** | **CFR, kolísání 0,00 %** |
+
+- **Synchron:** tlesknutí na začátku i na konci sedí na **0,00 ms**. Ne „v jednotkách ms" — přesně nula.
+- **Oční kontrola:** snímky vytažené přes `swift run Flatten --frames`, orientace i barvy sedí, nic rozsypaného.
+- **Hardwarový ProRes engine potvrzen:** 257–426 fps ve 4K je 4–7× reálný čas. Softwarové kódování by tohle nedalo. Otevřená otázka z plánu (sekce 9) je zodpovězená.
+
+> **⚠️ Chyba, kterou odhalilo až ověření na druhém klipu.**
+> `AVAssetWriter` si bez instrukce zvolí timescale 600. U 60p to vyjde (1500/90000 = 10/600), ale u 30,01 fps je 2999/90000 v šestistovkách 19,993 ticku — výstup vylezl jako `CFR≈` s 5% rozptylem. Oprava: `videoInput.mediaTimeScale = frameDuration.timescale`. Na zvuku se nastavovat nesmí, vyhodí výjimku.
+> **Kdyby se ověřovalo jen na jednom klipu, tahle chyba by prošla** a projevila by se až u prvního zdroje s neceločíselnou frekvencí. Platí i pro proxy generátor a export.
+
+**Zbylé dva 4K/60 klipy se schválně nezplošťovaly** — obě třídy případů (celočíselná i necelá frekvence) jsou pokryté a další 4K/60 by jen zopakoval, co už víme.
+
+<details>
+<summary>Původní zadání kroku</summary>
+
 Vezmi klip, `AVAssetReader` → `AVAssetWriter`, a přepiš časové značky na pevnou mřížku cílové snímkové frekvence. Zahozené snímky doplň duplikátem, nepravidelné časování přepočítej. Výsledek ověř znovu `MediaProbe`.
 
 **Proč to bylo přesunuto sem, před ramp:** sonda naměřila, že **ani jeden z pěti testovacích klipů nemá konstantní časování** (`MediaProbe/RESULTS.md`). Kdybys ramp pustil rovnou na VFR souboru a zvuk by ujel nebo obraz zaškubal, měřil bys dvě proměnné najednou a nevěděl, která z nich selhala — jestli segmentace rychlostní křivky, nebo proměnlivé časování zdroje. Spike má odpovědět na jednu otázku, ne zamotat dvě.
@@ -52,8 +80,15 @@ Zploštění je navíc v plánu stejně (fáze 4, součást generování proxy),
 ✅ Hotovo, když `MediaProbe` na výstupu hlásí `CFR` a délka i počet snímků sedí s originálem.
 ⚠️ Na zvuk sáhni jen přes `AVComposition` nebo s respektováním `AVAssetTrack.segments`. Všech pět klipů zahazuje edit listem prvních 44 ms (priming AAC) — kdo čte syrovou tabulku vzorků, posune si zvuk o 44 ms hned na začátku.
 
+</details>
+
 ### Krok 4 – Plynulá křivka (tady se to zlomí, nebo ne)
-Ramp 1,0× → 0,25× → 1,0× přes prostředek klipu. **Pouštěj ho na zploštěném souboru z kroku 3, ne na originálu.**
+
+**Vstup je připravený:** `TestClips/flattened/20260725_203813_cfr.mov` — 120,0000 fps, `CFR`, kolísání 0,00 %, 1363 snímků, 11,358 s. Na tomhle klipu se testuje **ramp 120 → 0,25× → 30 fps**, tedy ten případ, na kterém stojí celý produkt.
+
+Žádné další nástroje se už nepíšou. Sonda i zplošťovač jsou hotové a ověřené — teď jde o tu otázku, kvůli které spike vznikl.
+
+**Pouštěj to na zploštěném souboru z kroku 3, ne na originálu.** Jinak měříš dvě proměnné najednou.
 
 **Pozor, tohle je jádro spiku:** `scaleTimeRange` dělá konstantní změnu rychlosti přes daný úsek — vytvoří lineární časové mapování. Plynulý Bézier se z jednoho volání udělat nedá.
 
@@ -77,7 +112,7 @@ Zapiš si čísla. Bez nich to není spike, ale hraní.
 
 | # | Co | Výsledek |
 |---|-----|----------|
-| 0 | Zploštění VFR→CFR proběhlo a `MediaProbe` na výstupu hlásí `CFR` | ☐ |
+| 0 | Zploštění VFR→CFR proběhlo a `MediaProbe` na výstupu hlásí `CFR` | ✅ 3 klipy, kolísání 0,00 % |
 | 1 | Export doběhl bez pádu | ☐ |
 | 2 | Zvuk je na konci klipu pořád v synchronu (test s tlesknutím) | ☐ |
 | 3 | Ve zvuku nejsou lupance na hranicích segmentů | ☐ |

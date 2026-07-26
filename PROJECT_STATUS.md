@@ -7,20 +7,22 @@ Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal,
 **Stav: specifikace a plán hotové, dva ověřené moduly (`SpeedRampEngine`, `MediaProbe`). Appka zatím neexistuje — žádné UI, žádný Xcode projekt.**
 
 ## ⏭️ Příští krok
-**Spike 0, krok 3 — zploštění VFR → CFR.**
-`AVAssetReader` → `AVAssetWriter`, přepsat časové značky na pevnou mřížku. Zahozené snímky doplnit duplikátem, nepravidelné časování přepočítat. Výsledek ověřit `swift run MediaProbe` — má hlásit `CFR`.
+**Spike 0, krok 4 — plynulá rychlostní křivka. Jádro celého spiku.**
+Ramp **120 → 0,25× → 30 fps** segmentací na mikro-úseky. Segmenty spočítá hotový `SpeedRampEngine.segments(outputFrameRate:framesPerSegment:)`, kompozice přes `AVMutableVideoComposition`, export přes `AVAssetWriter`.
 
-Je to nově krok 3, tedy **před** rampem: sonda naměřila, že ani jeden testovací klip nemá konstantní časování, a pouštět ramp na VFR zdroji by znamenalo měřit dvě proměnné najednou.
+**Vstup je připravený:** `TestClips/flattened/20260725_203813_cfr.mov` — 120,0000 fps, `CFR`, kolísání 0,00 %, 1363 snímků, 11,358 s.
 
-⚠️ **Zvuk čti jen přes `AVComposition` nebo s respektováním `AVAssetTrack.segments`.** Všech pět klipů zahazuje edit listem prvních 44 ms (priming AAC).
+Žádné další nástroje se nepíšou. Sonda i zplošťovač jsou hotové a ověřené — teď jde o tu otázku, kvůli které spike vznikl: **jde plynulý ramp v AVFoundation vůbec udělat tak, aby zvuk neujel a export nespadl?**
 
-Kroky 1 a 2 spiku (přehrávač, konstantní zpomalení) zůstávají otevřené — `MediaProbe` je zatím jediný kód, který sáhl na AVFoundation, a UI ještě žádné není. Až se bude zakládat Xcode projekt: ⚠️ **deployment target nastav ručně na macOS 14.0**, výchozí by byl 26.0.
+⚠️ Hlavní riziko: **lupance na hranicích segmentů.** To je to, co se má změřit, ne jestli se ramp „povede".
+⚠️ Při zápisu videa nastav `videoInput.mediaTimeScale` — viz technická rozhodnutí v `CLAUDE.md`.
 
-Příprava hotová: Xcode nainstalovaný, git repozitář založený, klipy v `TestClips/` (ignorované gitem), naměřené vlastnosti v `MediaProbe/RESULTS.md`. Detaily v `SPIKE_0.md`.
+Kroky 1 a 2 spiku (přehrávač, konstantní zpomalení) zůstávají otevřené. Až se bude zakládat Xcode projekt: **deployment target nastav ručně na macOS 14.0**, výchozí by byl 26.0.
 
 ## ✅ Hotovo
 - **`SpeedRampEngine` — první modul, zkompilovaný a otestovaný.** 31 testů, 0 selhání, Swift 6.3.3. Bézier easing, integrace rychlostní křivky, inverzní mapování pro scrubbing, segmentace pro `scaleTimeRange` zarovnaná na hranice snímků, `Codable` pro `project.json`. Ověřeno proti nezávislé Python referenci na analyticky spočitatelných případech.
 - **`MediaProbe` — sonda na vlastnosti klipů.** Rozlišení, orientace, kodeky, fps, edit list a hlavně **skutečné délky vzorků přes `AVSampleCursor`** (fallback `AVAssetReader`). Rozlišuje zaokrouhlení / zahozený snímek / proměnlivé časování. Naměřené hodnoty v `MediaProbe/RESULTS.md`. První kód, který sáhl na AVFoundation.
+- **`Flatten` — zploštění VFR na pevnou snímkovou mřížku.** Krok 3 spiku. Cílová frekvence z měřeného modu, čtení přes `AVComposition` (edit list), zero-order hold převzorkování, ProRes 422 Proxy v plném rozlišení, zvuk LPCM. **Ověřeno na třech klipech: všechny `CFR` s kolísáním 0,00 %, synchron tlesknutí 0,00 ms, kódování 257–426 fps.**
 - Produktová a technická specifikace v2.0 (HTML + PDF)
 - **Implementační plán** — 12 fází, 3 kill-gates, modulová mapa, session protokol (`IMPLEMENTACNI_PLAN.md`)
 - **Interaktivní tracker** — odškrtávací postup s progress barem (`krasa-tracker.html`)
@@ -67,6 +69,8 @@ Příprava hotová: Xcode nainstalovaný, git repozitář založený, klipy v `T
 - **Modely pro rozpoznávání obličejů jsou z velké části komerčně zakázané.** InsightFace, ArcFace, buffalo_l: *non-commercial research only*. Jediný čistý je AuraFace-v1 (Apache 2.0), a z jeho repa se smí stáhnout **pouze `glintr100.onnx`**.
 - **EU AI Act čl. 2(10) nechrání dodavatele software**, jen koncového uživatele. Termín pro Annex III po Digital Omnibus: 2. 12. 2027.
 - **`AVAssetExportSession` ignoruje `frameDuration`** → export přes `AVAssetWriter`.
+- **`AVAssetWriter` si bez instrukce zvolí timescale 600 a kvantizuje do ní zapisované časy.** U 29,97 / 59,94 / 23,976 i naší 30,01 fps to vyrobí rozptyl a výstup vyleze jako `CFR≈` místo `CFR`. Vždy `videoInput.mediaTimeScale = frameDuration.timescale`; na zvuku NE, vyhodí výjimku. Odhaleno až ověřením na druhém klipu — na jednom by chyba prošla.
+- **Zvuk v proxy a zploštěných souborech jen jako LPCM.** AAC by přidal vlastní priming delay a rozbil to, kvůli čemu ty soubory vznikají.
 - **VFR z telefonu.** Apple nemá API pro detekci — musíš číst délky vzorků sám. **Změřeno 25. 07. 2026 na pěti klipech ze Samsungu (`MediaProbe/RESULTS.md`): ani jeden nemá čistě konstantní časování.** VFR je výchozí stav, ne okrajový případ.
 - **Zvuk má edit list, který zahazuje prvních 44 ms.** Priming AAC kodéru, u všech pěti klipů. **Zvuk se nikdy nesmí číst ze syrové tabulky vzorků** — jen přes `AVComposition` nebo s respektováním `AVAssetTrack.segments`. Jinak je posunutý o 44 ms a chyba se hledá v synchronizaci místo ve čtení.
 - **`nominalFrameRate` lže.** Slow-mo klip hlásí 119,369 fps, naměřeno 120,000. Metadata, ne měření — časovou základnu projektu z něj neodvozovat.

@@ -8,13 +8,21 @@
 
 20260725_202947.mp4 = 4K/60 (naměřeno 59,68 fps), 44,9 s — ⚠ DOPLŇ co je na záběru
 20260725_203452.mp4 = 4K/30 (naměřeno 30,01 fps), 38,6 s — ⚠ DOPLŇ co je na záběru
-20260725_203813.mp4 = 120fps slow-mo (naměřeno 120,00 fps), 11,4 s — ⚠ DOPLŇ co je na záběru
-20260725_203901.mp4 = 4K/60 (naměřeno 60,00 fps), 31,7 s — ⚠ DOPLŇ co je na záběru
+20260725_203813.mp4 = 120fps slow-mo (naměřeno 120,00 fps), 11,3 s — vstup pro krok 4 spiku (ramp 120 → 0,25× → 30 fps). ⚠ DOPLŇ co je na záběru
+20260725_203901.mp4 = 4K/60 (naměřeno 60,00 fps), 31,7 s — REFERENČNÍ KLIP NA SYNCHRON. Detekce transientů ho označila jako klip s tlesknutím: vrchol 0,33 s od začátku a 1,02 s od konce, ostatní klipy mají nejhlasitější místo uprostřed. ⚠ POTVRĎ uchem
 20260725_204045.mp4 = 4K/60 (naměřeno 60,00 fps), 31,6 s — ⚠ DOPLŇ co je na záběru
 
-# ⚠ Nevyplněné: který klip má mluvenou češtinu a který má tlesknutí na
-# začátku a na konci. To z metadat vyčíst nejde — technické parametry výše
-# jsou naměřené, obsah záběru zná jen autor.
+# ⚠ Čeká na doplnění: který klip má mluvenou češtinu, a co je na ostatních
+# záběrech. Technické parametry výše jsou naměřené, obsah zná jen autor.
 #
-# Klip s tlesknutím je referenční pro kontrolu synchronu zvuku, takže
-# u něj musí být jistota, ne odhad.
+# K 203901: označení jako referenční klip vychází z MĚŘENÍ, ne z paměti —
+# `swift run Flatten --transients` hledá vrchol nejblíž ke krajům stopy.
+# Pořadí bylo:
+#     1,01 s  203901  ← kandidát
+#     2,32 s  202947
+#     3,60 s  203452
+#     4,33 s  203813
+#     4,98 s  204045
+# Samotný crest faktor NEROZLIŠUJE (u všech pěti vyšel 12–30×, protože každý
+# klip obsahuje něco hlasitého). Rozlišuje až poloha vrcholu vůči kraji.
+# Je to křížová kontrola, ne důkaz — potvrď si to poslechem.

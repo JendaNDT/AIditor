@@ -16,12 +16,12 @@ enum Report {
 
     static let summaryHeader = [
         "Soubor", "Obraz", "Kodek", "fps nom.", "fps měř.",
-        "Edit V/A", "Délka", "Zvuk", "Kolísání", "Zahozeno", "Verdikt",
+        "Edit V/A", "Délka", "Zvuk", "Kolísání", "Okraje", "Zahozeno", "Verdikt",
     ]
 
     static func summaryRow(_ clip: ClipReport) -> [String] {
         guard clip.failure == nil else {
-            return [clip.name, "—", "—", "—", "—", "—", "—", "—", "—", "—", "CHYBA"]
+            return [clip.name, "—", "—", "—", "—", "—", "—", "—", "—", "—", "—", "CHYBA"]
         }
 
         let video = clip.video
@@ -49,10 +49,16 @@ enum Report {
             return "\(a.codec) \(a.channels)ch \(fmt(a.sampleRate / 1000, 1))k"
         }()
 
-        // Kolísání se hlásí bez zahozených snímků — ty mají vlastní sloupec.
-        // Jinak by jeden dvojnásobný vzorek nafoukl číslo na 100 % a zakryl,
-        // že časování je jinak úplně klidné.
-        let jitter: String = timing.map { "\(fmt($0.jitterPercent, 1)) %" } ?? "—"
+        // Kolísání je jen zevnitř stopy — bez zahozených snímků a bez okrajů.
+        // Obojí by ho nafouklo o řád a zakrylo, že časování je jinak klidné.
+        // Nic se ale nezahazuje potichu: okraje i zahozené mají vlastní sloupec.
+        let jitter: String = timing.map { "\(fmt($0.interiorJitterPercent, 1)) %" } ?? "—"
+        let edges: String = timing.map { t in
+            let odd = t.anomalousEdges
+            guard !odd.isEmpty else { return "ok" }
+            return odd.map { "\(fmt($0.ratioToMode, 2))× \($0.shortPosition)" }
+                .joined(separator: " ")
+        } ?? "—"
         let dropped: String = timing.map { t in
             t.droppedFrames == 0 ? "—" : "\(t.droppedFrames) v \(t.droppedEvents)×"
         } ?? "—"
@@ -67,6 +73,7 @@ enum Report {
             timeString(clip.duration),
             audioText,
             jitter,
+            edges,
             dropped,
             timing?.verdict.shortLabel ?? "—",
         ]
@@ -172,11 +179,35 @@ enum Report {
             lines.append("             Opraví se doplněním duplikátů, ne přepočtem časování.")
         }
 
-        lines.append("  Kolísání   \(t.maxDeviationExcludingDropped) t"
-                   + " = \(fmt(Double(t.maxDeviationExcludingDropped) * t.msPerTick, 3)) ms"
-                   + " = \(fmt(t.jitterPercent, 2)) % (bez zahozených snímků)")
-        lines.append("             s nimi by vyšlo \(t.maxDeviationTicks) t"
+        lines.append("  Kolísání   \(t.interiorDeviationTicks) t"
+                   + " = \(fmt(Double(t.interiorDeviationTicks) * t.msPerTick, 3)) ms"
+                   + " = \(fmt(t.interiorJitterPercent, 2)) %")
+        lines.append("             uvnitř stopy, z \(t.interiorSampleCount) vzorků"
+                   + " — bez okrajů a bez zahozených snímků")
+        lines.append("             se vším dohromady by vyšlo \(t.maxDeviationTicks) t"
                    + " = \(fmt(t.maxDeviationPercent, 2)) %")
+
+        // Okraje se z kolísání vyjímají, ale nesmí zmizet — tady je jejich řádek.
+        if t.edges.isEmpty {
+            lines.append("  Okraje     stopa je kratší než 3 vzorky, okraje se nevyjímaly")
+        } else {
+            let parts = t.edges.map { edge -> String in
+                let detail = "\(edge.tick) t = \(fmt(t.milliseconds(edge.tick), 3)) ms"
+                            + ", \(fmt(edge.ratioToMode, 3))× modu"
+                return edge.isAnomalous
+                    ? "\(edge.position) vzorek [\(edge.index)] \(detail) ⚠"
+                    : "\(edge.position) vzorek [\(edge.index)] přesně na modu"
+            }
+            lines.append("  Okraje     \(parts[0])")
+            for part in parts.dropFirst() {
+                lines.append("             \(part)")
+            }
+            if !t.anomalousEdges.isEmpty {
+                lines.append("             Vyjmuté z kolísání výše, ne zahozené — krajní vzorek bývá")
+                lines.append("             useknutý a nafoukl by číslo o řád.")
+            }
+        }
+
         if !t.irregularIndices.isEmpty {
             lines.append("             nepravidelné vzorky na indexech: \(indexList(t.irregularIndices))")
         }

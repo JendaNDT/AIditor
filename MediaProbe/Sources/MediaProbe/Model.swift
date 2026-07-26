@@ -52,6 +52,26 @@ enum SampleClass: Equatable {
     }
 }
 
+// MARK: - Okrajový vzorek
+
+/// První a poslední vzorek stopy. Do kolísání uvnitř stopy se nepočítají —
+/// useknutý krajní vzorek je běžný a nafoukl by číslo o řád. Nezmizí ale:
+/// hlásí se vlastním řádkem, ať je vidět, co přesně se z výpočtu vyjmulo.
+struct EdgeSample {
+    let index: Int
+    let tick: Int64
+    let position: String
+    let classification: SampleClass
+    /// Kolikanásobek modu tenhle vzorek je.
+    let ratioToMode: Double
+
+    var isAnomalous: Bool { classification != .normal }
+
+    /// Zkratka do tabulky. „první" a „poslední" mají stejné první písmeno,
+    /// takže se zkracovat nesmí strojově.
+    var shortPosition: String { index == 0 ? "1." : "posl." }
+}
+
 // MARK: - Verdikt CFR / VFR
 
 enum FrameRateVerdict {
@@ -145,9 +165,13 @@ struct TimingStats {
     let droppedFrames: Int
     /// Indexy vzorků, které nevysvětlí ani zaokrouhlení, ani zahozený snímek.
     let irregularIndices: [Int]
-    /// Největší odchylka od modu **bez** vzorků se zahozenými snímky.
-    /// Tohle je „jak moc kolísá časování", nezkreslené dvojnásobnými vzorky.
-    let maxDeviationExcludingDropped: Int64
+    /// Největší odchylka od modu **uvnitř stopy** — bez zahozených snímků
+    /// a bez prvního a posledního vzorku. Tohle je „jak moc kolísá časování".
+    let interiorDeviationTicks: Int64
+    /// Kolik vzorků do výpočtu kolísání vůbec vstoupilo.
+    let interiorSampleCount: Int
+    /// První a poslední vzorek. Z kolísání vyjmuté, ale hlášené zvlášť.
+    let edges: [EdgeSample]
 
     var sampleCount: Int { ticks.count }
     var distinctCount: Int { histogram.count }
@@ -172,13 +196,17 @@ struct TimingStats {
         return Double(maxDeviationTicks) / Double(mode) * 100.0
     }
 
-    /// Kolísání časování bez započtení zahozených snímků, v procentech délky snímku.
-    var jitterPercent: Double {
+    /// Kolísání časování uvnitř stopy, v procentech délky snímku.
+    /// Bez zahozených snímků a bez okrajových vzorků — ty mají vlastní hlášení.
+    var interiorJitterPercent: Double {
         guard mode > 0 else { return 0 }
-        return Double(maxDeviationExcludingDropped) / Double(mode) * 100.0
+        return Double(interiorDeviationTicks) / Double(mode) * 100.0
     }
 
     var irregularCount: Int { irregularIndices.count }
+
+    /// Okrajové vzorky, které nesedí na modu. Prázdné pole = okraje jsou v pořádku.
+    var anomalousEdges: [EdgeSample] { edges.filter(\.isAnomalous) }
 
     // MARK: Výpočet
 
@@ -225,9 +253,27 @@ struct TimingStats {
             classByTick[tick] = SampleClass.classify(tick: tick, mode: modeValue)
         }
 
+        // Okraje stopy. U kratších stop než tři vzorky by vyjmutí okrajů nenechalo
+        // co počítat, takže se v tom případě nevyjímá nic.
+        let lastIndex = ticks.count - 1
+        let edgeIndices: Set<Int> = ticks.count >= 3 ? [0, lastIndex] : []
+
+        var edgeList: [EdgeSample] = []
+        for index in edgeIndices.sorted() {
+            let tick = ticks[index]
+            edgeList.append(EdgeSample(
+                index: index,
+                tick: tick,
+                position: index == 0 ? "první" : "poslední",
+                classification: classByTick[tick] ?? .irregular,
+                ratioToMode: modeValue > 0 ? Double(tick) / Double(modeValue) : 0))
+        }
+        self.edges = edgeList
+
         var normal = 0, rounding = 0, events = 0, frames = 0
         var irregular: [Int] = []
-        var deviationExcludingDropped: Int64 = 0
+        var interiorDeviation: Int64 = 0
+        var interiorCount = 0
 
         for (index, tick) in ticks.enumerated() {
             switch classByTick[tick] ?? .irregular {
@@ -238,11 +284,15 @@ struct TimingStats {
             case .dropped(let missing):
                 events += 1
                 frames += missing
-                continue  // do kolísání časování se zahozený snímek nepočítá
+                continue  // zahozený snímek není kolísání časování
             case .irregular:
                 irregular.append(index)
             }
-            deviationExcludingDropped = max(deviationExcludingDropped, abs(tick - modeValue))
+
+            // Okraje se do kolísání nepočítají — hlásí se zvlášť v `edges`.
+            guard !edgeIndices.contains(index) else { continue }
+            interiorCount += 1
+            interiorDeviation = max(interiorDeviation, abs(tick - modeValue))
         }
 
         self.normalCount = normal
@@ -250,7 +300,8 @@ struct TimingStats {
         self.droppedEvents = events
         self.droppedFrames = frames
         self.irregularIndices = irregular
-        self.maxDeviationExcludingDropped = deviationExcludingDropped
+        self.interiorDeviationTicks = interiorDeviation
+        self.interiorSampleCount = interiorCount
 
         // Verdikt. Pořadí testů je od nejpřísnějšího k nejvolnějšímu.
         let spread = maxTick - minTick

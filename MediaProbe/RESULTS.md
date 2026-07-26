@@ -1,6 +1,6 @@
 # MediaProbe — naměřené vlastnosti testovacích klipů
 
-*Vygenerováno 2026-07-26T00:07:03Z nástrojem `MediaProbe`.*
+*Vygenerováno 2026-07-26T01:16:15Z nástrojem `MediaProbe`.*
 
 Klipy samotné jsou v `.gitignore` (jsou to gigabajty videa), takže tenhle
 soubor je jediný záznam o tom, na čem se měřilo. Negeneruj ho ručně —
@@ -30,18 +30,22 @@ Verdikty: `CFR` všechny vzorky identické · `CFR≈` jen zaokrouhlení ·
 jen krajní vzorek · `VFR` skutečně proměnlivé časování.
 
 Sloupec `Edit V/A` hlásí edit list zvlášť pro obraz a pro zvuk.
-Sloupec `Kolísání` je bez zahozených snímků — ty mají vlastní sloupec,
-aby jeden dvojnásobný vzorek nezakryl, že časování je jinak klidné.
+
+`Kolísání` je odchylka **uvnitř** stopy — bez prvního a posledního vzorku
+a bez zahozených snímků. Obojí by číslo nafouklo o řád a zakrylo, že
+časování je jinak klidné. Nic se ale nezahazuje potichu: okraje mají
+sloupec `Okraje` a vlastní řádek v detailu, zahozené snímky sloupec
+`Zahozeno`. Detail navíc vždy uvádí i číslo se vším dohromady.
 
 ## Souhrn
 
-| Soubor | Obraz | Kodek | fps nom. | fps měř. | Edit V/A | Délka | Zvuk | Kolísání | Zahozeno | Verdikt |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 20260725_202947.mp4 | 3840×2160 | HEVC | 59,66 | 59,68 | 1:1/⚠ | 0:44,952 | AAC 2ch 48,0k | 0,1 % | 1 v 1× | CFR↓1 |
-| 20260725_203452.mp4 | 3840×2160 | HEVC | 29,99 | 30,01 | 1:1/⚠ | 0:38,646 | AAC 2ch 48,0k | 78,9 % | — | CFR± |
-| 20260725_203813.mp4 | 3840×2160 | HEVC | 119,37 | 120,00 | 1:1/⚠ | 0:11,360 | AAC 2ch 48,0k | 13,9 % | — | VFR |
-| 20260725_203901.mp4 | 3840×2160 | HEVC | 59,79 | 60,00 | 1:1/⚠ | 0:31,725 | AAC 2ch 48,0k | 36,7 % | 6 v 4× | VFR |
-| 20260725_204045.mp4 | 3840×2160 | HEVC | 59,93 | 60,00 | 1:1/⚠ | 0:31,585 | AAC 2ch 48,0k | 0,1 % | 2 v 2× | CFR↓2 |
+| Soubor | Obraz | Kodek | fps nom. | fps měř. | Edit V/A | Délka | Zvuk | Kolísání | Okraje | Zahozeno | Verdikt |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 20260725_202947.mp4 | 3840×2160 | HEVC | 59,66 | 59,68 | 1:1/⚠ | 0:44,952 | AAC 2ch 48,0k | 0,1 % | ok | 1 v 1× | CFR↓1 |
+| 20260725_203452.mp4 | 3840×2160 | HEVC | 29,99 | 30,01 | 1:1/⚠ | 0:38,646 | AAC 2ch 48,0k | 0,0 % | 1,79× 1. | — | CFR± |
+| 20260725_203813.mp4 | 3840×2160 | HEVC | 119,37 | 120,00 | 1:1/⚠ | 0:11,360 | AAC 2ch 48,0k | 1,1 % | 1,14× 1. 1,01× posl. | — | VFR |
+| 20260725_203901.mp4 | 3840×2160 | HEVC | 59,79 | 60,00 | 1:1/⚠ | 0:31,725 | AAC 2ch 48,0k | 1,9 % | 1,37× 1. | 6 v 4× | VFR |
+| 20260725_204045.mp4 | 3840×2160 | HEVC | 59,93 | 60,00 | 1:1/⚠ | 0:31,585 | AAC 2ch 48,0k | 0,1 % | 1,94× 1. | 2 v 2× | CFR↓2 |
 
 ## Závěr
 
@@ -84,8 +88,11 @@ dostane zvuk posunutý o tenhle offset — a bude ho hledat jinde.
   Rozbor     2402× přesně na modu · 279× zaokrouhlení (±1 tick) · 1× násobek modu · 0× nepravidelné
   Zahozeno   1 snímek/snímků ve 1 místě/místech — vzorek je celočíselným násobkem délky snímku.
              Opraví se doplněním duplikátů, ne přepočtem časování.
-  Kolísání   1 t = 0,011 ms = 0,07 % (bez zahozených snímků)
-             s nimi by vyšlo 1508 t = 100,00 %
+  Kolísání   1 t = 0,011 ms = 0,07 %
+             uvnitř stopy, z 2679 vzorků — bez okrajů a bez zahozených snímků
+             se vším dohromady by vyšlo 1508 t = 100,00 %
+  Okraje     první vzorek [0] přesně na modu
+             poslední vzorek [2681] přesně na modu
   Verdikt    CFR se zahozenými snímky — časování je jinak konstantní, ale v 1 místě/místech je vzorek celočíselným násobkem délky snímku. Chybí 1 snímek/snímků. Tohle se řeší doplněním duplikátů, ne přepočtem časování.
   Zvuk       AAC (aac ), 2 kanál(ů), 48000 Hz
   Edit list z ⚠ 2 segment(ů), mapování NENÍ triviální:
@@ -109,8 +116,13 @@ dostane zvuk posunutý o tenhle offset — a bude ho hledat jinde.
              směrodatná odchylka 69,4702 ticku = 0,7719 ms
              měřená fps z modu 30,0100
   Rozbor     1093× přesně na modu · 65× zaokrouhlení (±1 tick) · 0× násobek modu · 1× nepravidelné
-  Kolísání   2366 t = 26,289 ms = 78,89 % (bez zahozených snímků)
-             s nimi by vyšlo 2366 t = 78,89 %
+  Kolísání   1 t = 0,011 ms = 0,03 %
+             uvnitř stopy, z 1157 vzorků — bez okrajů a bez zahozených snímků
+             se vším dohromady by vyšlo 2366 t = 78,89 %
+  Okraje     první vzorek [0] 5365 t = 59,611 ms, 1,789× modu ⚠
+             poslední vzorek [1158] přesně na modu
+             Vyjmuté z kolísání výše, ne zahozené — krajní vzorek bývá
+             useknutý a nafoukl by číslo o řád.
              nepravidelné vzorky na indexech: 0
   Verdikt    CFR s odchylkou na okraji — nepravidelný je pouze vzorek/vzorky na indexu 0 (první a/nebo poslední). Uvnitř stopy je frekvence konstantní. Useknutý krajní vzorek je běžný a neznamená VFR.
   Zvuk       AAC (aac ), 2 kanál(ů), 48000 Hz
@@ -134,8 +146,13 @@ dostane zvuk posunutý o tenhle offset — a bude ho hledat jinde.
              směrodatná odchylka 4,7045 ticku = 0,0523 ms
              měřená fps z modu 120,0000
   Rozbor     636× přesně na modu · 41× zaokrouhlení (±1 tick) · 0× násobek modu · 679× nepravidelné
-  Kolísání   104 t = 1,156 ms = 13,87 % (bez zahozených snímků)
-             s nimi by vyšlo 104 t = 13,87 %
+  Kolísání   8 t = 0,089 ms = 1,07 %
+             uvnitř stopy, z 1354 vzorků — bez okrajů a bez zahozených snímků
+             se vším dohromady by vyšlo 104 t = 13,87 %
+  Okraje     první vzorek [0] 854 t = 9,489 ms, 1,139× modu ⚠
+             poslední vzorek [1355] 758 t = 8,422 ms, 1,011× modu ⚠
+             Vyjmuté z kolísání výše, ne zahozené — krajní vzorek bývá
+             useknutý a nafoukl by číslo o řád.
              nepravidelné vzorky na indexech: 0, 2, 4, 6, 8, 10, 12, 14, … +671
   Verdikt    VFR — 679 vzorek/vzorků má délku, kterou nevysvětlí ani zaokrouhlení, ani zahozený snímek. Časování je skutečně proměnlivé a před střihem se musí přepočítat na CFR.
   Zvuk       AAC (aac ), 2 kanál(ů), 48000 Hz
@@ -161,8 +178,13 @@ dostane zvuk posunutý o tenhle offset — a bude ho hledat jinde.
   Rozbor     1563× přesně na modu · 223× zaokrouhlení (±1 tick) · 4× násobek modu · 107× nepravidelné
   Zahozeno   6 snímek/snímků ve 4 místě/místech — vzorek je celočíselným násobkem délky snímku.
              Opraví se doplněním duplikátů, ne přepočtem časování.
-  Kolísání   551 t = 6,122 ms = 36,73 % (bez zahozených snímků)
-             s nimi by vyšlo 3001 t = 200,07 %
+  Kolísání   29 t = 0,322 ms = 1,93 %
+             uvnitř stopy, z 1891 vzorků — bez okrajů a bez zahozených snímků
+             se vším dohromady by vyšlo 3001 t = 200,07 %
+  Okraje     první vzorek [0] 2051 t = 22,789 ms, 1,367× modu ⚠
+             poslední vzorek [1896] přesně na modu
+             Vyjmuté z kolísání výše, ne zahozené — krajní vzorek bývá
+             useknutý a nafoukl by číslo o řád.
              nepravidelné vzorky na indexech: 0, 557, 559, 561, 563, 565, 567, 569, … +99
   Verdikt    VFR — 107 vzorek/vzorků má délku, kterou nevysvětlí ani zaokrouhlení, ani zahozený snímek. Časování je skutečně proměnlivé a před střihem se musí přepočítat na CFR. Z toho 6 zahozený snímek/snímků.
   Zvuk       AAC (aac ), 2 kanál(ů), 48000 Hz
@@ -188,8 +210,13 @@ dostane zvuk posunutý o tenhle offset — a bude ho hledat jinde.
   Rozbor     1657× přesně na modu · 234× zaokrouhlení (±1 tick) · 2× násobek modu · 0× nepravidelné
   Zahozeno   2 snímek/snímků ve 2 místě/místech — vzorek je celočíselným násobkem délky snímku.
              Opraví se doplněním duplikátů, ne přepočtem časování.
-  Kolísání   1 t = 0,011 ms = 0,07 % (bez zahozených snímků)
-             s nimi by vyšlo 1500 t = 100,00 %
+  Kolísání   1 t = 0,011 ms = 0,07 %
+             uvnitř stopy, z 1890 vzorků — bez okrajů a bez zahozených snímků
+             se vším dohromady by vyšlo 1500 t = 100,00 %
+  Okraje     první vzorek [0] 2904 t = 32,267 ms, 1,936× modu ⚠
+             poslední vzorek [1892] přesně na modu
+             Vyjmuté z kolísání výše, ne zahozené — krajní vzorek bývá
+             useknutý a nafoukl by číslo o řád.
   Verdikt    CFR se zahozenými snímky — časování je jinak konstantní, ale v 2 místě/místech je vzorek celočíselným násobkem délky snímku. Chybí 2 snímek/snímků. Tohle se řeší doplněním duplikátů, ne přepočtem časování.
   Zvuk       AAC (aac ), 2 kanál(ů), 48000 Hz
   Edit list z ⚠ 1 segment(ů), mapování NENÍ triviální:

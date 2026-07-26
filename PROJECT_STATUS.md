@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 25. 07. 2026*
+*Naposled aktualizováno: 26. 07. 2026*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
@@ -7,11 +7,16 @@ Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal,
 **Stav: specifikace v2.0 + implementační plán hotové. Žádný kód.**
 
 ## ⏭️ Příští krok
-**Spike 0, krok 1 — otevřít soubor a přehrát ho.**
-`NSOpenPanel` se Security-Scoped Bookmarkem → `AVPlayer` v `NSViewRepresentable` → mezerník play/pauza, šipky krok po snímku.
-Matematika křivky je hotová a otestovaná (`SpeedRampEngine/`), takže krok 4 spiku (ramp) už staví na ověřeném základu.
-Příprava hotová: Xcode nainstalovaný, git repozitář založený, klipy v `TestClips/` (ignorované gitem). Detaily v `SPIKE_0.md`.
-⚠️ Při zakládání Xcode projektu **nastav deployment target ručně na macOS 14.0** — výchozí by byl 26.0.
+**Spike 0, krok 3 — zploštění VFR → CFR.**
+`AVAssetReader` → `AVAssetWriter`, přepsat časové značky na pevnou mřížku. Zahozené snímky doplnit duplikátem, nepravidelné časování přepočítat. Výsledek ověřit `swift run MediaProbe` — má hlásit `CFR`.
+
+Je to nově krok 3, tedy **před** rampem: sonda naměřila, že ani jeden testovací klip nemá konstantní časování, a pouštět ramp na VFR zdroji by znamenalo měřit dvě proměnné najednou.
+
+⚠️ **Zvuk čti jen přes `AVComposition` nebo s respektováním `AVAssetTrack.segments`.** Všech pět klipů zahazuje edit listem prvních 44 ms (priming AAC).
+
+Kroky 1 a 2 spiku (přehrávač, konstantní zpomalení) zůstávají otevřené — `MediaProbe` je zatím jediný kód, který sáhl na AVFoundation, a UI ještě žádné není. Až se bude zakládat Xcode projekt: ⚠️ **deployment target nastav ručně na macOS 14.0**, výchozí by byl 26.0.
+
+Příprava hotová: Xcode nainstalovaný, git repozitář založený, klipy v `TestClips/` (ignorované gitem), naměřené vlastnosti v `MediaProbe/RESULTS.md`. Detaily v `SPIKE_0.md`.
 
 ## ✅ Hotovo
 - **`SpeedRampEngine` — první modul, zkompilovaný a otestovaný.** 31 testů, 0 selhání, Swift 6.3.3. Bézier easing, integrace rychlostní křivky, inverzní mapování pro scrubbing, segmentace pro `scaleTimeRange` zarovnaná na hranice snímků, `Codable` pro `project.json`. Ověřeno proti nezávislé Python referenci na analyticky spočitatelných případech.

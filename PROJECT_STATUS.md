@@ -9,12 +9,13 @@ Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal,
 ## ⏭️ Příští krok
 **Spike 0, krok 1 — otevřít soubor a přehrát ho.**
 `NSOpenPanel` se Security-Scoped Bookmarkem → `AVPlayer` v `NSViewRepresentable` → mezerník play/pauza, šipky krok po snímku.
-Matematika křivky je hotová a otestovaná (`SpeedRampEngine/`), takže krok 3 spiku už staví na ověřeném základu.
+Matematika křivky je hotová a otestovaná (`SpeedRampEngine/`), takže krok 4 spiku (ramp) už staví na ověřeném základu.
 Příprava hotová: Xcode nainstalovaný, git repozitář založený, klipy v `TestClips/` (ignorované gitem). Detaily v `SPIKE_0.md`.
 ⚠️ Při zakládání Xcode projektu **nastav deployment target ručně na macOS 14.0** — výchozí by byl 26.0.
 
 ## ✅ Hotovo
 - **`SpeedRampEngine` — první modul, zkompilovaný a otestovaný.** 31 testů, 0 selhání, Swift 6.3.3. Bézier easing, integrace rychlostní křivky, inverzní mapování pro scrubbing, segmentace pro `scaleTimeRange` zarovnaná na hranice snímků, `Codable` pro `project.json`. Ověřeno proti nezávislé Python referenci na analyticky spočitatelných případech.
+- **`MediaProbe` — sonda na vlastnosti klipů.** Rozlišení, orientace, kodeky, fps, edit list a hlavně **skutečné délky vzorků přes `AVSampleCursor`** (fallback `AVAssetReader`). Rozlišuje zaokrouhlení / zahozený snímek / proměnlivé časování. Naměřené hodnoty v `MediaProbe/RESULTS.md`. První kód, který sáhl na AVFoundation.
 - Produktová a technická specifikace v2.0 (HTML + PDF)
 - **Implementační plán** — 12 fází, 3 kill-gates, modulová mapa, session protokol (`IMPLEMENTACNI_PLAN.md`)
 - **Interaktivní tracker** — odškrtávací postup s progress barem (`krasa-tracker.html`)
@@ -27,7 +28,7 @@ Příprava hotová: Xcode nainstalovaný, git repozitář založený, klipy v `T
 
 ## 📝 TODO
 ### Cesta k v0.5 „MVP nula" (~6 měsíců při 30 h/týdně)
-- **F0** Spike 0 — ověření speed rampingu *(1 týden)* — 🔄 matematika hotová
+- **F0** Spike 0 — ověření speed rampingu *(1 týden)* — 🔄 matematika a sonda hotové, příští je zploštění VFR→CFR (krok 3)
 - **F1** Kostra, import, přehrávač, VFRDetector *(2 týdny)*
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)*
 - **F3** Speed ramping ostrý *(3 týdny)*
@@ -61,7 +62,10 @@ Příprava hotová: Xcode nainstalovaný, git repozitář založený, klipy v `T
 - **Modely pro rozpoznávání obličejů jsou z velké části komerčně zakázané.** InsightFace, ArcFace, buffalo_l: *non-commercial research only*. Jediný čistý je AuraFace-v1 (Apache 2.0), a z jeho repa se smí stáhnout **pouze `glintr100.onnx`**.
 - **EU AI Act čl. 2(10) nechrání dodavatele software**, jen koncového uživatele. Termín pro Annex III po Digital Omnibus: 2. 12. 2027.
 - **`AVAssetExportSession` ignoruje `frameDuration`** → export přes `AVAssetWriter`.
-- **VFR z telefonu.** Apple nemá API pro detekci — musíš číst délky vzorků sám.
+- **VFR z telefonu.** Apple nemá API pro detekci — musíš číst délky vzorků sám. **Změřeno 25. 07. 2026 na pěti klipech ze Samsungu (`MediaProbe/RESULTS.md`): ani jeden nemá čistě konstantní časování.** VFR je výchozí stav, ne okrajový případ.
+- **Zvuk má edit list, který zahazuje prvních 44 ms.** Priming AAC kodéru, u všech pěti klipů. **Zvuk se nikdy nesmí číst ze syrové tabulky vzorků** — jen přes `AVComposition` nebo s respektováním `AVAssetTrack.segments`. Jinak je posunutý o 44 ms a chyba se hledá v synchronizaci místo ve čtení.
+- **`nominalFrameRate` lže.** Slow-mo klip hlásí 119,369 fps, naměřeno 120,000. Metadata, ne měření — časovou základnu projektu z něj neodvozovat.
+- **Zahozený snímek ≠ proměnlivé časování.** Vzorek jako celočíselný násobek délky snímku = zahozený snímek, opraví se duplikátem. Nepravidelná délka = přepočet časování. Rozdíl v ceně opravy je řádový, `MediaProbe` to rozlišuje.
 - **Nikdo nikdy nepublikoval benchmark vlastního `AVVideoCompositing` na 4K/60.** Proto je Spike 0 fáze nula.
 - **Vykonavatelské riziko.** Web stack z předchozích projektů se sem nepřenáší.
 
@@ -87,6 +91,10 @@ Příprava hotová: Xcode nainstalovaný, git repozitář založený, klipy v `T
 - `SPIKE_0.md` – zadání první fáze
 - `krasa-tracker.html` – interaktivní tracker postupu
 - `PROJECT_STATUS.md` – tenhle soubor
+- `MediaProbe/` – **sonda na testovací klipy**, `swift run MediaProbe`
+  - `Sources/MediaProbe/` – Model, Timing (čtení vzorků), Inspect, Report
+  - `RESULTS.md` – **naměřené hodnoty**; klipy jsou v `.gitignore`, tohle je jediný záznam
+- `TestClips/` – 5 klipů ze Samsungu, 2,1 GB, **ignorované gitem**
 - `SpeedRampEngine/` – **první modul, hotový a otestovaný**
   - `Sources/SpeedRampEngine/SpeedRampEngine.swift` – ~380 řádků, žádné závislosti
   - `Tests/SpeedRampEngineTests/SpeedRampEngineTests.swift` – 31 testů

@@ -41,6 +41,16 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
 - **WhisperKit** (`argmaxinc/argmax-oss-swift`), model `large-v3-turbo`. Ne whisper-small — pro češtinu má 34–38 % chybovost.
 - Minimální macOS 14.0 pro běh, novější API runtime gatovaná.
 
+## Naměřeno na reálných klipech (`MediaProbe`, 25. 07. 2026)
+
+Pět klipů ze Samsungu, 4K HEVC. Čísla a metoda v `MediaProbe/RESULTS.md`.
+
+- **VFR je výchozí stav, ne výjimka.** Ani jeden z pěti klipů nemá čistě konstantní časování. Nepiš kód, který předpokládá pevnou délku snímku, a pak k němu dodělávej VFR větev — začni od proměnlivého časování.
+- **Zvuk NIKDY nečti ze syrové tabulky vzorků.** Všech pět klipů má na zvukové stopě edit list, který zahazuje prvních **44 ms** (priming AAC kodéru). Čti přes `AVComposition` nebo respektuj `AVAssetTrack.segments` — obojí edit list ctí. Kdo ho ignoruje, dostane zvuk posunutý o 44 ms a bude tu chybu hledat v synchronizaci, ne ve čtení.
+- **`nominalFrameRate` lže.** U slow-mo klipu hlásí 119,369 fps, naměřeno 120,000. Je to metadata, ne měření. **Časovou základnu projektu z něj neodvozuj** — to je jen jiná formulace už platného pravidla o jedné časové základně.
+- **Slow-mo klip je opravdové 120 fps**, ne 30fps stopa se zpomalením v edit listu. Edit list obrazu je u všech pěti klipů 1:1. Ta druhá varianta ale existuje a `VFRDetector` s ní musí počítat — u klipů z iPhonu bývá běžná.
+- **Rozlišuj zahozený snímek od proměnlivého časování.** Vzorek, který je celočíselným násobkem délky snímku, je zahozený snímek — opraví se doplněním duplikátu. Skutečně nepravidelná délka vyžaduje přepočet časování. Je to rozdíl v ceně opravy o řád. `MediaProbe` to už rozlišuje.
+
 ## Prostředí (ověřeno 25. 07. 2026)
 
 - **Swift 6.3.3** (`swiftlang-6.3.3.1.3`), target `arm64-apple-macosx26.0`.

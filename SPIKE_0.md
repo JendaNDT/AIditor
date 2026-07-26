@@ -42,8 +42,18 @@ Tohle je celý smysl — když se to rozbije, přijdeš o víkend, ne o čtvrt r
 ✅ Hotovo, když soubor vyleze a jde přehrát v QuickTimu.
 ⚠️ Tady poprvé poslouchej zvuk. Lupance na začátku/konci?
 
-### Krok 3 – Plynulá křivka (tady se to zlomí, nebo ne)
-Ramp 1,0× → 0,25× → 1,0× přes prostředek klipu.
+### Krok 3 – Zploštit VFR → CFR (**nově před rampem, nepřeskakuj**)
+Vezmi klip, `AVAssetReader` → `AVAssetWriter`, a přepiš časové značky na pevnou mřížku cílové snímkové frekvence. Zahozené snímky doplň duplikátem, nepravidelné časování přepočítej. Výsledek ověř znovu `MediaProbe`.
+
+**Proč to bylo přesunuto sem, před ramp:** sonda naměřila, že **ani jeden z pěti testovacích klipů nemá konstantní časování** (`MediaProbe/RESULTS.md`). Kdybys ramp pustil rovnou na VFR souboru a zvuk by ujel nebo obraz zaškubal, měřil bys dvě proměnné najednou a nevěděl, která z nich selhala — jestli segmentace rychlostní křivky, nebo proměnlivé časování zdroje. Spike má odpovědět na jednu otázku, ne zamotat dvě.
+
+Zploštění je navíc v plánu stejně (fáze 4, součást generování proxy), takže to není práce navíc — jen dřív.
+
+✅ Hotovo, když `MediaProbe` na výstupu hlásí `CFR` a délka i počet snímků sedí s originálem.
+⚠️ Na zvuk sáhni jen přes `AVComposition` nebo s respektováním `AVAssetTrack.segments`. Všech pět klipů zahazuje edit listem prvních 44 ms (priming AAC) — kdo čte syrovou tabulku vzorků, posune si zvuk o 44 ms hned na začátku.
+
+### Krok 4 – Plynulá křivka (tady se to zlomí, nebo ne)
+Ramp 1,0× → 0,25× → 1,0× přes prostředek klipu. **Pouštěj ho na zploštěném souboru z kroku 3, ne na originálu.**
 
 **Pozor, tohle je jádro spiku:** `scaleTimeRange` dělá konstantní změnu rychlosti přes daný úsek — vytvoří lineární časové mapování. Plynulý Bézier se z jednoho volání udělat nedá.
 
@@ -58,7 +68,7 @@ Kompozici stav přes `AVMutableVideoComposition`. Je od macOS 26 deprecated, ale
 ✅ Hotovo, když ramp vidíš i slyšíš a export doběhne.
 ⚠️ Čeho si tu všímej: každá hranice segmentu je potenciální lupnutí ve zvuku. To je hlavní riziko celého spiku, ne to, jestli se ramp „povede".
 
-### Krok 4 – Změřit
+### Krok 5 – Změřit
 Zapiš si čísla. Bez nich to není spike, ale hraní.
 
 ---
@@ -67,6 +77,7 @@ Zapiš si čísla. Bez nich to není spike, ale hraní.
 
 | # | Co | Výsledek |
 |---|-----|----------|
+| 0 | Zploštění VFR→CFR proběhlo a `MediaProbe` na výstupu hlásí `CFR` | ☐ |
 | 1 | Export doběhl bez pádu | ☐ |
 | 2 | Zvuk je na konci klipu pořád v synchronu (test s tlesknutím) | ☐ |
 | 3 | Ve zvuku nejsou lupance na hranicích segmentů | ☐ |
@@ -82,7 +93,7 @@ Zapiš si čísla. Bez nich to není spike, ale hraní.
 - **Všechno zelené** → stavíš dál podle sekce 8.1 specifikace. Rozsah MVP je reálný.
 - **Zvuk lupe nebo ujíždí** → řešitelné, ale znamená to vlastní audio pipeline přes `AVAudioEngine` místo AVFoundation zkratky. Připočti si týdny, ne dny. Uprav plán, ne ambici.
 - **Náhled se seká i po vygenerování proxy** → proxy workflow povyšuješ z „nice to have" na povinnou součást MVP, případně přehodnoť rozsah.
-- **Nedostal ses ani ke kroku 3** → to je taky odpověď, a ta nejdůležitější. Znamená to, že cesta vede přes užší produkt (jedna mini-appka „Speed Ramp") místo celého NLE.
+- **Nedostal ses ani ke kroku 4 (rampu)** → to je taky odpověď, a ta nejdůležitější. Znamená to, že cesta vede přes užší produkt (jedna mini-appka „Speed Ramp") místo celého NLE.
 
 Žádný z těch výsledků není neúspěch. Neúspěch by bylo zjistit to samé po půl roce psaní timeline.
 
@@ -92,7 +103,7 @@ Zapiš si čísla. Bez nich to není spike, ale hraní.
 
 ### Prompt 0 – ověření API — ✅ **HOTOVO 25. 07. 2026, nepouštěj znovu**
 
-Odpověď je zapracovaná do kroku 3 výše a do sekce 1 `IMPLEMENTACNI_PLAN.md`. Shrnutí:
+Odpověď je zapracovaná do kroku 4 výše a do sekce 1 `IMPLEMENTACNI_PLAN.md`. Shrnutí:
 
 | Otázka | Odpověď | Jistota |
 |---|---|---|
@@ -100,7 +111,7 @@ Odpověď je zapracovaná do kroku 3 výše a do sekce 1 `IMPLEMENTACNI_PLAN.md`
 | Segmentace, nebo vlastní compositor? | **Segmentace.** Compositor do časování nevidí. | ověřeno v SDK |
 | Existuje `AVVideoComposition.Configuration`? | Ano, ale `@available(macOS 26.0, *)` → pro nás zatím ne. | ověřeno v SDK |
 | Je `AVMutableVideoComposition` deprecated? | Ano, od macOS 26. Funguje dál, používáme ji. | ověřeno v SDK |
-| Artefakty ve zvuku na hranicích segmentů | **neověřeno** — to je právě úkol kroku 3 | otevřené |
+| Artefakty ve zvuku na hranicích segmentů | **neověřeno** — to je právě úkol kroku 4 | otevřené |
 
 Ověřovalo se proti `MacOSX26.5.sdk` na disku (hlavičky + `.swiftinterface`), ne proti webu — doc stránky se renderují JavaScriptem a stáhnout se nedají. Existence každé odkazované stránky potvrzena zvlášť přes JSON endpoint Apple docs.
 
@@ -152,6 +163,9 @@ Testy musí projít, než mi kód vrátíš.
 Použij SpeedRampEngine a postav AVMutableComposition, která na vybraný klip
 aplikuje ramp 1.0 → 0.25 → 1.0 přes prostřední třetinu.
 Postupuj cestou segmentace na mikro-úseky (viz odpověď z Promptu 0).
+Pracuj na souboru zploštěném na CFR z kroku 3, ne na originálu z telefonu.
+Zvuk čti přes AVComposition, ne ze syrové tabulky vzorků — klipy mají
+edit list, který zahazuje prvních 44 ms.
 Video i audio track drž v synchronu, na audio nasaď AVAudioUnitTimePitch.
 Export přes AVAssetExportSession do 1080p H.264.
 Do konzole vypiš dobu exportu v sekundách.

@@ -1,0 +1,387 @@
+//
+//  Model.swift
+//  Projekt Krása / MediaProbe
+//
+//  Datové typy pro výsledek sondy. Žádná logika čtení, jen tvar výsledku
+//  a odvozené hodnoty, které se počítají z už naměřených čísel.
+//
+
+import AVFoundation
+import CoreMedia
+import Foundation
+
+// MARK: - Odkud se četly délky vzorků
+
+enum TimingSource: String {
+    case sampleCursor = "AVSampleCursor"
+    case assetReader = "AVAssetReader"
+}
+
+// MARK: - Klasifikace jednoho vzorku
+
+/// Do jaké kategorie spadá délka jednoho vzorku vůči modu.
+///
+/// Rozlišení mezi `dropped` a `irregular` je celý smysl téhle sondy: zahozený
+/// snímek se opraví doplněním duplikátu, nepravidelné časování se musí přepočítat.
+enum SampleClass: Equatable {
+    /// Přesně na modu.
+    case normal
+    /// Do jednoho ticku od modu — artefakt celočíselné časové základny.
+    case rounding
+    /// Celočíselný násobek modu. Kolik snímků chybí.
+    case dropped(missing: Int)
+    /// Cokoli jiného. Skutečně proměnlivé časování.
+    case irregular
+
+    /// Tolerance kolem celočíselného násobku, v podílu délky snímku.
+    /// 10 % je dost na jitter kolem zahozeného snímku, málo na to, aby to spolklo
+    /// délku 1,79× modu (ta je opravdu nepravidelná, ne zahozený snímek).
+    static let multipleTolerance = 0.10
+
+    static func classify(tick: Int64, mode: Int64) -> SampleClass {
+        if tick == mode { return .normal }
+        if abs(tick - mode) <= 1 { return .rounding }
+        guard mode > 0 else { return .irregular }
+
+        let ratio = Int((Double(tick) / Double(mode)).rounded())
+        guard ratio >= 2 else { return .irregular }
+
+        let expected = Int64(ratio) * mode
+        let tolerance = max(Int64(1), Int64((Double(mode) * multipleTolerance).rounded()))
+        return abs(tick - expected) <= tolerance ? .dropped(missing: ratio - 1) : .irregular
+    }
+}
+
+// MARK: - Verdikt CFR / VFR
+
+enum FrameRateVerdict {
+    /// Všechny vzorky mají naprosto stejnou délku.
+    case constant
+    /// Délky se liší, ale nejvýš o jeden tick timescale — zaokrouhlování, ne VFR.
+    case constantWithRounding(spreadTicks: Int64)
+    /// Konstantní časování se zahozenými snímky. Opravitelné duplikací.
+    case constantWithDroppedFrames(events: Int, frames: Int)
+    /// Nepravidelný je jen první a/nebo poslední vzorek. Typicky useknutý okraj.
+    case constantWithEdgeOutliers(indices: [Int], droppedFrames: Int)
+    /// Skutečný rozptyl uvnitř stopy.
+    case variable(irregular: Int, droppedFrames: Int)
+
+    var shortLabel: String {
+        switch self {
+        case .constant: return "CFR"
+        case .constantWithRounding: return "CFR≈"
+        case .constantWithDroppedFrames(_, let frames): return "CFR↓\(frames)"
+        case .constantWithEdgeOutliers: return "CFR±"
+        case .variable: return "VFR"
+        }
+    }
+
+    /// Je časování pod zahozenými snímky konstantní? Rozhoduje o tom,
+    /// jestli stačí doplnit duplikáty, nebo je nutný přepočet.
+    var isConstantUnderneath: Bool {
+        switch self {
+        case .constant, .constantWithRounding, .constantWithDroppedFrames: return true
+        case .constantWithEdgeOutliers, .variable: return false
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .constant:
+            return "CFR — všechny vzorky mají identickou délku."
+        case .constantWithRounding(let spread):
+            return "CFR se zaokrouhlením — délky se liší o \(spread) tick(y) timescale. "
+                 + "To je artefakt celočíselné časové základny, ne proměnná snímková frekvence."
+        case .constantWithDroppedFrames(let events, let frames):
+            return "CFR se zahozenými snímky — časování je jinak konstantní, ale v \(events) "
+                 + "místě/místech je vzorek celočíselným násobkem délky snímku. Chybí \(frames) "
+                 + "snímek/snímků. Tohle se řeší doplněním duplikátů, ne přepočtem časování."
+        case .constantWithEdgeOutliers(let indices, let frames):
+            let list = indices.map(String.init).joined(separator: ", ")
+            let dropped = frames > 0 ? " Navíc \(frames) zahozený snímek/snímků." : ""
+            return "CFR s odchylkou na okraji — nepravidelný je pouze vzorek/vzorky na indexu "
+                 + "\(list) (první a/nebo poslední). Uvnitř stopy je frekvence konstantní. "
+                 + "Useknutý krajní vzorek je běžný a neznamená VFR.\(dropped)"
+        case .variable(let irregular, let frames):
+            let dropped = frames > 0 ? " Z toho \(frames) zahozený snímek/snímků." : ""
+            return "VFR — \(irregular) vzorek/vzorků má délku, kterou nevysvětlí ani zaokrouhlení, "
+                 + "ani zahozený snímek. Časování je skutečně proměnlivé a před střihem "
+                 + "se musí přepočítat na CFR.\(dropped)"
+        }
+    }
+}
+
+// MARK: - Statistika délek vzorků
+
+/// Naměřené délky vzorků jedné stopy a všechno, co z nich plyne.
+///
+/// Délky se drží jako **celá čísla v tickách timescale**, ne v sekundách.
+/// Kdyby se porovnávaly `Double` sekundy, plovoucí aritmetika by vyrobila
+/// rozptyl, který v souboru není.
+struct TimingStats {
+    let source: TimingSource
+    let timescale: CMTimeScale
+    /// Musely se délky převádět mezi různými timescale? Pak čísla nejsou přesná.
+    let rescaled: Bool
+    /// Délky vzorků v tickách, seřazené podle prezentačního času.
+    let ticks: [Int64]
+
+    let mode: Int64
+    let minTick: Int64
+    let maxTick: Int64
+    /// Histogram seřazený sestupně podle četnosti.
+    let histogram: [(tick: Int64, count: Int)]
+    /// Indexy (v prezentačním pořadí) vzorků, které se liší od modu.
+    let outlierIndices: [Int]
+    let stdDevTicks: Double
+    let verdict: FrameRateVerdict
+
+    /// Kolik vzorků spadá do které kategorie.
+    let normalCount: Int
+    let roundingCount: Int
+    /// Počet vzorků, které jsou celočíselným násobkem modu.
+    let droppedEvents: Int
+    /// Kolik snímků dohromady chybí.
+    let droppedFrames: Int
+    /// Indexy vzorků, které nevysvětlí ani zaokrouhlení, ani zahozený snímek.
+    let irregularIndices: [Int]
+    /// Největší odchylka od modu **bez** vzorků se zahozenými snímky.
+    /// Tohle je „jak moc kolísá časování", nezkreslené dvojnásobnými vzorky.
+    let maxDeviationExcludingDropped: Int64
+
+    var sampleCount: Int { ticks.count }
+    var distinctCount: Int { histogram.count }
+
+    /// Snímková frekvence odvozená z nejčastější délky vzorku.
+    var measuredFrameRate: Double {
+        guard mode > 0 else { return 0 }
+        return Double(timescale) / Double(mode)
+    }
+
+    var msPerTick: Double { 1000.0 / Double(timescale) }
+
+    func milliseconds(_ tick: Int64) -> Double { Double(tick) * msPerTick }
+
+    /// Největší odchylka od modu v tickách.
+    var maxDeviationTicks: Int64 {
+        max(maxTick - mode, mode - minTick)
+    }
+
+    var maxDeviationPercent: Double {
+        guard mode > 0 else { return 0 }
+        return Double(maxDeviationTicks) / Double(mode) * 100.0
+    }
+
+    /// Kolísání časování bez započtení zahozených snímků, v procentech délky snímku.
+    var jitterPercent: Double {
+        guard mode > 0 else { return 0 }
+        return Double(maxDeviationExcludingDropped) / Double(mode) * 100.0
+    }
+
+    var irregularCount: Int { irregularIndices.count }
+
+    // MARK: Výpočet
+
+    /// Spočítá statistiku z délek v tickách. `ticks` musí být v prezentačním pořadí.
+    init?(source: TimingSource, timescale: CMTimeScale, rescaled: Bool, ticks: [Int64]) {
+        guard !ticks.isEmpty else { return nil }
+
+        self.source = source
+        self.timescale = timescale
+        self.rescaled = rescaled
+        self.ticks = ticks
+
+        var counts: [Int64: Int] = [:]
+        for t in ticks { counts[t, default: 0] += 1 }
+
+        // Modus: nejčastější délka. Při rovnosti bere kratší, ať je výsledek deterministický.
+        var entries: [(tick: Int64, count: Int)] = []
+        entries.reserveCapacity(counts.count)
+        for (tick, count) in counts {
+            entries.append((tick: tick, count: count))
+        }
+        entries.sort { lhs, rhs in
+            lhs.count == rhs.count ? lhs.tick < rhs.tick : lhs.count > rhs.count
+        }
+
+        let sortedHistogram = entries
+        self.histogram = sortedHistogram
+        let modeValue = sortedHistogram[0].tick
+        self.mode = modeValue
+        self.minTick = ticks.min()!
+        self.maxTick = ticks.max()!
+        self.outlierIndices = ticks.indices.filter { ticks[$0] != modeValue }
+
+        let mean = ticks.reduce(0.0) { $0 + Double($1) } / Double(ticks.count)
+        let variance = ticks.reduce(0.0) { acc, t in
+            let d = Double(t) - mean
+            return acc + d * d
+        } / Double(ticks.count)
+        self.stdDevTicks = variance.squareRoot()
+
+        // Klasifikace. Počítá se jednou na každou různou délku, ne na každý vzorek.
+        var classByTick: [Int64: SampleClass] = [:]
+        for tick in counts.keys {
+            classByTick[tick] = SampleClass.classify(tick: tick, mode: modeValue)
+        }
+
+        var normal = 0, rounding = 0, events = 0, frames = 0
+        var irregular: [Int] = []
+        var deviationExcludingDropped: Int64 = 0
+
+        for (index, tick) in ticks.enumerated() {
+            switch classByTick[tick] ?? .irregular {
+            case .normal:
+                normal += 1
+            case .rounding:
+                rounding += 1
+            case .dropped(let missing):
+                events += 1
+                frames += missing
+                continue  // do kolísání časování se zahozený snímek nepočítá
+            case .irregular:
+                irregular.append(index)
+            }
+            deviationExcludingDropped = max(deviationExcludingDropped, abs(tick - modeValue))
+        }
+
+        self.normalCount = normal
+        self.roundingCount = rounding
+        self.droppedEvents = events
+        self.droppedFrames = frames
+        self.irregularIndices = irregular
+        self.maxDeviationExcludingDropped = deviationExcludingDropped
+
+        // Verdikt. Pořadí testů je od nejpřísnějšího k nejvolnějšímu.
+        let spread = maxTick - minTick
+        if counts.count == 1 {
+            self.verdict = .constant
+        } else if irregular.isEmpty && events == 0 {
+            self.verdict = .constantWithRounding(spreadTicks: spread)
+        } else if irregular.isEmpty {
+            // Časování je pod zahozenými snímky konstantní — stačí doplnit duplikáty.
+            self.verdict = .constantWithDroppedFrames(events: events, frames: frames)
+        } else if Set(irregular).isSubset(of: [0, ticks.count - 1]) {
+            // Nepravidelný je jen okraj. Useknutý krajní vzorek není VFR.
+            self.verdict = .constantWithEdgeOutliers(indices: irregular, droppedFrames: frames)
+        } else {
+            self.verdict = .variable(irregular: irregular.count, droppedFrames: frames)
+        }
+    }
+}
+
+// MARK: - Edit list
+
+/// Jeden segment stopy: mapování z časové osy médií na časovou osu stopy.
+struct SegmentInfo {
+    let index: Int
+    let isEmpty: Bool
+    let mapping: CMTimeMapping
+
+    /// Poměr `source.duration / target.duration`.
+    ///
+    /// 1,0 = přehrává se v původní rychlosti. 4,0 = do stopy se vejde čtyřnásobek
+    /// zdrojového času, takže se přehrává 4× zpomaleně.
+    var rate: Double? {
+        guard !isEmpty else { return nil }
+        let target = mapping.target.duration.seconds
+        let source = mapping.source.duration.seconds
+        guard target > 0, source.isFinite, target.isFinite else { return nil }
+        return source / target
+    }
+}
+
+/// Souhrn edit listu stopy.
+struct EditListInfo {
+    let segments: [SegmentInfo]
+
+    /// Je mapování triviální, tedy jeden neprázdný segment 1:1 bez posunu?
+    var isIdentity: Bool {
+        guard segments.count == 1, let seg = segments.first, !seg.isEmpty else { return false }
+        guard let rate = seg.rate, abs(rate - 1.0) < 1e-6 else { return false }
+        return seg.mapping.source.start == seg.mapping.target.start
+    }
+
+    /// Výsledná rychlost, pokud ji lze vyjádřit jedním číslem.
+    var overallRate: Double? {
+        let rates = segments.compactMap(\.rate)
+        guard let first = rates.first else { return nil }
+        return rates.allSatisfy { abs($0 - first) < 1e-6 } ? first : nil
+    }
+
+    var hasEmptySegments: Bool { segments.contains(where: \.isEmpty) }
+
+    /// Kde v médiích začíná první skutečně prezentovaný vzorek.
+    ///
+    /// U AAC je to typicky nenulové — kodér si na začátek přidá priming vzorky,
+    /// které se nemají přehrát, a edit list je odřízne. Kdo edit list ignoruje
+    /// a čte syrové vzorky, dostane zvuk posunutý o tenhle offset.
+    var sourceStartOffset: CMTime? {
+        segments.first(where: { !$0.isEmpty })?.mapping.source.start
+    }
+
+    /// Kde na časové ose stopy začíná první prezentovaný vzorek.
+    /// Nenulové znamená, že stopa začíná mezerou (prázdný edit).
+    var targetStartOffset: CMTime? {
+        segments.first(where: { !$0.isEmpty })?.mapping.target.start
+    }
+}
+
+// MARK: - Stopy
+
+struct VideoTrackInfo {
+    let naturalSize: CGSize
+    let encodedSize: CGSize
+    let preferredTransform: CGAffineTransform
+    let rotationDegrees: Int
+    let displaySize: CGSize
+    let codec: String
+    let codecFourCC: String
+    let nominalFrameRate: Float
+    let minFrameDuration: CMTime
+    let timeRange: CMTimeRange
+    let naturalTimeScale: CMTimeScale
+    let estimatedDataRate: Float
+    let editList: EditListInfo
+    let timing: TimingStats?
+    /// Proč se délky vzorků nepodařilo přečíst, pokud `timing == nil`.
+    let timingError: String?
+
+    var isPortrait: Bool { displaySize.height > displaySize.width }
+
+    /// Snímková frekvence, jak ji uvidí divák — tedy po započtení edit listu.
+    var effectiveFrameRate: Double? {
+        guard let measured = timing?.measuredFrameRate, measured > 0 else { return nil }
+        guard let rate = editList.overallRate, rate > 0 else { return measured }
+        return measured / rate
+    }
+}
+
+struct AudioTrackInfo {
+    let codec: String
+    let codecFourCC: String
+    let channels: UInt32
+    let sampleRate: Double
+    let editList: EditListInfo
+    let timeRange: CMTimeRange
+}
+
+// MARK: - Výsledek za jeden soubor
+
+struct ClipReport {
+    let url: URL
+    let fileSize: Int64?
+    let duration: CMTime
+    let formatName: String
+    let video: VideoTrackInfo?
+    let audio: AudioTrackInfo?
+    /// Vyplněné, když se soubor nepodařilo otevřít vůbec.
+    let failure: String?
+
+    var name: String { url.lastPathComponent }
+
+    static func failed(url: URL, message: String) -> ClipReport {
+        ClipReport(url: url, fileSize: nil, duration: .invalid, formatName: "—",
+                   video: nil, audio: nil, failure: message)
+    }
+}

@@ -112,7 +112,9 @@ Rozdělení je navržené tak, aby se každý modul dal napsat a otestovat **izo
 Zadání v `SPIKE_0.md`. Nezkracuj ho.
 
 **Hotovo když:** máš vyplněnou tabulku sedmi kritérií.
-**Gate:** pokud se nedostaneš ke kroku 3, přejdi na plán „mini-appka" (sekce 8).
+**Gate:** pokud se nedostaneš ke kroku 4 (rampu), přejdi na plán „mini-appka" (sekce 8).
+
+**Pozor na pořadí:** zploštění VFR→CFR je v `SPIKE_0.md` nově krok 3, tedy **před** rampem. Sonda `MediaProbe` naměřila, že ani jeden testovací klip nemá konstantní časování — pouštět ramp na VFR zdroji znamená měřit dvě proměnné najednou.
 
 ---
 

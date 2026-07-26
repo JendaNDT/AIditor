@@ -1,5 +1,5 @@
 # Spike 0 – „Funguje speed ramp vůbec?"
-*Projekt Krása · zadání prvního kroku · 25. 07. 2026*
+*Projekt Krása · **uzavřeno 26. 07. 2026** · zadáno 25. 07. 2026*
 
 ## Otázka, na kterou spike odpovídá
 
@@ -10,9 +10,11 @@ Nic víc. Až bude odpověď, ví se, jestli má smysl stavět zbytek.
 ## Co spike NEDĚLÁ
 
 Žádná timeline. Žádné panely. Žádná AI. Žádný svatební asistent. Žádné ukládání projektu. Žádný design. Žádná lokalizace.
-**Je to odpadní kód.** Až odpoví na otázku, zahodí se a MVP se začne psát načisto s tím, co se ví.
+**Bylo to zamýšlené jako odpadní kód** — odpoví na otázku, zahodí se, MVP se napíše načisto.
 
-Tohle je celý smysl — když se to rozbije, přijdeš o víkend, ne o čtvrt roku.
+**Nakonec se nezahodilo nic.** `SpeedRampEngine`, `ProbeKit`, `MediaProbe`, `Flatten` a `Ramp` jsou ověřené moduly, na kterých MVP staví: `VFRDetector` ve fázi 1 vychází z `ProbeKit`, `ProxyGenerator` ve fázi 4 z `Flatten`, `CompositionBuilder` ve fázi 3 z `Ramp`. Spike si vynutil, aby všechno měřitelné bylo v knihovně a ne v jednorázovém skriptu — a to se vyplatilo.
+
+Původní smysl ale platí: když se to rozbije, přijdeš o víkend, ne o čtvrt roku.
 
 ---
 
@@ -25,7 +27,7 @@ Tohle je celý smysl — když se to rozbije, přijdeš o víkend, ne o čtvrt r
    - 4K/60 z telefonu, 30–60 s
    - 4K/30 z telefonu
    - 1080p nebo 4K/120 (slow-mo)
-   - jeden klip, kde někdo mluví (kvůli kontrole zvuku)
+   - jeden klip s **vysokým podílem ticha** — pauzy a velký dynamický rozsah. Řeč je jedna z cest, dozvuk po ráně sekerou stejně dobrá. Rozhoduje ticho, ne obsah záběru (viz poznámka k metodice u kroku 4)
    - **u každého si zjisti, jestli je CFR nebo VFR.** `ffprobe` nebo Media Inspector. Alespoň jeden VFR tam nech schválně — je to nejčastější zdroj rozjetého zvuku.
 5. **Referenční bod pro synchron:** natoč si 30s klip, kde na začátku a na konci tleskneš. Po exportu uvidíš na první pohled, jestli zvuk ujel.
 
@@ -33,14 +35,26 @@ Tohle je celý smysl — když se to rozbije, přijdeš o víkend, ne o čtvrt r
 
 ## Postup
 
-### Krok 1 – Otevřít a přehrát (cíl: půl hodiny)
-`NSOpenPanel` → vybraný soubor → `AVPlayer` v `NSViewRepresentable` → mezerník play/pauza, šipky krok po snímku.
-✅ Hotovo, když přehraješ 4K/60 klip a zkroluješ po snímcích.
+### Kroky 1 a 2 — ⏭️ **PŘESKOČENY, přesunuty do fáze 1**
 
-### Krok 2 – Konstantní zpomalení + export
+Původní plán začínal přehrávačem a konstantním zpomalením. **Ani jeden krok se neudělal a spike se přesto uzavřel** — proto to tady musí být napsané, ne mlčky vynechané.
+
+Spike šel místo toho cestou **soubor → soubor** (`AVAssetReader` → `AVAssetWriter`, žádné UI). Ukázalo se, že na hlavní otázku — *drží zvuk, lupe to, spadne export* — přehrávač vůbec není potřeba, a bez UI se měří rychleji a přesněji.
+
+**Co tím zůstalo nezodpovězené:** plynulost náhledu 4K/60 (kritérium 5 níž). Ta otázka nepatří do spiku, ale do fází 1–4, kde bude co přehrávat.
+
+<details>
+<summary>Původní zadání kroků 1 a 2</summary>
+
+**Krok 1 – Otevřít a přehrát (cíl: půl hodiny)**
+`NSOpenPanel` → vybraný soubor → `AVPlayer` v `NSViewRepresentable` → mezerník play/pauza, šipky krok po snímku.
+
+**Krok 2 – Konstantní zpomalení + export**
 `AVMutableComposition`, jeden video track, jeden audio track, `scaleTimeRange` na celý klip na 0,5×. Export přes `AVAssetExportSession` do 1080p.
-✅ Hotovo, když soubor vyleze a jde přehrát v QuickTimu.
-⚠️ Tady poprvé poslouchej zvuk. Lupance na začátku/konci?
+
+⚠️ Kdyby se krok 2 někdy dělal: **`AVAssetExportSession` ignoruje `frameDuration`** a exportoval by v jiné snímkové frekvenci, než kompozice hraje. Správně je `AVAssetWriter` — to už je v plánu i v `CLAUDE.md`, ale v tomhle zadání to ještě nebylo.
+
+</details>
 
 ### Krok 3 – Zploštit VFR → CFR — ✅ **HOTOVO 26. 07. 2026**
 
@@ -188,7 +202,7 @@ Neznamená to, že na algoritmu nezáleží. Znamená to, že **volba algoritmu 
 
 **Pozor, tohle je jádro spiku:** `scaleTimeRange` dělá konstantní změnu rychlosti přes daný úsek — vytvoří lineární časové mapování. Plynulý Bézier se z jednoho volání udělat nedá.
 
-**Cesta je jedna: segmentace na mikro-úseky.** Klip se nakrájí na desítky krátkých úseků a každý dostane vlastní `scaleTimeRange` podle křivky. Segmenty ti spočítá hotový `SpeedRampEngine.segments(outputFrameRate:framesPerSegment:)` — zarovnané na hranice snímků, ověřené 31 testy.
+**Cesta je jedna: segmentace na mikro-úseky.** Klip se nakrájí na desítky krátkých úseků a každý dostane vlastní `scaleTimeRange` podle křivky. Segmenty ti spočítá hotový `SpeedRampEngine.segmentation(outputFrameRate:maxSpeedStep:)` — zarovnané na hranice snímků, ověřené 41 testy.
 
 > **Dřív tu stála volba mezi segmentací a vlastním compositorem. Ta volba neexistuje.**
 > Vlastní `AVVideoCompositing` do časování nevidí. Přes `sourceFrame(byTrackID:)` dostane snímek, který kompozice pro daný `compositionTime` **už vybrala**, a API pro vyžádání jiného zdrojového času neexistuje. Který snímek to bude, určuje `CMTimeMapping` stopy — a ten je pouhá dvojice `CMTimeRange`, tedy afinní mapování z definice. Compositor je nástroj na pixely (efekty, prolínačky, Metal), ne na čas.

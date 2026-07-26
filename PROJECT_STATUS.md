@@ -29,7 +29,7 @@ První otázka fáze 1, kterou spike zdědil: **utáhne `AVPlayer` náhled 4K/60
 - **`SpeedRampEngine` — první modul, zkompilovaný a otestovaný.** **41 testů**, 0 selhání, Swift 6.3.3. Bézier easing, integrace rychlostní křivky, inverzní mapování pro scrubbing, segmentace pro `scaleTimeRange` zarovnaná na hranice snímků a řízená mezí skoku rychlosti, `Codable` pro `project.json`. Ověřeno proti nezávislé Python referenci na analyticky spočitatelných případech.
 - **`MediaProbe` — sonda na vlastnosti klipů.** Rozlišení, orientace, kodeky, fps, edit list a hlavně **skutečné délky vzorků přes `AVSampleCursor`** (fallback `AVAssetReader`). Rozlišuje zaokrouhlení / zahozený snímek / proměnlivé časování. Naměřené hodnoty v `MediaProbe/RESULTS.md`. První kód, který sáhl na AVFoundation.
 - **`Flatten` — zploštění VFR na pevnou snímkovou mřížku.** Krok 3 spiku. Cílová frekvence z měřeného modu, čtení přes `AVComposition` (edit list), zero-order hold převzorkování, ProRes 422 Proxy v plném rozlišení, zvuk LPCM. **Ověřeno na třech klipech: všechny `CFR` s kolísáním 0,00 %, synchron tlesknutí 0,00 ms, kódování 257–426 fps.**
-- **`Ramp` — plynulá rychlostní křivka segmentací.** Krok 4 spiku, jádro produktu. `scaleTimeRange` pozpátku, časy kumulativně v celých tickách, korekce výšky přes `.spectral`. **Ověřeno na třech klipech × čtyřech jemnostech: všech 12 výstupů `CFR` 30 fps, kolísání 0,00 %, délky sedí do jednoho snímku, žádné lupance ani při 545 segmentech.**
+- **`Ramp` — plynulá rychlostní křivka segmentací.** Krok 4 spiku, jádro produktu. `scaleTimeRange` pozpátku, časy kumulativně v celých tickách, segmentace podle meze skoku rychlosti (výchozí 1,5 %), korekce výšky `.timeDomain`. **Ověřeno na třech klipech: `CFR` 30 fps, kolísání 0,00 %, délky sedí do jednoho snímku, žádné lupance ani při 545 segmentech.**
 - **`ProbeKit` — sdílené měřicí a renderovací jádro.** Klasifikace délek vzorků, verdikt CFR/VFR, edit list, `CFRRenderer`. Používají ho všechny tři nástroje, takže měří a renderují stejným kódem.
 - Produktová a technická specifikace v2.0 (HTML + PDF)
 - **Implementační plán** — 12 fází, 3 kill-gates, modulová mapa, session protokol (`IMPLEMENTACNI_PLAN.md`)
@@ -70,7 +70,7 @@ První otázka fáze 1, kterou spike zdědil: **utáhne `AVPlayer` náhled 4K/60
 *(Detaily v `IMPLEMENTACNI_PLAN.md`, sekce 1.)*
 
 - **`AVMutableVideoComposition` je od macOS 26 deprecated, ale používá se dál.** Náhrada `AVVideoComposition.Configuration` je `@available(macOS 26.0, *)`, a minimum projektu je macOS 14.0 — na macOS 14–25 tedy neexistuje. Deprecated ≠ odstraněné. Warning umlčovat cíleně u volání, ne globálně. *(Dřívější text tvrdil opak — byla to chyba, opraveno 25. 07. 2026.)*
-- **`scaleTimeRange` neumí plynulou křivku** — dělá lineární časové mapování. `CMTimeMapping` je dvojice `CMTimeRange`, takže křivka do něj nejde zapsat z principu. **Ramp = segmentace, jiná cesta není** (vlastní compositor do časování nevidí). Navíc hlášené artefakty ve zvuku na hranicích segmentů.
+- **`scaleTimeRange` neumí plynulou křivku** — dělá lineární časové mapování. `CMTimeMapping` je dvojice `CMTimeRange`, takže křivka do něj nejde zapsat z principu. **Ramp = segmentace, jiná cesta není** (vlastní compositor do časování nevidí). ~~Hlášené artefakty ve zvuku na hranicích segmentů~~ — **změřeno 26. 07. 2026: nejsou.** Poslechem ověřeno až po 545 segmentů na dvou klipech s vysokým podílem ticha. Jemnost segmentace se proto volí podle velikosti kompozice, ne podle sluchu.
 - **Whisper-small je pro češtinu nepoužitelný** (34–38 % WER) → `large-v3-turbo` (~13 %, stejná velikost jako medium, násobně rychlejší).
 - **`SpeechAnalyzer` češtinu nepodporuje** — v seznamu 42 locale není `cs_CZ`. Sekce 4.3.1 specifikace se ruší.
 - **Vision nemá veřejné API pro otisk obličeje.** Face grouping = vlastní Core ML model + vlastní DBSCAN + UI pro ruční opravy. Ente na tom pracovalo 21 měsíců s placeným týmem.
@@ -84,7 +84,7 @@ První otázka fáze 1, kterou spike zdědil: **utáhne `AVPlayer` náhled 4K/60
 - **Zvuk má edit list, který zahazuje prvních 44 ms.** Priming AAC kodéru, u všech pěti klipů. **Zvuk se nikdy nesmí číst ze syrové tabulky vzorků** — jen přes `AVComposition` nebo s respektováním `AVAssetTrack.segments`. Jinak je posunutý o 44 ms a chyba se hledá v synchronizaci místo ve čtení.
 - **`nominalFrameRate` lže.** Slow-mo klip hlásí 119,369 fps, naměřeno 120,000. Metadata, ne měření — časovou základnu projektu z něj neodvozovat.
 - **Zahozený snímek ≠ proměnlivé časování.** Vzorek jako celočíselný násobek délky snímku = zahozený snímek, opraví se duplikátem. Nepravidelná délka = přepočet časování. Rozdíl v ceně opravy je řádový, `MediaProbe` to rozlišuje.
-- **Nikdo nikdy nepublikoval benchmark vlastního `AVVideoCompositing` na 4K/60.** Proto je Spike 0 fáze nula.
+- **Nikdo nikdy nepublikoval benchmark vlastního `AVVideoCompositing` na 4K/60.** Spike 0 to nezodpověděl — vlastní compositor se nestavěl, protože se ukázalo, že do časování nevidí. Otázka zůstává otevřená pro efekty a Metal ve fázích 2–3.
 - **Vykonavatelské riziko.** Web stack z předchozích projektů se sem nepřenáší.
 
 ## 🏗️ Klíčová rozhodnutí
@@ -104,18 +104,30 @@ První otázka fáze 1, kterou spike zdědil: **utáhne `AVPlayer` náhled 4K/60
 - **Nejdřív spike, pak MVP, pak kill-gate.** Skončit včas je úspěch.
 
 ## 📁 Stav souborů
+
+### Dokumentace
 - `Projekt_Krasa_Specifikace_Aplikace_v2.html` / `.pdf` – specifikace, zdroj pravdy pro **rozsah**
 - `IMPLEMENTACNI_PLAN.md` – zdroj pravdy pro **pořadí a technologie**
-- `SPIKE_0.md` – zadání první fáze
-- `krasa-tracker.html` – interaktivní tracker postupu
+- `SPIKE_0.md` – **uzavřený Spike 0 s naměřenými výsledky.** Vyplněná kritéria úspěchu, vyhodnocený rozhodovací bod, metodické poznámky k testování lupanců
+- `CLAUDE.md` – kontext a technická rozhodnutí pro Claude Code
 - `PROJECT_STATUS.md` – tenhle soubor
-- `MediaProbe/` – **sonda na testovací klipy**, `swift run MediaProbe`
-  - `Sources/MediaProbe/` – Model, Timing (čtení vzorků), Inspect, Report
-  - `RESULTS.md` – **naměřené hodnoty**; klipy jsou v `.gitignore`, tohle je jediný záznam
-- `TestClips/` – 5 klipů ze Samsungu, 2,1 GB, **ignorované gitem**
-- `SpeedRampEngine/` – **první modul, hotový a otestovaný**
-  - `Sources/SpeedRampEngine/SpeedRampEngine.swift` – ~380 řádků, žádné závislosti
-  - `Tests/SpeedRampEngineTests/SpeedRampEngineTests.swift` – 31 testů
-  - `Package.swift` – jde pustit `swift test` i bez Xcode
-  - `README.md` – API, naměřené hodnoty, tabulka jemnosti segmentace
+- `krasa-tracker.html` – interaktivní tracker postupu *(udržuje autor ručně)*
+
+### Kód
+- `SpeedRampEngine/` – **matematika rychlostní křivky.** Čistý Swift, žádné závislosti
+  - `Sources/SpeedRampEngine/SpeedRampEngine.swift` – křivka, mapování, segmentace
+  - `Tests/SpeedRampEngineTests/SpeedRampEngineTests.swift` – **41 testů**
+  - `README.md` – API, naměřené hodnoty, volba jemnosti segmentace
   - `ref_speedramp.py` – Python reference, proti které se to ověřovalo
+- `MediaProbe/` – **balíček se třemi nástroji a sdílenou knihovnou**
+  - `Sources/ProbeKit/` – sdílené jádro: klasifikace délek vzorků, verdikt CFR/VFR, edit list, `CFRRenderer`, `VideoResampler`
+  - `Sources/MediaProbe/` – sonda: `swift run MediaProbe`
+  - `Sources/Flatten/` – zploštění VFR→CFR, test synchronu, detekce transientů a řeči, export snímků: `swift run Flatten`
+  - `Sources/Ramp/` – rychlostní křivka na reálném souboru: `swift run Ramp`
+  - `RESULTS.md` – **naměřené vlastnosti klipů**; generované, needituj ručně
+  - `CLIPS.txt` – **ručně psané poznámky, co se na kterém klipu točilo.** Sonda je načítá do `RESULTS.md`
+
+### Data (mimo git)
+- `TestClips/` – 5 klipů ze Samsungu, 2,1 GB, **ignorované gitem**
+  - `flattened/` – zploštěné vstupy pro ramp (`*_cfr.mov`)
+  - `flattened/ramped/` – výstupy rampu (`*_ramp_step15.mov`)

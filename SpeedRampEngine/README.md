@@ -7,9 +7,9 @@ bez videa, bez zvuku a bez Macu. Když je matematika špatně, žádné ladění
 
 ## Stav
 
-**Zkompilováno a otestováno na Swiftu 6.0.3. 31 testů, 0 selhání.**
+**Zkompilováno a otestováno na Swiftu 6.3.3. 41 testů, 0 selhání.**
 
-Předtím ověřeno proti nezávislé referenční implementaci v Pythonu na případech,
+Ověřeno proti nezávislé referenční implementaci v Pythonu (`ref_speedramp.py`) na případech,
 které jdou spočítat analyticky:
 
 | Vlastnost | Přesnost |
@@ -21,6 +21,11 @@ které jdou spočítat analyticky:
 | Monotonie mapování na 20 000 vzorcích | bez výjimky |
 
 Referenční hodnota k zapamatování: **ramp 1,0 → 0,25 → 1,0 přes 5 s spotřebuje přesně 3,125 s zdroje.**
+Když ti při stavbě kompozice vyjde jiné číslo, chyba je v převodu na `CMTime`, ne tady.
+
+**Ověřeno i na reálném videu.** Spike 0 (26. 07. 2026) prohnal tuhle matematiku přes
+`AVMutableComposition` na tři klipy ze Samsungu. Délky výstupu sedí na očekávané hodnoty
+do jednoho snímku, synchron zvuku drží na 0,00 ms. Podrobnosti v `../SPIKE_0.md`.
 
 ## Jak to použít
 
@@ -34,7 +39,7 @@ swift test
 ### V Xcode
 
 Buď přetáhni `Sources/SpeedRampEngine/SpeedRampEngine.swift` do projektu
-a `Tests/.../SpeedRampEngineTests.swift` do testovacího targetu,
+a `Tests/SpeedRampEngineTests/SpeedRampEngineTests.swift` do testovacího targetu,
 nebo přidej celou složku jako lokální Swift Package
 (*File → Add Package Dependencies → Add Local…*).
 
@@ -44,20 +49,29 @@ nebo přidej celou složku jako lokální Swift Package
 // Klasický svatební ramp na 8 s zdrojového klipu
 let ramp = try SpeedRamp.classicSlowMotion(sourceDuration: 8.0, slowSpeed: 0.25)
 
-ramp.outputDuration          // jak dlouhý bude na časové ose
-ramp.sourceConsumed          // kolik zdroje spotřebuje (== 8.0)
-ramp.speed(atOutput: 2.0)    // rychlost v čase 2 s
+ramp.outputDuration              // jak dlouhý bude na časové ose
+ramp.sourceConsumed              // kolik zdroje spotřebuje (== 8.0)
+ramp.speed(atOutput: 2.0)        // rychlost v čase 2 s
 ramp.sourceTime(atOutput: 2.0)   // odpovídající čas ve zdroji
 ramp.outputTime(atSource: 1.5)   // inverze, pro scrubbing
 
-// Mikro-úseky pro scaleTimeRange — tohle jde rovnou do AVMutableComposition
-let segments = try ramp.segments(outputFrameRate: 60, framesPerSegment: 2)
-for s in segments {
-    // s.sourceStart, s.sourceDuration, s.outputDuration, s.speed
-}
-
 // Vzorky pro vykreslení křivky v UI
 let points = ramp.speedSamples(count: 200)
+```
+
+### Segmentace — hlavní cesta
+
+```swift
+let plan = try ramp.segmentation(outputFrameRate: 30, maxSpeedStep: 0.015)
+
+plan.segments             // [RampSegment] pro scaleTimeRange
+plan.framesPerSegment     // kolik snímků na úsek engine zvolil
+plan.achievedMaxStep      // skutečně dosažený největší skok
+plan.limitedByFrameRate   // ⚠️ true = mez nešla dodržet, viz níž
+
+for s in plan.segments {
+    // s.sourceStart, s.sourceDuration, s.outputDuration, s.speed
+}
 ```
 
 Vlastní křivka:
@@ -71,7 +85,7 @@ let ramp = try SpeedRamp(nodes: [
 ```
 
 `SpeedRamp` je `Codable`, takže padne rovnou do `project.json` podle schématu ze specifikace.
-Dekodér validuje — poškozený projekt vyhodí chybu, nenačte se rozbitá křevka.
+Dekodér validuje — poškozený projekt vyhodí chybu, nenačte se rozbitá křivka.
 
 ## Proč zrovna segmentace
 
@@ -79,33 +93,101 @@ Dekodér validuje — poškozený projekt vyhodí chybu, nenačte se rozbitá k�
 rychlosti přes daný úsek — vytváří lineární časové mapování. Plynulá Bézierova křivka
 se z jednoho volání udělat nedá.
 
-`segments(outputFrameRate:framesPerSegment:)` proto křivku nakrájí na úseky zarovnané
-na hranice výstupních snímků. Každý úsek dostane vlastní `scaleTimeRange`.
+Není to volba mezi segmentací a něčím lepším. `CMTimeMapping` je pouhá dvojice
+`CMTimeRange`, takže mapování je afinní z definice, a vlastní `AVVideoCompositing`
+do časování vůbec nevidí. **Segmentace je jediná cesta.**
 
-**Kompromis, který si musíš pohlídat:** čím jemnější dělení, tím hladší křivka —
-ale tím víc hranic, kde může lupnout zvuk. Naměřené skoky rychlosti mezi sousedními
-úseky u rampu 1,0 → 0,25 → 1,0 při 60 fps:
+`segmentation(...)` proto křivku nakrájí na úseky zarovnané na hranice výstupních
+snímků. Každý úsek dostane vlastní `scaleTimeRange`.
 
-| snímků na úsek | počet úseků | největší skok rychlosti |
+## Podle čeho se volí jemnost dělení
+
+**Dřív tu stálo „začni na 2 snímky na úsek a poslouchej, jestli to lupe".
+Ta otázka je zodpovězená a odpověď je jiná, než se čekalo.**
+
+Spike 0 poslechem porovnal 8, 4, 2 a 1 snímek na úsek na dvou klipech
+s vysokým podílem ticha (41 % a 38 % pauz — tedy materiál, kde by cvaknutí
+bylo slyšet):
+
+> **Všechny čtyři znějí stejně. Lupance nejsou ani při 545 segmentech.**
+
+Hypotéza „víc hranic = víc lupanců" se nepotvrdila. **Zvuk jemnost dělení
+neomezuje**, takže se nevolí podle sluchu, ale podle **velikosti kompozice**:
+pětiminutový ramp při 30 fps je 9000 snímků, tedy 9000 volání `scaleTimeRange`
+při jednom snímku na úsek oproti ~750 při dvanácti.
+
+### Proč ne pevný počet snímků na úsek
+
+Protože **skok rychlosti závisí na délce klipu**, takže stejná hodnota dá
+pokaždé jinou kvalitu. Naměřeno při `framesPerSegment: 8`:
+
+| klip | úseků | největší skok |
 |---|---|---|
-| 8 | 38 | 0,068× |
-| 4 | 75 | 0,034× |
-| **2** | **150** | **0,017×** |
-| 1 | 300 | 0,009× |
+| 11,4 s | 69 | **3,79 %** |
+| 38,6 s | 232 | 1,12 % |
+| 44,9 s | 270 | 0,96 % |
 
-Začni na 2 a poslouchej. Tohle je přesně to, co má Spike 0 změřit.
+Pevný počet snímků je **vstupní** veličina, ale zajímá nás **výstupní** vlastnost.
+Proto `maxSpeedStep`: zadá se mez skoku a engine si počet úseků dopočítá sám
+z maximální strmosti křivky. Při mezi 1,5 %:
+
+| klip | snímků na úsek | úseků | dosažený skok |
+|---|---|---|---|
+| 11,4 s | **3** | 182 | 1,42 % |
+| 38,6 s | **10** | 186 | 1,40 % |
+| 44,9 s | **12** | 180 | 1,44 % |
+
+Krátký klip dostane jemnější dělení, dlouhý hrubší, **oba stejnou kvalitu
+a skoro stejný počet úseků** (180–186) přes čtyřnásobný rozdíl v délce.
+
+**Výchozí mez je `0.015`** — nad naměřenými 0,96 a 1,12 % u klipů, které zněly
+čistě, a pod 3,79 % u toho krátkého.
+
+### ⚠️ Mez nemusí být dosažitelná
+
+Úsek nemůže být kratší než jeden výstupní snímek, takže existuje podlaha
+`max|dv/dt| / fps`. Krátký a strmý ramp na nízké snímkové frekvenci se pod ni
+nedostane — **11s klip při 24 fps se nedostane pod 0,59 %**.
+
+Není to chyba, je to hustota mřížky. Engine to hlásí přes
+`SegmentationPlan.limitedByFrameRate` a **volající to musí umět zobrazit**.
+Tiše vrátit něco horšího, než bylo zadané, je jediné, co je zakázané.
+
+```swift
+let plan = try ramp.segmentation(outputFrameRate: 24, maxSpeedStep: 0.005)
+if plan.limitedByFrameRate {
+    // plan.achievedMaxStep > plan.requestedMaxStep, plan.framesPerSegment == 1
+    // Řekni to uživateli. Jemněji už to nejde.
+}
+```
+
+Odhad počtu úseků vychází z **maximální** strmosti křivky, takže je konzervativní,
+a pak se ještě ověří na skutečných úsecích a v případě potřeby zjemní. Z odhadu
+prvního řádu se tím stává záruka.
+
+### Legacy varianta
+
+```swift
+let segments = try ramp.segments(outputFrameRate: 30, framesPerSegment: 8)
+```
+
+Zůstala kvůli srovnávacím měřením. **Pro produkční kód sáhni po `segmentation(...)`.**
 
 ## Co tenhle modul záměrně nedělá
 
 - Nesahá na AVFoundation. Převod na `CMTime` a stavba kompozice patří do `CompositionBuilder`.
 - Neumí freeze frame (rychlost 0). Podržený snímek je jiná funkce a rozbil by invertibilitu mapování — konstruktor nulovou rychlost odmítne.
 - Neumí zpětné přehrávání (záporná rychlost).
+- **Neřeší, jestli má zdroj dost snímků.** Ramp na 0,25× při výstupu 30 fps potřebuje
+  zdroj 120 fps, jinak se snímky duplikují a zpomalený úsek trhá
+  (`zdrojFps × nejnižšíRychlost ≥ výstupFps`). Tohle je vlastnost materiálu, ne křivky —
+  patří do UI a do svatebního asistenta. Viz `../SPIKE_0.md`.
 
 ## Soubory
 
 ```
 Package.swift
-Sources/SpeedRampEngine/SpeedRampEngine.swift    ~380 řádků
-Tests/SpeedRampEngineTests/…Tests.swift          31 testů
+Sources/SpeedRampEngine/SpeedRampEngine.swift    matematika křivky a segmentace
+Tests/SpeedRampEngineTests/…Tests.swift          41 testů
 ref_speedramp.py                                 referenční implementace pro ověření
 ```

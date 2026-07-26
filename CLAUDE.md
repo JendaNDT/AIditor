@@ -11,7 +11,7 @@ Nativní macOS videoeditor pro svatební a rodinné filmy. Swift, SwiftUI (panel
 | `Projekt_Krasa_Specifikace_Aplikace_v2.html` | **rozsah** — co má appka umět |
 | `IMPLEMENTACNI_PLAN.md` | **pořadí a technologie** — v jakém pořadí to stavět |
 | `PROJECT_STATUS.md` | **stav** — co je hotové, co je příští krok |
-| `SPIKE_0.md` | zadání aktuální fáze |
+| `SPIKE_0.md` | **uzavřený Spike 0** — naměřené výsledky a co z nich plyne |
 
 Specifikace je starší než plán. **Kde si odporují, platí plán** — obsahuje opravy proti realitě července 2026.
 

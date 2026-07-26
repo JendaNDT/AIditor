@@ -385,7 +385,7 @@ Obojí jde postavit i **vedle** hlavního projektu jako pojistka.
 
 Poctivě, ať víš, kde stojíš na měkkém:
 
-- **Nikdo nikdy nepublikoval benchmark vlastního `AVVideoCompositing` držícího 4K/60 náhled.** Ani pozitivní, ani negativní. Proto je Spike 0 fáze nula a ne příprava.
+- **Nikdo nikdy nepublikoval benchmark vlastního `AVVideoCompositing` držícího 4K/60 náhled.** Ani pozitivní, ani negativní. **Spike 0 to nezodpověděl** — vlastní compositor se nestavěl, protože se ukázalo, že do časování nevidí a pro speed ramping je zbytečný. Pro efekty a Metal (fáze 2–3) otázka zůstává otevřená.
 - Ze čtyř komerčních macOS video appek, jejichž binárky šly rozebrat, **žádná nekompozituje přes `AVVideoComposition`** — všechny mají vlastní engine. To může znamenat, že to nestačí, nebo že chtěly Windows. Nevíme.
 - Odhady časů jsou moje, ne měřené. Násobek 1,7 je odhad odhadu.
 - ~~Zda `AVAssetWriter` s ProRes Proxy skutečně zapne hardwarový engine, nejde přes API zjistit. Změř to.~~ **✅ Změřeno 26. 07. 2026:** zploštění do ProRes 422 Proxy ve 4K běželo **257–426 fps** podle klipu, tedy 4–7× reálný čas. Softwarové kódování by tohle nedalo. Přes API to pořád zjistit nejde, ale číslo mluví jasně.

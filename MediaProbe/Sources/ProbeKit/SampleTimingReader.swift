@@ -1,6 +1,6 @@
 //
-//  Timing.swift
-//  Projekt Krása / MediaProbe
+//  SampleTimingReader.swift
+//  Projekt Krása / ProbeKit
 //
 //  Čtení skutečných délek jednotlivých vzorků. Tohle je jádro celé sondy —
 //  Apple nemá API, které by řeklo „tenhle soubor je VFR", takže se délky
@@ -16,18 +16,18 @@ import CoreMedia
 import Foundation
 
 /// Jeden vzorek tak, jak je zapsaný v médiích. Časy jsou v ose médií, ne stopy.
-struct SampleTiming {
-    let presentationTime: CMTime
-    let duration: CMTime
+public struct SampleTiming {
+    public let presentationTime: CMTime
+    public let duration: CMTime
 }
 
-struct TimingReadResult {
-    let stats: TimingStats?
+public struct TimingReadResult {
+    public let stats: TimingStats?
     /// Varování nebo důvod selhání. Může být vyplněné i při úspěchu.
-    let note: String?
+    public let note: String?
 }
 
-enum SampleTimingReader {
+public enum SampleTimingReader {
 
     // MARK: - Veřejný vstup
 
@@ -35,7 +35,7 @@ enum SampleTimingReader {
     ///
     /// `naturalTimeScale` se předává zvenčí, protože synchronní přístup k němu
     /// je ve Swiftu deprecated a volající ho stejně už načetl.
-    static func read(track: AVAssetTrack,
+    public static func read(track: AVAssetTrack,
                      asset: AVAsset,
                      naturalTimeScale: CMTimeScale) async -> TimingReadResult {
         var notes: [String] = []
@@ -205,10 +205,10 @@ enum SampleTimingReader {
 
 // MARK: - Chyba sondy
 
-enum ProbeError: Error, LocalizedError {
+public enum ProbeError: Error, LocalizedError {
     case message(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .message(let text): return text
         }

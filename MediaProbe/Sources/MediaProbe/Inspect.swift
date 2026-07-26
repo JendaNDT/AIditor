@@ -10,6 +10,7 @@
 import AVFoundation
 import CoreMedia
 import Foundation
+import ProbeKit
 
 enum ClipInspector {
 

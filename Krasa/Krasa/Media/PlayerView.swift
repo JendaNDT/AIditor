@@ -46,6 +46,7 @@ final class PlayerHostView: NSView {
     var onDisplayTick: ((DisplayTick) -> Void)?
 
     private var link: CADisplayLink?
+    private var readyObservation: NSKeyValueObservation?
 
     /// ⚠️ **`AVPlayerLayer` je vrstvou view, ne její podvrstvou.**
     ///
@@ -65,10 +66,48 @@ final class PlayerHostView: NSView {
         super.init(frame: frameRect)
         playerLayer.videoGravity = .resizeAspect
         playerLayer.backgroundColor = NSColor.black.cgColor
+        // Skrytá, dokud nemá co ukázat. Odkryje ji `readyObservation`.
+        playerLayer.isHidden = true
         // Pořadí: nejdřív vrstva, pak `wantsLayer` — takhle se zakládá
         // layer-hosting view.
         layer = playerLayer
         wantsLayer = true
+        observeReadyForDisplay()
+    }
+
+    /// ⚠️ **Bez tohohle zůstane náhled po startu černý, dokud se něco
+    /// nepřelayoutuje.** Odhaleno 27. 07. 2026 a stálo to hodinu hledání.
+    ///
+    /// Pořadí událostí při startu: SwiftUI view rozloží hned, ale klip se
+    /// načítá až po proměření pěti souborů, tedy o několik vteřin později.
+    /// Vrstva tak dostane obsah ve chvíli, kdy už žádné další rozložení
+    /// nepřijde — a bez něj se obraz neobjeví. Poznalo se to na tom, že
+    /// obraz naskočil přesně v okamžiku, kdy tlačítko „Okno vs celá
+    /// obrazovka" schovalo sidebar a osu, tedy při přestavbě layoutu.
+    ///
+    /// Proto se drží dokumentovaný postup: vrstva je skrytá, dokud
+    /// `isReadyForDisplay` nenaskočí, a teprve pak se odkryje.
+    ///
+    /// > „Use this property as an indicator of when best to show or
+    /// > animate-in an AVPlayerLayer into view. … This property is
+    /// > key-value observable."
+    ///
+    /// <https://developer.apple.com/documentation/avfoundation/avplayerlayer/isreadyfordisplay>
+    ///
+    /// Naskakuje znovu při každé výměně položky, takže to pokrývá i přepnutí
+    /// na jiný klip, ne jen první načtení.
+    private func observeReadyForDisplay() {
+        readyObservation = playerLayer.observe(\.isReadyForDisplay,
+                                               options: [.initial, .new]) { layer, _ in
+            let ready = layer.isReadyForDisplay
+            // KVO nemusí přijít na hlavním vlákně a vrstvami se jinde sahat nemá.
+            DispatchQueue.main.async {
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                layer.isHidden = !ready
+                CATransaction.commit()
+            }
+        }
     }
 
     @available(*, unavailable)

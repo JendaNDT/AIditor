@@ -441,14 +441,24 @@ final class TimelineDocumentView: NSView {
         }
 
         if controller.selection != [hit.clipID] { controller.selection = [hit.clipID] }
+
+        // Modifikátory (krok 9, návrh sekce 4): ⌥ na okraji = roll (operace
+        // na hranici), ⌘ v těle = slip (operace na obsahu). Bez souseda
+        // spadne roll v interakci zpátky na trim — hlídá to model.
+        var forced: DragKind?
+        if event.modifierFlags.contains(.option), hit.zone != .body { forced = .roll }
+        if event.modifierFlags.contains(.command), hit.zone == .body { forced = .slip }
+
         controller.interaction.begin(hit: hit, in: controller.project,
+                                     forcing: forced,
                                      playhead: controller.playhead)
 
-        // Roll a slip mají modifikátory až v kroku 9; trim vzniká ze zóny.
         switch controller.interaction.drag?.kind {
         case .trimStart, .trimEnd, .roll:
             controller.undo.beginInteraction(controller.project)
-        default:
+        case .move, .slip:
+            NSCursor.closedHand.set()
+        case nil:
             break
         }
     }
@@ -489,6 +499,7 @@ final class TimelineDocumentView: NSView {
             break
         }
         updateDragOverlay(nil)
+        updateCursor(at: point)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -510,7 +521,123 @@ final class TimelineDocumentView: NSView {
             }
             return
         }
+
+        // Delete i forward delete mažou výběr (svázaná dvojčata jdou s ním).
+        if event.keyCode == 51 || event.keyCode == 117 {
+            controller.deleteClips(controller.selection)
+            return
+        }
+
+        // ⌘B = řez vybraných klipů v hlavě (blade, konvence z NLE).
+        if event.modifierFlags.contains(.command),
+           event.charactersIgnoringModifiers?.lowercased() == "b" {
+            for clipID in controller.selection {
+                controller.splitAtPlayhead(clipID)
+            }
+            return
+        }
         super.keyDown(with: event)
+    }
+
+    // MARK: - Kurzory (krok 9)
+
+    /// ⚠️ Kurzor pro okraj má dvě jména podle verze systému:
+    /// `resizeLeftRight` (od 10.0, deprecated 27.0) a `columnResize`
+    /// (až od 15.0). Deployment target je 14.0, proto runtime gate —
+    /// stejný vzorec jako `AVMutableVideoComposition` vs `Configuration`.
+    private static var edgeCursor: NSCursor {
+        if #available(macOS 15.0, *) { return .columnResize }
+        return .resizeLeftRight
+    }
+
+    /// Přes `NSTrackingArea` s `.cursorUpdate`, NE přes `addCursorRect` —
+    /// ta se smí volat jen z `resetCursorRects` a u tisíce klipů by se
+    /// obdélníky stejně přestavovaly při každém scrollu. `.inVisibleRect`
+    /// drží oblast srovnanou s viditelným výřezem sám. ⚠️ `.cursorUpdate`
+    /// se neposílá v kombinaci s `.activeAlways` — proto `.activeInKeyWindow`.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
+            owner: self))
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        updateCursor(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateCursor(at: convert(event.locationInWindow, from: nil))
+    }
+
+    private func updateCursor(at point: NSPoint) {
+        guard !controller.interaction.isDragging else { return }
+        switch controller.geometry.hitTest(x: point.x, y: point.y,
+                                           in: controller.project.timeline)?.zone {
+        case .leadingEdge, .trailingEdge:
+            Self.edgeCursor.set()
+        case .body, nil:
+            NSCursor.arrow.set()
+        }
+    }
+
+    // MARK: - Kontextové menu (krok 9)
+
+    /// Klip, na který se ukázalo pravým tlačítkem — cíl akcí menu.
+    private var menuClipID: ClipID?
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let hit = controller.geometry.hitTest(x: point.x, y: point.y,
+                                                    in: controller.project.timeline) else {
+            return nil
+        }
+        controller.selection = [hit.clipID]
+        menuClipID = hit.clipID
+
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+
+        let split = NSMenuItem(title: "Rozdělit v hlavě",
+                               action: #selector(menuSplit(_:)), keyEquivalent: "")
+        split.target = self
+        if let clip = controller.project.timeline.clip(hit.clipID) {
+            split.isEnabled = clip.timelineStart < controller.playhead
+                && controller.playhead < clip.timelineEnd
+        } else {
+            split.isEnabled = false
+        }
+        menu.addItem(split)
+        menu.addItem(.separator())
+
+        let delete = NSMenuItem(title: "Smazat",
+                                action: #selector(menuDelete(_:)), keyEquivalent: "")
+        delete.target = self
+        menu.addItem(delete)
+
+        let ripple = NSMenuItem(title: "Smazat s dosunutím",
+                                action: #selector(menuRippleDelete(_:)), keyEquivalent: "")
+        ripple.target = self
+        menu.addItem(ripple)
+
+        return menu
+    }
+
+    @objc private func menuSplit(_ sender: Any?) {
+        guard let clipID = menuClipID else { return }
+        controller.splitAtPlayhead(clipID)
+    }
+
+    @objc private func menuDelete(_ sender: Any?) {
+        guard let clipID = menuClipID else { return }
+        controller.deleteClips([clipID])
+    }
+
+    @objc private func menuRippleDelete(_ sender: Any?) {
+        guard let clipID = menuClipID else { return }
+        controller.rippleDelete(clipID)
     }
 
     // MARK: - Zoom (krok 8)

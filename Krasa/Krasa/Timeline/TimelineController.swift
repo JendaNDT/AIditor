@@ -78,6 +78,45 @@ final class TimelineController: ObservableObject {
         if playhead != clamped { playhead = clamped }
     }
 
+    // MARK: - Střihové operace z menu a zkratek (krok 9)
+
+    /// Rozřízne klip v hlavě. Svázané dvojče řeže model sám (a přepojuje
+    /// vazby) — tady se jen hlídá, že řez vede vnitřkem klipu, a píše undo.
+    func splitAtPlayhead(_ clipID: ClipID) {
+        guard let clip = project.timeline.clip(clipID),
+              clip.timelineStart < playhead, playhead < clip.timelineEnd else { return }
+        var updated = project
+        guard (try? updated.split(clipID: clipID, at: playhead)) != nil else { return }
+        undo.record(project)
+        project = updated
+    }
+
+    /// Smaže klipy i jejich svázaná dvojčata. Jeden undo krok pro celou dávku.
+    func deleteClips(_ ids: Set<ClipID>) {
+        var toRemove = ids
+        for id in ids {
+            for partner in project.linkedPartners(of: id) { toRemove.insert(partner.id) }
+        }
+        let existing = toRemove.filter { project.timeline.clip($0) != nil }
+        guard !existing.isEmpty else { return }
+
+        var updated = project
+        for id in existing { try? updated.remove(clipID: id) }
+        undo.record(project)
+        project = updated
+        selection.subtract(toRemove)
+    }
+
+    /// Smaže s dosunutím. Dvojčata a dosah přes stopy řeší model
+    /// (`rippleRemove` — hudební podkres na A2 se neposouvá).
+    func rippleDelete(_ clipID: ClipID) {
+        var updated = project
+        guard (try? updated.rippleRemove(clipID: clipID)) != nil else { return }
+        undo.record(project)
+        project = updated
+        selection.remove(clipID)
+    }
+
     // MARK: - Undo (krok 7)
 
     func undoStep() {

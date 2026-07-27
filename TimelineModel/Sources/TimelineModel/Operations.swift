@@ -350,9 +350,55 @@ extension Project {
 extension Project {
 
     /// Rozdělí klip. `at` je **první snímek druhé poloviny**.
+    ///
+    /// ⚠️ **Svázaný klip se řeže i s dvojčetem, jinak to nejde.** Vazba smí
+    /// mít nejvýš dva členy různého druhu (invariant 9) — kdyby se rozřízl
+    /// jen jeden z páru, sdílely by jednu vazbu tři klipy. Proto se řez vede
+    /// i dvojčetem a poloviny se přepojí po dvojicích: levé sdílí původní
+    /// vazbu, pravé dostanou čerstvou. Když řez dvojčetem nevede (posunuté
+    /// dvojče), zůstane vazba té polovině, se kterou se dvojče překrývá,
+    /// a druhá polovina je bez vazby.
+    ///
+    /// Návratová hodnota jsou poloviny KLIPU, o který se žádalo — dvojče se
+    /// řeže jako vedlejší účinek, stejně jako ho vedlejším účinkem maže
+    /// `rippleRemove`.
     @discardableResult
     public mutating func split(clipID: ClipID, at frame: Frames) throws -> (left: ClipID, right: ClipID) {
         guard let at = timeline.locate(clipID) else { throw TimelineError.clipNotFound(clipID) }
+        let clip = timeline.tracks[at.trackIndex].clips[at.clipIndex]
+
+        var copy = self
+        let (leftID, rightID) = try copy.splitSingle(at: at, frame: frame)
+
+        if let link = clip.linkID,
+           let partner = copy.timeline.tracks.flatMap(\.clips)
+               .first(where: { $0.linkID == link && $0.id != leftID && $0.id != rightID }) {
+
+            if partner.contains(frame: frame), frame > partner.timelineStart,
+               let partnerAt = copy.timeline.locate(partner.id) {
+                // Řez vede i dvojčetem: rozříznout a přepojit po dvojicích.
+                let (partnerLeft, partnerRight) = try copy.splitSingle(at: partnerAt, frame: frame)
+                let rightLink = LinkID()
+                copy.setLink(partnerLeft, to: link)
+                copy.setLink(rightID, to: rightLink)
+                copy.setLink(partnerRight, to: rightLink)
+            } else if partner.timelineStart >= frame {
+                // Dvojče leží celé napravo od řezu — vazba patří pravé polovině.
+                copy.setLink(leftID, to: nil)
+            } else {
+                // Dvojče leží celé nalevo — vazba zůstává levé polovině.
+                copy.setLink(rightID, to: nil)
+            }
+        }
+
+        self = copy
+        return (leftID, rightID)
+    }
+
+    /// Holý řez jednoho klipu, bez ohledu na vazby. Pravá polovina dědí
+    /// `linkID` — o vazbách rozhoduje `split`, tenhle helper jen řeže.
+    private mutating func splitSingle(at: (trackIndex: Int, clipIndex: Int),
+                                      frame: Frames) throws -> (left: ClipID, right: ClipID) {
         let clip = timeline.tracks[at.trackIndex].clips[at.clipIndex]
 
         guard clip.contains(frame: frame) else { throw TimelineError.splitOutsideClip }
@@ -371,13 +417,19 @@ extension Project {
                          sourceStart: sourceOffset(in: clip, atFrame: offset),
                          speedRamp: clip.speedRamp)
 
-        var copy = self
-        var tracks = copy.timeline.tracks
+        var tracks = timeline.tracks
         tracks[at.trackIndex].clips[at.clipIndex] = left
         tracks[at.trackIndex].clips.insert(right, at: at.clipIndex + 1)
-        copy.timeline.tracks = tracks
-        self = copy
+        timeline.tracks = tracks
         return (left.id, right.id)
+    }
+
+    /// Přepíše vazbu klipu na místě.
+    private mutating func setLink(_ clipID: ClipID, to link: LinkID?) {
+        guard let at = timeline.locate(clipID) else { return }
+        var tracks = timeline.tracks
+        tracks[at.trackIndex].clips[at.clipIndex].linkID = link
+        timeline.tracks = tracks
     }
 
     /// Opak splitu. Bez toho se špatný řez neopraví jinak než undo.

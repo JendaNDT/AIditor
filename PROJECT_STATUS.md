@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná (182 testů), z deseti kroků hotových pět, kroky 6–8 (playhead + seek, tažení s undo, zoom kotvený na kurzoru) napsané a čekají na ověření okem. Zbývá krok 9 (roll/slip, menu, kurzory) a 10 (vlnové průběhy).**
+**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná (188 testů), z deseti kroků hotových pět, kroky 6–9 napsané a čekají na ověření okem (playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory). Zbývá krok 10 — vlnové průběhy.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -45,7 +45,13 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   Cesta geometrie → přerozměření → překreslení **ověřena screenshotem** (dočasná sonda `setZoom(0,15)`, po ověření smazaná): čtyři klipy vedle sebe, pravítko samo zhrublo na 30s rozteč, úzký klip zkracuje jméno. 👀 **Kotvení na kurzoru a plynulost pinche chce ruku** — gesto se syntetizovat nedá: pinchni nad konkrétním klipem a zkontroluj, že zůstane pod prsty; ⌘+kolečko totéž; při rozjetém tažení nesmí zoom nic dělat.
 
-Pak **krok 9: roll, slip, kontextové menu, zkratky, kurzory.**
+🔄 **Krok 9 — roll/slip, menu, zkratky, kurzory: NAPSANÝ, čeká na koukanec (28. 07. 2026).** ⌥ na okraji vynutí roll, ⌘ v těle slip (návrh sekce 4; bez souseda spadne roll na trim — hlídá interakce). Kurzory přes `NSTrackingArea` s `.cursorUpdate` (`columnResize` gatovaný na macOS 15+, fallback deprecated `resizeLeftRight` — přesně vzorec z návrhu). Kontextové menu: Rozdělit v hlavě (aktivní jen když hlava vede vnitřkem klipu) / Smazat / Smazat s dosunutím. Zkratky: Delete maže výběr, ⌘B řeže vybrané v hlavě. Mazání bere svázaná dvojčata; všechno píše undo.
+
+  **Mezera nalezená v návrhu a opravená v modelu: split svázaného páru.** Dosavadní `split` nechal oběma polovinám `linkID` originálu — u páru V+A by po řezu sdílely jednu vazbu tři klipy a `validate()` by hlásil `brokenLink`. Teď je `split` link-aware: řeže i dvojče a poloviny přepojuje po dvojicích (levé sdílí původní vazbu, pravé čerstvou); u nesouosého dvojčete (vzniká trimem jednoho z páru) zůstává vazba polovině s překryvem. **+6 testů, celkem 188, 0 selhání.** Vedlejší zjištění: `move` je link-aware odjakživa — dvojče jde s klipem, nesouosost vyrobí jen trim.
+
+  👀 Koukanec kroku 9: ⌥-tažení hranice mezi sousedy roluje (oba duchy), ⌘-tažení v těle slipuje, kurzor se mění na okraji, pravé tlačítko ukazuje menu a položky dělají, co říkají, Delete a ⌘B fungují.
+
+Pak **krok 10: vlnové průběhy** — špičky na pozadí + dlaždice, poslední kus fáze 2.
 
 👀 **Kroky 2 a 3 chtějí koukanec.** Krok 2 potvrzený (27. 07. 2026, 21:08). U kroku 3 se očima ověřuje, že při vodorovném scrollu jede timecode s obsahem a jména stop stojí, a při svislém naopak.
 
@@ -127,7 +133,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
   **GPU baseline pro fáze 2–3.** Holý náhled 4K/60 na popředí, ať v okně nebo na celé obrazovce, stojí **pod 0,3 % GPU rezidence** — video jde na displej jako samostatná vrstva a GPU se skoro nezapojí. S aplikací na pozadí, kdy se skládat musí, to skočí na ~10 %. Až se ve fázi 3 přidá vlastní compositor nebo efekty, přepne se to natrvalo do té dražší cesty; tohle jsou hodnoty, proti kterým se to pozná. Podrobnosti v sekci rizik.
 
   Dřívější zápis „okno 1280×1192 px" byla plocha **vrstvy** v backing pixelech, ne okna ani obrazu. Samotný obraz měl 1280×720 px.
-- **`TimelineModel` — logika, geometrie a interakce časové osy.** **182 testů, 0 selhání.** Čistý Swift bez AVFoundation a bez AppKitu, takže se přeloží a otestuje i na Linuxu — díky tomu byl ověřený dřív, než se sáhlo na UI.
+- **`TimelineModel` — logika, geometrie a interakce časové osy.** **188 testů, 0 selhání.** Čistý Swift bez AVFoundation a bez AppKitu, takže se přeloží a otestuje i na Linuxu — díky tomu byl ověřený dřív, než se sáhlo na UI.
   - **Datový model:** dvě časové soustavy s jedinou hranicí mezi nimi (`Frames` na ose, `SourceTime` ve zdroji), deset invariantů kontrolovaných po každé operaci, kompletní sada operací (vložení, přepis, ripple, split, join, trim, slip, roll, vazba obrazu na zvuk), dotazy na meze tažení a snapshot undo nad celým projektem.
   - **`TimelineGeometry`:** mapování čas↔pixel při zoomu, viditelný rozsah binárním půlením, rozvržení stop, hit testing s okraji klipů, přichytávání s pořadím síly kandidátů. Šířka úchopu a tolerance přichytávání jsou v **bodech**, ne ve snímcích — jinak by po odzoomování nešel chytit okraj klipu a po přiblížení by přichytávání skákalo přes půl obrazovky.
   - **`TimelineInteraction`:** stavový automat tažení. Určení druhu podle toho, co je pod myší, průběžný náhled s přichytáváním a kontrolou legálnosti, meze trimu a rollu, výsledná operace na modelu. Během tažení se do modelu nezapisuje.
@@ -141,14 +147,14 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 2 — timeline.** `TimelineModel` hotový (182 testů) a napojený na `Krasa.xcodeproj`. Z deseti kroků stavby view hotové 1–5: controller, osa se stopami, pravítko + hlavičky, rozvržení s recyklací, klipy na ose. Další je krok 6 — playhead + seek.
+- **Fáze 2 — timeline.** `TimelineModel` hotový (188 testů) a napojený na `Krasa.xcodeproj`. Z deseti kroků stavby view hotové 1–5 a napsané 6–9. Zbývá krok 10 — vlnové průběhy — a koukanec na interakce 6–9.
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
 ### Cesta k v0.5 „MVP nula" (~6 měsíců při 30 h/týdně)
 - **F0** Spike 0 — ověření speed rampingu — ✅ **HOTOVO 26. 07. 2026**, hlavní riziko zavřené
 - **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
-- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (182 testů), z deseti kroků hotových 5**
+- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (188 testů), z deseti kroků hotových 5 a napsané 6–9**
 - **F3** Speed ramping ostrý *(3 týdny)*
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)*
 - **F5** Projekt, autosave, undo, export *(3 týdny)*
@@ -285,7 +291,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
   - `Sources/TimelineModel/Interaction.swift` – stavový automat tažení: náhled, meze, výsledná operace
   - `Sources/TimelineModel/Timecode.swift` – popisky pravítka: `HH:MM:SS:FF` a volba rozteče rysek
   - `Sources/TimelineModel/Layout.swift` – rozvržení viditelných klipů (`Placement`) a recyklační diff vrstev
-  - `Tests/TimelineModelTests/` – **182 testů**
+  - `Tests/TimelineModelTests/` – **188 testů**
   - `README.md` – API, dvě časové soustavy, co se snadno rozbije
 - `Krasa/Krasa/Timeline/` – **timeline v appce**
   - `TimelineController.swift` – vlastník stavu: projekt, undo, interakce (a v ní **jediná kopie geometrie**), playhead, výběr

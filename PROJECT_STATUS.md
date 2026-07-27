@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná (182 testů), z deseti kroků hotových pět a šestý (playhead + seek) napsaný, čeká na ověření okem. Klipy jsou na ose jako vrstvy na V1 + A1, hlava se kreslí a je obousměrně svázaná s přehrávačem.**
+**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná (182 testů), z deseti kroků hotových pět, kroky 6 a 7 (playhead + seek, tažení s undo) napsané a čekají na ověření okem. Klipy jsou na ose, hlava svázaná s přehrávačem, klipy jdou táhnout a trimovat s náhledem, přichytáváním a ⌘Z.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -35,7 +35,13 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   👀 **„Hotovo když" kroku 6 („klikneš do pravítka a monitor skočí") zbývá ověřit rukou.** Syntetický klik při automatickém ověřování narazil na oprávnění zpřístupnění (macOS ukázal dialog — klidně Zakázat, pro vývoj není potřeba). Zkontroluj: klik do pravítka skočí monitorem na správný snímek, tažení scrubuje, mezerník přehrává a hlava jede s obrazem, klik za posledním klipem hlavu posune a obraz nechá.
 
-Pak **krok 7: tažení — přesun a trim.** Přetáhneš klip, zkrátíš ho, ⌘Z to vrátí.
+🔄 **Krok 7 — tažení klipů: NAPSANÝ, čeká na koukanec (28. 07. 2026).** Cesta události přesně podle `FAZE_2_VIEW.md` sekce 4: `mouseDown` = `hitTest` + `interaction.begin` (a výběr klipu), `mouseDragged` = `preview` **jen do overlay vrstvy** (duch s poloprůhlednou výplní, při neplatném cíli červeně, vodicí čára na kandidátovi přichycení), `mouseUp` = `commit` do modelu. Do modelu se během tažení nezapisuje — to hlídá otestovaná `TimelineInteraction`, view jen předává souřadnice a kreslí.
+
+  Undo dvěma způsoby a je to schválně (zapsáno i v návrhu): u `move` neexistuje legální mezistav → jeden `record()` před zápisem; u trimu a rollu jsou mezistavy legální → `beginInteraction`/`endInteraction`, a když se nic nezmění, krok nevznikne. Escape tažení ruší (model se nesahal), ⌘Z/⇧⌘Z jde přes `keyDown` — appka nemá `NSUndoManager`, undo drží vlastní snapshot stack z modelu. Shift při tažení vypíná přichytávání. Roll/slip modifikátory jsou krok 9.
+
+  👀 **„Hotovo když" kroku 7 („přetáhneš klip, zkrátíš ho, ⌘Z to vrátí") čeká na ruku** — syntetická myš bez oprávnění zpřístupnění nejde (viz krok 6). Zkontroluj: tažení těla klipu ukazuje ducha a pustí klip na nové místo (přes souseda červeně a nepustí), tažení okraje trimuje, duch se přichytává na hrany/nulu/hlavu (Shift vypne), Escape tažení zruší, ⌘Z vrátí, klik vybírá (žlutý okraj) a klik do prázdna výběr zruší. Smoke test prošel: klipy i hlava se po změně kreslí stejně.
+
+Pak **krok 8: zoom** (pinch, ⌘+kolečko), kotvený na kurzoru, zamčený při tažení.
 
 👀 **Kroky 2 a 3 chtějí koukanec.** Krok 2 potvrzený (27. 07. 2026, 21:08). U kroku 3 se očima ověřuje, že při vodorovném scrollu jede timecode s obsahem a jména stop stojí, a při svislém naopak.
 

@@ -72,7 +72,9 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
 - **Persony to nemají stejně.** [Filip](Projekt_Krasa_Specifikace_Aplikace_v2.html) (primární) točí sám a může se zařídit — jemu limit stačí říct dopředu a on natočí 120 fps. [Alena](Projekt_Krasa_Specifikace_Aplikace_v2.html) (sekundární) skládá film z cizích videí od hostů, typicky 30 fps, a zařídit se nemůže. **Pro ni je duplikace snímků s přiznaným varováním legitimní chování, ne nedodělek** — ale přiznané být musí. Nikdy jí netvrď, že výsledek je plynulý, když není.
 - **Vlastní `AVVideoCompositing` speed ramping neřeší — segmentace je jediná cesta.** Compositor dostane přes `sourceFrame(byTrackID:)` snímek, který kompozice pro daný `compositionTime` **už vybrala**; požádat o jiný zdrojový čas nejde. Časování určuje `CMTimeMapping` stopy, a ten je dvojice `CMTimeRange` — afinní z definice. Compositor je na pixely (efekty, prolínačky, Metal), ne na čas.
 - **Proxy: ProRes 422 Proxy (`'apco'`) v polovičním rozlišení**, a při generování zploštit VFR na CFR.
-- **⚠️ Proxy NENÍ kvůli přehrávání, ale kvůli SCRUBOVÁNÍ.** Změřeno ve fázi 1: `AVPlayer` utáhne 4K/60 i 4K/120 HEVC na 60,3 a 60,7 fps, tedy na stropu displeje. Plynulost obrazu proxy nepotřebuje. Rozdíl je v odezvě seeku — **6,2 ms u ProRes proti 48,3 ms u HEVC**, osmkrát. ProRes je intra-only, HEVC musí dekódovat od nejbližšího klíčového snímku, a se zero tolerance (kterou v editoru mít musíme) to obejít nejde. U 120fps zdroje je to 97 ms. Argumentovat proxy plynulostí přehrávání znamená řešit problém, který neexistuje.
+- **⚠️ Proxy NENÍ kvůli přehrávání, ale kvůli SCRUBOVÁNÍ.** Přeměřeno 27. 07. 2026: `AVPlayer` doručuje 4K HEVC na stropu 60Hz displeje u všech testovacích klipů, a **fullscreen na tom nic nemění** — obraz 2,16× větší, čísla stejná. Plynulost obrazu proxy nepotřebuje. Rozdíl je v odezvě seeku: **6,2 ms u ProRes proti 41–52 ms u HEVC** podle klipu, u 120fps zdroje **95 ms**. ProRes je intra-only, HEVC musí dekódovat od nejbližšího klíčového snímku, a se zero tolerance (kterou v editoru mít musíme) to obejít nejde. Argumentovat proxy plynulostí přehrávání znamená řešit problém, který neexistuje.
+  ⚠️ **Dřívější čísla „60,3 a 60,7 fps" byla vadná** — metoda počítala nejvýš jeden snímek na tik displeje a okna měřila o 0,8 % delší než sekundu, takže vycházela nad vlastním deklarovaným stropem. Opraveno; závěr o proxy se nezměnil, protože stojí na scrubování, které dotčené nebylo. Detaily v `PROJECT_STATUS.md`, sekce rizik.
+- **⚠️ GPU rezidence náhledu nesleduje plochu obrazu, ale nutnost kompozice.** Změřeno 27. 07. 2026: tentýž klip a tatáž plocha dá 9,90 % s aplikací na pozadí a 0,25 % s aplikací vpředu. Dokud je náhled holé video a nic přes něj neleží, jde na displej jako samostatná vrstva a GPU se skoro nezapojí. **Ta skoro-nula není rezerva, je to varování:** jakmile ve fázi 3 přijde vlastní compositor nebo efekty, přepne se to na skládání přes GPU a čísla neporostou plynule — skočí.
 - **Datový model nese u každého assetu dvě cesty — originál a volitelnou proxy — od fáze 2.** Generovat se nemusí až do fáze 4, ale struktura tam musí být hned; doplnit ji později znamená přepsat model i playback. Volba „pracovat s proxy" je per projekt, ne per klip. Časová základna se bere z originálu.
 - **Jedna časová základna projektu.** Nikdy neodvozuj čísla snímků ze zdrojových časových značek.
 - **Časová základna projektu: 30 fps.** Rozhodnuto 26. 07. 2026.
@@ -123,6 +125,51 @@ let plan = try ramp.segmentation(outputFrameRate: 30, maxSpeedStep: 0.015)
 Referenční hodnota: ramp 1,0 → 0,25 → 1,0 přes 5 s spotřebuje **přesně 3,125 s** zdroje. Když ti při stavbě kompozice vyjde jiné číslo, chyba je v převodu na `CMTime`, ne v matematice.
 
 Testy pustíš přes `cd SpeedRampEngine && swift test`.
+
+### `TimelineModel/`
+Logika, geometrie a interakce časové osy. Čistý Swift, žádné závislosti, **žádné
+AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **143 testů, ověřeno.**
+
+```swift
+var project = Project.empty()                        // V1 + A1 + A2
+project.addAsset(asset)
+let clip = try project.makeClip(assetID: asset.id)   // model razí ID i délku
+try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+try project.split(clipID: clip.id, at: Frames(120))
+assert(project.validate().isEmpty)
+```
+
+**Dvě časové soustavy, hranice jen na dvou místech:**
+`Frames` (celé snímky na ose, 30 fps) ↔ `SourceTime` (zlomek ve zdroji), přes
+`timeline.sourceTime(_:)` a `timeline.availableFrames(from:)`. Ta druhá zaokrouhluje
+**vždy dolů** — nahoru by dovolila trim o snímek za konec souboru. Převod `Frames`
+na sekundy záměrně neexistuje, aby nešlo osové snímky převést frekvencí assetu.
+
+**Spotřebu zdroje počítá jen `sourceConsumption(of:)`** a pozici ve zdroji jen
+`sourceOffset(in:atFrame:)`. Fáze 3 vymění vnitřek těch dvou funkcí; kdyby si to
+počítala každá operace po svém, přepisuje se jich šest.
+
+**`CMTime` není `Codable`**, proto vlastní `SourceTime`. Ověřeno v dokumentaci.
+
+**`TimelineGeometry`** je matematika pro `TimelineView`: mapování čas↔pixel při zoomu,
+viditelný rozsah (binárním půlením, ne průchodem), rozvržení stop, hit testing s okraji
+klipů, přichytávání. Do AppKit view piš jen kreslení a události — co v něm bude navíc,
+to už nikdo neotestuje.
+
+⚠️ **Šířka úchopu okraje a tolerance přichytávání jsou v BODECH, ne ve snímcích,**
+a přepočítávají se zoomem. Ve snímcích by po odzoomování okraj klipu zabíral zlomek
+pixelu a nešel by chytit; po přiblížení by přichytávání skákalo přes půl obrazovky.
+
+**`TimelineInteraction`** je stavový automat tažení: `begin(hit:)` při stisku,
+`preview(atX:y:)` při každém pohybu (čistá funkce, model se nesahá), `commit(atX:y:into:)`
+při puštění. Druh tažení plyne z toho, co bylo pod myší; `forcing:` ho přepíše na
+`roll` nebo `slip`.
+
+⚠️ **Během tažení klipu se do modelu NEZAPISUJE.** Každý mezistav při přetahování přes
+souseda by byl překryv, tedy chyba, a to šedesátkrát za sekundu. `beginInteraction` /
+`endInteraction` na `UndoStacku` je jen pro trim a roll, kde jsou mezistavy legální.
+
+Testy pustíš přes `cd TimelineModel && swift test`. Návrh a zdůvodnění v `FAZE_2_TIMELINE.md`.
 
 ## Co do projektu nepatří
 

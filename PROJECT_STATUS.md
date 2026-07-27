@@ -13,23 +13,71 @@ Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal,
 
 Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, staví se dál.** Detaily a vyplněná kritéria v `SPIKE_0.md`.
 
-**Poslední otevřené kritérium je zavřené.** Plynulost náhledu 4K/60 se ve spiku změřit nedala (přehrávač neexistoval) — fáze 1 ji zodpověděla: **60,3 fps, tedy strop 60Hz displeje, bez sekání.**
+**Poslední otevřené kritérium je zavřené.** Plynulost náhledu 4K/60 se ve spiku změřit nedala (přehrávač neexistoval) — fáze 1 ji zodpověděla a **27. 07. 2026 byla přeměřena po opravě metodiky: náhled běží přesně na stropu 60Hz displeje, bez sekání.**
 
 ## ⏭️ Příští krok
-**Fáze 2 — timeline v AppKitu (4–5 týdnů) → v0.2.** Nejtěžší UI v projektu.
+
+🔴 **Nejdřív ověřit, co se nakupilo.** `TimelineModel` (18 souborů, 143 testů) vznikl celý mimo macOS — přeložený a otestovaný na Swiftu 6.1.2 na Linuxu, ale na Macu se Swiftem 6.3.3 zatím neběžel a není v gitu. Než se na něj začne stavět UI, má proběhnout `cd TimelineModel && swift test` a `git commit`.
+
+Pak **`TimelineView` v AppKitu — poslední kus fáze 2.** Co v něm doopravdy zbývá:
+
+| část | stav |
+|---|---|
+| matematika osy, hit testing, přichytávání | ✅ `TimelineGeometry` |
+| logika tažení, náhled, meze, výsledná operace | ✅ `TimelineInteraction` |
+| střihové operace a jejich pravidla | ✅ `Project` |
+| undo | ✅ `UndoStack` |
+| `NSView` v `NSScrollView`, klipy jako `CALayer` | ❌ |
+| pravítko a hlavičky stop přes `NSViewBoundsDidChangeNotification` | ❌ |
+| vlnové průběhy jako `CGImage` dlaždice per zoom | ❌ |
+| kurzory, kontextové menu, klávesové zkratky | ❌ |
+
+**Do view patří jen kreslení a předávání událostí.** Co v něm bude navíc, to už nikdo neotestuje — a je to jediná část fáze 2, která se dá ověřit výhradně okem na běžící aplikaci.
 
 `TimelineModel` (čistá logika, testy první), pak `TimelineView` v AppKitu.
 
 🚩 **Podmínka, ne nápad: datový model nese u každého assetu dvě cesty** — originál a volitelnou proxy — a přehrávání musí umět vybrat, kterou použije. Generovat se proxy nemusí až do fáze 4, ale struktura tam musí být hned. Doplnit ji později znamená přepsat model i playback.
 
-⚠️ **Přeměřit náhled na celou obrazovku.** Fáze 1 měřila v okně 1280×1192 px; na plné ploše můžou být čísla horší.
+### ✅ Náhled doměřen včetně fullscreenu (27. 07. 2026)
+
+**Fullscreen nestojí nic.** Tři platné běhy na 4K/60 klipu, plocha obrazu 2,16× větší (40 % → 86 % displeje):
+
+| | okno | celá obrazovka |
+|---|---|---|
+| doručeno | 59,9 fps | 59,9 fps |
+| scrubování (medián) | 51,6 ms | 51,3 ms |
+| GPU rezidence | 0,25 % | 0,00–0,06 % |
+
+Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších podmínek, než jaké budou v praxi — závěr je proto konzervativní. Otevřená položka „přeměřit náhled na celou obrazovku" je tím uzavřená.
 
 ## ✅ Hotovo
 - **`SpeedRampEngine` — první modul, zkompilovaný a otestovaný.** **41 testů**, 0 selhání, Swift 6.3.3. Bézier easing, integrace rychlostní křivky, inverzní mapování pro scrubbing, segmentace pro `scaleTimeRange` zarovnaná na hranice snímků a řízená mezí skoku rychlosti, `Codable` pro `project.json`. Ověřeno proti nezávislé Python referenci na analyticky spočitatelných případech.
 - **`MediaProbe` — sonda na vlastnosti klipů.** Rozlišení, orientace, kodeky, fps, edit list a hlavně **skutečné délky vzorků přes `AVSampleCursor`** (fallback `AVAssetReader`). Rozlišuje zaokrouhlení / zahozený snímek / proměnlivé časování. Naměřené hodnoty v `MediaProbe/RESULTS.md`. První kód, který sáhl na AVFoundation.
 - **`Flatten` — zploštění VFR na pevnou snímkovou mřížku.** Krok 3 spiku. Cílová frekvence z měřeného modu, čtení přes `AVComposition` (edit list), zero-order hold převzorkování, ProRes 422 Proxy v plném rozlišení, zvuk LPCM. **Ověřeno na třech klipech: všechny `CFR` s kolísáním 0,00 %, synchron tlesknutí 0,00 ms, kódování 257–426 fps.**
 - **`Ramp` — plynulá rychlostní křivka segmentací.** Krok 4 spiku, jádro produktu. `scaleTimeRange` pozpátku, časy kumulativně v celých tickách, segmentace podle meze skoku rychlosti (výchozí 1,5 %), korekce výšky `.timeDomain`. **Ověřeno na třech klipech: `CFR` 30 fps, kolísání 0,00 %, délky sedí do jednoho snímku, žádné lupance ani při 545 segmentech.**
-- **Aplikace `Krasa` — fáze 1 hotová.** Xcode projekt (deployment target 14.0, sandbox, bundle `cz.projektkrasa.Krasa`), `MediaImporter` se security-scoped bookmarky, `VFRDetector` nad `ProbeKit`, `PlaybackController` se seekem podle QA1820 a `PlaybackBenchmark`. **Naměřeno: AVPlayer utáhne 4K/60 i 4K/120 na 60,3 a 60,7 fps; scrubování 48,3 ms HEVC vs 6,2 ms ProRes.**
+- **Aplikace `Krasa` — fáze 1 hotová, měření přeměřeno 27. 07. 2026.** Xcode projekt (deployment target 14.0, sandbox, bundle `cz.projektkrasa.Krasa`), `MediaImporter` se security-scoped bookmarky, `VFRDetector` nad `ProbeKit`, `PlaybackController` se seekem podle QA1820 a `PlaybackBenchmark`.
+
+  Naměřeno na pěti klipech, obraz v okně 1280×720 px (16,4 % displeje), MacBook Air M4, vestavěný displej 2940×1912 px / 60 Hz, napájení ze sítě:
+
+  | klip | zdroj | strop metody | doručeno | scrub (medián) |
+  |---|---|---|---|---|
+  | 202947 | 59,682 fps | 59,7 | **59,7** | 49,2 ms |
+  | 203452 | 30,010 fps | 30,0 | **30,0** | 41,0 ms |
+  | 203813 slow-mo | 120,000 fps | 60,0 | **60,0** | 95,1 ms |
+  | 203901 | 60,000 fps (VFR) | 60,0 | **59,9** | 51,6 ms |
+  | 204045 | 60,000 fps | 60,0 | **60,0** | 51,9 ms |
+
+  **Doručování je nasycené na stropu metody u všech klipů** — víc než jeden snímek na tik displeje se nezapočítá. Znamená to *spotřeba na 60Hz displeji je pokrytá*, ne *tolik zvládne dekodér*. U slow-mo klipu je strop i výsledek shodně 60,0, takže o propustnosti 120 fps se z toho nedozvíme nic.
+
+  **GPU baseline pro fáze 2–3.** Holý náhled 4K/60 na popředí, ať v okně nebo na celé obrazovce, stojí **pod 0,3 % GPU rezidence** — video jde na displej jako samostatná vrstva a GPU se skoro nezapojí. S aplikací na pozadí, kdy se skládat musí, to skočí na ~10 %. Až se ve fázi 3 přidá vlastní compositor nebo efekty, přepne se to natrvalo do té dražší cesty; tohle jsou hodnoty, proti kterým se to pozná. Podrobnosti v sekci rizik.
+
+  Dřívější zápis „okno 1280×1192 px" byla plocha **vrstvy** v backing pixelech, ne okna ani obrazu. Samotný obraz měl 1280×720 px.
+- **`TimelineModel` — logika, geometrie a interakce časové osy.** **143 testů, 0 selhání.** Čistý Swift bez AVFoundation a bez AppKitu, takže se přeloží a otestuje i na Linuxu — díky tomu byl ověřený dřív, než se sáhlo na UI.
+  - **Datový model:** dvě časové soustavy s jedinou hranicí mezi nimi (`Frames` na ose, `SourceTime` ve zdroji), deset invariantů kontrolovaných po každé operaci, kompletní sada operací (vložení, přepis, ripple, split, join, trim, slip, roll, vazba obrazu na zvuk), dotazy na meze tažení a snapshot undo nad celým projektem.
+  - **`TimelineGeometry`:** mapování čas↔pixel při zoomu, viditelný rozsah binárním půlením, rozvržení stop, hit testing s okraji klipů, přichytávání s pořadím síly kandidátů. Šířka úchopu a tolerance přichytávání jsou v **bodech**, ne ve snímcích — jinak by po odzoomování nešel chytit okraj klipu a po přiblížení by přichytávání skákalo přes půl obrazovky.
+  - **`TimelineInteraction`:** stavový automat tažení. Určení druhu podle toho, co je pod myší, průběžný náhled s přichytáváním a kontrolou legálnosti, meze trimu a rollu, výsledná operace na modelu. Během tažení se do modelu nezapisuje.
+
+  Návrh a zdůvodnění v `FAZE_2_TIMELINE.md`.
 - **`ProbeKit` — sdílené měřicí a renderovací jádro.** Klasifikace délek vzorků, verdikt CFR/VFR, edit list, `CFRRenderer`. Používají ho všechny tři nástroje, takže měří a renderují stejným kódem.
 - Produktová a technická specifikace v2.0 (HTML + PDF)
 - **Implementační plán** — 12 fází, 3 kill-gates, modulová mapa, session protokol (`IMPLEMENTACNI_PLAN.md`)
@@ -38,7 +86,7 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 2 — timeline.** Nezačato.
+- **Fáze 2 — timeline.** `TimelineModel` hotový a otestovaný na Linuxu, **na macOS ještě neběžel a není v gitu**; `TimelineView` v AppKitu nezačato.
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
@@ -68,6 +116,29 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 
 ## ⚠️ Známá rizika a korekce specifikace
 *(Detaily v `IMPLEMENTACNI_PLAN.md`, sekce 1.)*
+
+- **⚠️ Měření doručených snímků je NASYCENÁ metrika a na velikost plochy je slepá.** Zjištěno 26. 07. 2026. Tři nezávislé důvody, každý sám o sobě stačí:
+  1. `pollFrame` počítá **nejvýš jeden snímek na tik display linku**, takže na 60Hz panelu je strop 60 bez ohledu na to, co stroj zvládne.
+  2. `AVPlayerItemVideoOutput` doručuje v rozlišení **zdroje** nezávisle na velikosti okna — dekódovací zátěž se roztažením okna nemění, roste jen škálování.
+  3. Sekundové okno se uzavíralo na prvním tiku **za** hranicí a čas se resetoval na aktuální, takže přeběh propadal. Okno trvalo v průměru 1,0083 s a počet se vydával za „fps".
+
+  Z bodu 3 plyne, proč vyšlo **60,3 fps na displeji se stropem 60,0** — a report si nad tím číslem sám tiskl „víc se doručit nedá". Opraveno: `MeasurementWindow` nese svou skutečnou délku a fps se počítá jako počet/čas.
+
+  Z bodů 1 a 2 plyne, že **„4K/120 na 60,7 fps" neměří dekodér** — u 120fps zdroje je nový buffer připravený na každém tiku, takže se změřil počet tiků display linku. Že 60,7 > 60,3 znamená jen to, že 60fps zdroj občas jeden tik fázově mine.
+
+  **Nedotčené zůstává scrubování** (48,3 vs 6,2 ms): měří se přes `measuredSeek`, jinou cestou. Rozhodnutí „proxy je kvůli scrubování, ne kvůli přehrávání" tedy platí dál.
+- **🚩 GPU rezidence náhledu nesleduje plochu obrazu, ale to, jestli je potřeba kompozice.** Změřeno 27. 07. 2026. Dva okenní běhy, tentýž klip a tatáž plocha, se liší **čtyřicetinásobně**: s aplikací na pozadí 9,90 %, s aplikací vpředu a nezakrytým oknem 0,25 %. Fullscreen při 2,16× větší ploše 0,00–0,06 %.
+
+  Výklad: dokud je náhled prostě video a nic přes něj neleží, systém ho pošle na displej jako samostatnou vrstvu a GPU se nezapojí. Jakmile se musí skládat, GPU se probudí.
+
+  **Důsledek pro fázi 3, a je to varování, ne rezerva:** ta skoro-nula platí jen pro holé video. Až přes náhled půjde vlastní compositor, efekty nebo Metal, přepne se to na skládání přes GPU a čísla **neporostou plynule — skočí**. Výchozí hodnota, proti které se to pozná, je změřená (viz sekce Hotovo). Zároveň z toho plyne, že `powermetrics --samplers gpu_power` je pro cenu *holého* náhledu skoro slepý; užitečný bude až na efektech.
+- **⚠️ Měření náhledu je platné jen tehdy, když bylo na co koukat.** Zjištěno 27. 07. 2026 poté, co první fullscreen běh vrátil spokojených 60,0 fps s rozbitým layoutem: skrytí sidebaru přes `maxWidth: 0` zalomilo text do nulové šířky a natáhlo view na 4398 bodů, tedy 4,5× výšku displeje. Snímky z `AVPlayerItemVideoOutput` přitom chodí dál bez ohledu na to, jestli se něco kreslí — vada se v číslech nijak neprojevila.
+
+  V kódu to teď hlídá `NSWindow.occlusionState`, podíl obrazu ležícího uvnitř `contentView`, ořez vrstvy na viditelnou plochu (`PlayerHostView.visibleBounds`) a podíl času, kdy byla aplikace aktivní. Když cokoli z toho klesne pod 99 %, běh se prohlásí za neplatný místo aby vrátil hezké číslo. Ověřeno v praxi — druhý pokus jeden ze čtyř běhů takhle sám odmítl.
+
+  *(Pozor na dřívější verzi téhle poznámky: nulová GPU rezidence se v ní vykládala jako důkaz, že se obraz nekreslí. Není — viz předchozí bod.)*
+- **Kadence display linku není metrika kompozice.** `CADisplayLink` je vázaný na vsync displeje — ten proběhne, i když WindowServer nestíhá skládat; ukáže se prostě starý snímek. Vypadlý tik znamená **zaseknuté hlavní vlákno naší aplikace**, ne přetížené GPU. Cenu skládání měř `powermetrics` puštěným vedle, nebo — až ve fázích 2–3, kde se stejně bude stavět — vlastní Metal cestou přes `addPresentedHandler` / `presentedTime` a `gpuStartTime` / `gpuEndTime`.
+- **`ProcessInfo.thermalState` na Apple silicon lže podobně jako `nominalFrameRate`.** Zůstává `.nominal` dlouho poté, co se stroj už taktuje dolů. Jako důkaz nepřetíženosti ho neber; na bezventilátorovém Airu je 20 s chladnutí navíc řádově málo, proto se před srovnávacím měřením pouští zahazovaný zahřívací běh.
 
 - **`AVMutableVideoComposition` je od macOS 26 deprecated, ale používá se dál.** Náhrada `AVVideoComposition.Configuration` je `@available(macOS 26.0, *)`, a minimum projektu je macOS 14.0 — na macOS 14–25 tedy neexistuje. Deprecated ≠ odstraněné. Warning umlčovat cíleně u volání, ne globálně. *(Dřívější text tvrdil opak — byla to chyba, opraveno 25. 07. 2026.)*
 - **`scaleTimeRange` neumí plynulou křivku** — dělá lineární časové mapování. `CMTimeMapping` je dvojice `CMTimeRange`, takže křivka do něj nejde zapsat z principu. **Ramp = segmentace, jiná cesta není** (vlastní compositor do časování nevidí). ~~Hlášené artefakty ve zvuku na hranicích segmentů~~ — **změřeno 26. 07. 2026: nejsou.** Poslechem ověřeno až po 545 segmentů na dvou klipech s vysokým podílem ticha. Jemnost segmentace se proto volí podle velikosti kompozice, ne podle sluchu.
@@ -110,6 +181,7 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 - `Projekt_Krasa_Specifikace_Aplikace_v2.html` / `.pdf` – specifikace, zdroj pravdy pro **rozsah**
 - `IMPLEMENTACNI_PLAN.md` – zdroj pravdy pro **pořadí a technologie**
 - `SPIKE_0.md` – **uzavřený Spike 0 s naměřenými výsledky.** Vyplněná kritéria úspěchu, vyhodnocený rozhodovací bod, metodické poznámky k testování lupanců
+- `FAZE_2_TIMELINE.md` – **návrh `TimelineModelu`.** Typy, invarianty, operace, undo a zdůvodnění rozhodnutí; kód podle něj je hotový
 - `CLAUDE.md` – kontext a technická rozhodnutí pro Claude Code
 - `PROJECT_STATUS.md` – tenhle soubor
 - `krasa-tracker.html` – interaktivní tracker postupu *(udržuje autor ručně)*
@@ -120,6 +192,17 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
   - `Tests/SpeedRampEngineTests/SpeedRampEngineTests.swift` – **41 testů**
   - `README.md` – API, naměřené hodnoty, volba jemnosti segmentace
   - `ref_speedramp.py` – Python reference, proti které se to ověřovalo
+- `TimelineModel/` – **logika časové osy.** Čistý Swift, žádné závislosti, přeloží se i na Linuxu
+  - `Sources/TimelineModel/Time.swift` – `Frames` a `SourceTime`, hranice mezi soustavami
+  - `Sources/TimelineModel/Model.swift` – `Asset`, `Clip`, `Track`, `Timeline`, `Project`, převody
+  - `Sources/TimelineModel/Validation.swift` – deset invariantů
+  - `Sources/TimelineModel/Operations.swift` – všechny střihové operace
+  - `Sources/TimelineModel/Queries.swift` – meze tažení pro UI
+  - `Sources/TimelineModel/UndoStack.swift` – snapshot undo nad celým projektem
+  - `Sources/TimelineModel/Geometry.swift` – matematika view: zoom, viditelný rozsah, hit testing, přichytávání
+  - `Sources/TimelineModel/Interaction.swift` – stavový automat tažení: náhled, meze, výsledná operace
+  - `Tests/TimelineModelTests/` – **143 testů**
+  - `README.md` – API, dvě časové soustavy, co se snadno rozbije
 - `MediaProbe/` – **balíček se třemi nástroji a sdílenou knihovnou**
   - `Sources/ProbeKit/` – sdílené jádro: klasifikace délek vzorků, verdikt CFR/VFR, edit list, `CFRRenderer`, `VideoResampler`
   - `Sources/MediaProbe/` – sonda: `swift run MediaProbe`

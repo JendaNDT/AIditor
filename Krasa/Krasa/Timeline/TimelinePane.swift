@@ -132,6 +132,12 @@ final class TimelinePane: NSView {
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.documentView.updatePlayhead() },
+            // Dopočítané špičky a dlaždice vlny (krok 10). Verze roste na
+            // pozadí dokončenou prací — refresh si hotové kusy vyzvedne.
+            controller.waveforms.$version
+                .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.documentView.refreshClips() },
         ]
     }
 

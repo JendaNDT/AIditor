@@ -107,16 +107,30 @@ enum TimelinePalette {
 final class ClipLayer: CALayer {
 
     let title = CATextLayer()
+    /// Kontejner dlaždic vlny — pod titulkem, ořezaný na klip.
+    let waveContainer = CALayer()
+    /// Dlaždice podle indexu. Obsah spravuje `TimelineDocumentView`.
+    var waveTiles: [Int: CALayer] = [:]
+    /// Úroveň zoomu, pro kterou dlaždice platí. Při změně se mění celá sada.
+    var waveRung: Double = 0
 
     override init() {
         super.init()
         cornerRadius = 3
         masksToBounds = true
         borderWidth = 1
+        waveContainer.masksToBounds = true
+        addSublayer(waveContainer)
         title.fontSize = 11
         title.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         title.truncationMode = .end
         addSublayer(title)
+    }
+
+    /// Odpojí všechny dlaždice — při recyklaci a při změně úrovně.
+    func clearWaveTiles() {
+        for tile in waveTiles.values { tile.removeFromSuperlayer() }
+        waveTiles = [:]
     }
 
     /// Core Animation si přes tenhle init dělá kopie pro prezentační strom.
@@ -304,6 +318,8 @@ final class TimelineDocumentView: NSView {
 
         for clipID in diff.toRecycle {
             guard let layer = mountedClipLayers.removeValue(forKey: clipID) else { continue }
+            layer.clearWaveTiles()
+            layer.waveRung = 0
             layer.removeFromSuperlayer()
             clipLayerPool.append(layer)
         }
@@ -319,7 +335,7 @@ final class TimelineDocumentView: NSView {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             for placement in placements {
                 guard let layer = mountedClipLayers[placement.clipID] else { continue }
-                apply(placement, to: layer)
+                apply(placement, to: layer, visible: visible)
             }
         }
     }
@@ -327,7 +343,8 @@ final class TimelineDocumentView: NSView {
     /// Rámec, barvy a jméno jedné vrstvy. Volat UVNITŘ
     /// `performAsCurrentDrawingAppearance` — `cgColor` se vyhodnocuje pro
     /// aktuální appearance a vrstva si výsledek pamatuje jako hodnotu.
-    private func apply(_ placement: TimelineLayout.Placement, to layer: ClipLayer) {
+    private func apply(_ placement: TimelineLayout.Placement, to layer: ClipLayer,
+                       visible: NSRect) {
         layer.frame = CGRect(x: placement.x, y: placement.y,
                              width: placement.width, height: placement.height)
 
@@ -339,10 +356,89 @@ final class TimelineDocumentView: NSView {
             : TimelinePalette.clipStroke.cgColor
         layer.borderWidth = placement.isSelected ? 2 : 1
 
+        // U titěrných klipů se titulek i vlna schovávají ÚPLNĚ, nezmenšují —
+        // zmenšený text je rozsypaný a zmenšená vlna šum (návrh, sekce 6).
+        layer.title.isHidden = placement.width < 40
         layer.title.string = clipName(placement.clipID)
         layer.title.foregroundColor = TimelinePalette.clipText.cgColor
         layer.title.frame = CGRect(x: 6, y: 2,
                                    width: max(0, placement.width - 12), height: 15)
+
+        applyWaveform(placement, to: layer, kind: kind, visible: visible)
+    }
+
+    // MARK: - Vlnové průběhy (krok 10)
+
+    /// Poskládá dlaždice vlny pro zvukový klip. Dlaždice jsou ASSETOVÉ
+    /// (klíč: asset, mocnina dvou, index) — trim ani slip je nezahazuje,
+    /// jen posune výřez. Renderují se líně na pozadí; dokud nejsou, je pod
+    /// titulkem prostě jen barva klipu.
+    private func applyWaveform(_ placement: TimelineLayout.Placement, to layer: ClipLayer,
+                               kind: TrackKind, visible: NSRect) {
+        let pointsPerFrame = controller.geometry.pointsPerFrame
+        guard kind == .audio,
+              placement.width >= 32,
+              let clip = controller.project.timeline.clip(placement.clipID),
+              let asset = controller.project.asset(clip.assetID),
+              let peaks = controller.waveforms.peaks(for: asset),
+              peaks.count > 0
+        else {
+            layer.clearWaveTiles()
+            layer.waveRung = 0
+            return
+        }
+
+        let rung = WaveformStore.rung(for: pointsPerFrame)
+        if layer.waveRung != rung {
+            layer.clearWaveTiles()
+            layer.waveRung = rung
+        }
+        layer.waveContainer.frame = layer.bounds
+
+        // Viditelný výřez klipu v bodech dokumentu, s malým přesahem.
+        let fromX = max(visible.minX - 100, placement.x)
+        let toX = min(visible.maxX + 100, placement.x + placement.width)
+        guard toX > fromX else {
+            layer.clearWaveTiles()
+            return
+        }
+
+        // Body → sekundy zdroje při AKTUÁLNÍM zoomu; dlaždice jsou na úrovni.
+        let secondsPerPoint = 1.0 / (30.0 * pointsPerFrame)
+        let clipStartSeconds = clip.sourceStart.seconds
+        let secondsPerTile = WaveformStore.tileWidthPoints / (30.0 * rung)
+        let scale = window?.backingScaleFactor ?? 2
+
+        let fromSeconds = clipStartSeconds + (fromX - placement.x) * secondsPerPoint
+        let toSeconds = clipStartSeconds + (toX - placement.x) * secondsPerPoint
+        let firstTile = max(0, Int(fromSeconds / secondsPerTile))
+        let lastTile = max(firstTile, Int(toSeconds / secondsPerTile))
+
+        // Pryč s dlaždicemi mimo výřez.
+        for (index, tile) in layer.waveTiles where index < firstTile || index > lastTile {
+            tile.removeFromSuperlayer()
+            layer.waveTiles.removeValue(forKey: index)
+        }
+
+        for index in firstTile...lastTile {
+            let tile: CALayer
+            if let existing = layer.waveTiles[index] {
+                tile = existing
+            } else {
+                tile = CALayer()
+                layer.waveContainer.addSublayer(tile)
+                layer.waveTiles[index] = tile
+            }
+            let tileStartSeconds = Double(index) * secondsPerTile
+            let xInClip = (tileStartSeconds - clipStartSeconds) / secondsPerPoint
+            tile.frame = CGRect(x: xInClip, y: 0,
+                                width: secondsPerTile / secondsPerPoint,
+                                height: placement.height)
+            // `nil` = ještě se renderuje; až doběhne, zvedne store `version`
+            // a tenhle průchod se zopakuje.
+            tile.contents = controller.waveforms.tile(assetID: asset.id, rung: rung,
+                                                      index: index, scale: scale)
+        }
     }
 
     /// Jméno souboru bez přípony. Klip vlastní jméno nemá — bere ho z assetu.

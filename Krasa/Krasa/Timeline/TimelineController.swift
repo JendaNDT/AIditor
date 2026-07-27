@@ -49,7 +49,9 @@ final class TimelineController: ObservableObject {
     /// Výběr. Totéž — stav UI, ne dokumentu.
     @Published var selection: Set<ClipID> = []
 
-    // `waveforms: WaveformStore` přibude až s krokem 10 (vlnové průběhy).
+    /// Mezipaměť vlnových průběhů (krok 10). Mezipaměť, ne dokument —
+    /// špičky i dlaždice se dají kdykoli zahodit a spočítat znovu.
+    let waveforms = WaveformStore()
 
     init(project: Project = .empty(), geometry: TimelineGeometry = TimelineGeometry()) {
         self.project = project

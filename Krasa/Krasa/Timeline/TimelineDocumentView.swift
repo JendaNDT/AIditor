@@ -35,6 +35,13 @@ enum TimelinePalette {
         }
     }
 
+    private static func adaptive(_ name: String,
+                                 dark: NSColor, light: NSColor) -> NSColor {
+        NSColor(name: NSColor.Name(name)) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+        }
+    }
+
     /// Plocha pod stopami a za koncem projektu.
     static let background = adaptive("timelineBackground", dark: 0.09, light: 0.78)
     /// Pruh obrazové stopy. Nejsvětlejší — obraz je hlavní.
@@ -55,6 +62,63 @@ enum TimelinePalette {
     static let tick = adaptive("timelineTick", dark: 0.42, light: 0.52)
     /// Předěly mezi pravítkem, hlavičkami a plochou osy.
     static let separator = adaptive("timelineSeparator", dark: 0.28, light: 0.66)
+
+    // MARK: Klipy
+    //
+    // Jediné barevné plochy na ose. Modrá pro obraz a zelená pro zvuk je
+    // konvence, kterou zná každý, kdo kdy viděl NLE — není důvod vymýšlet
+    // vlastní. Výplně jsou tlumené, aby na nich stálo písmo.
+
+    /// Výplň obrazového klipu.
+    static let clipVideoFill = adaptive(
+        "clipVideoFill",
+        dark: NSColor(calibratedRed: 0.23, green: 0.34, blue: 0.55, alpha: 1),
+        light: NSColor(calibratedRed: 0.58, green: 0.69, blue: 0.87, alpha: 1))
+    /// Výplň zvukového klipu.
+    static let clipAudioFill = adaptive(
+        "clipAudioFill",
+        dark: NSColor(calibratedRed: 0.16, green: 0.41, blue: 0.30, alpha: 1),
+        light: NSColor(calibratedRed: 0.56, green: 0.78, blue: 0.64, alpha: 1))
+    /// Obrys klipu — ztmavená hrana, ať se sousedící klipy neslijí.
+    static let clipStroke = adaptive(
+        "clipStroke",
+        dark: NSColor(white: 0, alpha: 0.45),
+        light: NSColor(white: 0, alpha: 0.25))
+    /// Obrys vybraného klipu. Výběr přijde s krokem 7, barva ale patří sem,
+    /// ať se paleta nerozšiřuje nadvakrát.
+    static let clipSelectedStroke = adaptive(
+        "clipSelectedStroke",
+        dark: NSColor(calibratedRed: 1.00, green: 0.79, blue: 0.28, alpha: 1),
+        light: NSColor(calibratedRed: 0.85, green: 0.55, blue: 0.00, alpha: 1))
+    /// Jméno klipu.
+    static let clipText = adaptive("clipText", dark: 0.94, light: 0.10)
+}
+
+/// Vrstva jednoho klipu. ŽÁDNÉ kreslení — jen barvy, obrys a `CATextLayer`
+/// se jménem. Kreslené view by tu dostalo vadnou celookenní `ContentLayer`
+/// (viz `TimelinePane`), vrstvy s barvami jsou imunní.
+final class ClipLayer: CALayer {
+
+    let title = CATextLayer()
+
+    override init() {
+        super.init()
+        cornerRadius = 3
+        masksToBounds = true
+        borderWidth = 1
+        title.fontSize = 11
+        title.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        title.truncationMode = .end
+        addSublayer(title)
+    }
+
+    /// Core Animation si přes tenhle init dělá kopie pro prezentační strom.
+    override init(layer: Any) {
+        super.init(layer: layer)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("nepoužívá se") }
 }
 
 final class TimelineDocumentView: NSView {
@@ -68,6 +132,15 @@ final class TimelineDocumentView: NSView {
     private let backgroundLayer = CALayer()
     private var laneLayers: [CALayer] = []
 
+    /// Kontejner klipových vrstev — nad pruhy, pod budoucím playheadem.
+    private let clipsContainer = CALayer()
+    /// Vrstvy právě visící na ose, podle klipu.
+    private var mountedClipLayers: [ClipID: ClipLayer] = [:]
+    /// Fond odložených vrstev. Vrstva se nikdy nezahazuje, jen odpojuje —
+    /// zakládání vrstev při každém scrollnutí je přesně to, čemu se recyklací
+    /// předchází.
+    private var clipLayerPool: [ClipLayer] = []
+
     init(controller: TimelineController) {
         self.controller = controller
         super.init(frame: .zero)
@@ -77,6 +150,7 @@ final class TimelineDocumentView: NSView {
         // jednodušší varianta.)
         wantsLayer = true
         layer?.addSublayer(backgroundLayer)
+        layer?.addSublayer(clipsContainer)
         rebuildLanes()
     }
 
@@ -148,6 +222,84 @@ final class TimelineDocumentView: NSView {
                                              width: bounds.width,
                                              height: geometry.height(of: track.kind))
         }
+
+        clipsContainer.frame = bounds
+        refreshClips()
+    }
+
+    // MARK: - Klipy (krok 5)
+
+    /// Ta „desetiřádková smyčka" z návrhu: placements → diff → odpojit,
+    /// připojit z fondu, všem přepsat rámec. KTERÉ vrstvy a KAM říká
+    /// `TimelineModel` a je to otestované; tady se to jen provádí.
+    ///
+    /// Volá se při scrollu, layoutu a reloadu. Viditelný výřez si bere
+    /// z clip view, protože scroll hýbe jeho `bounds` — vlastní rámec
+    /// dokumentu se scrollem nemění.
+    func refreshClips() {
+        guard let clipView = enclosingScrollView?.contentView else { return }
+        let visible = clipView.bounds
+
+        let placements = TimelineLayout.placements(project: controller.project,
+                                                   geometry: controller.geometry,
+                                                   scrollX: visible.origin.x,
+                                                   width: visible.width,
+                                                   selection: controller.selection)
+        let diff = TimelineLayout.diff(previous: Set(mountedClipLayers.keys),
+                                       next: placements)
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+
+        for clipID in diff.toRecycle {
+            guard let layer = mountedClipLayers.removeValue(forKey: clipID) else { continue }
+            layer.removeFromSuperlayer()
+            clipLayerPool.append(layer)
+        }
+
+        for clipID in diff.toMount {
+            let layer = clipLayerPool.popLast() ?? ClipLayer()
+            layer.contentsScale = window?.backingScaleFactor ?? 2
+            layer.title.contentsScale = layer.contentsScale
+            clipsContainer.addSublayer(layer)
+            mountedClipLayers[clipID] = layer
+        }
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            for placement in placements {
+                guard let layer = mountedClipLayers[placement.clipID] else { continue }
+                apply(placement, to: layer)
+            }
+        }
+    }
+
+    /// Rámec, barvy a jméno jedné vrstvy. Volat UVNITŘ
+    /// `performAsCurrentDrawingAppearance` — `cgColor` se vyhodnocuje pro
+    /// aktuální appearance a vrstva si výsledek pamatuje jako hodnotu.
+    private func apply(_ placement: TimelineLayout.Placement, to layer: ClipLayer) {
+        layer.frame = CGRect(x: placement.x, y: placement.y,
+                             width: placement.width, height: placement.height)
+
+        let kind = controller.project.timeline.track(id: placement.trackID)?.kind ?? .video
+        let fill = kind == .video ? TimelinePalette.clipVideoFill : TimelinePalette.clipAudioFill
+        layer.backgroundColor = fill.cgColor
+        layer.borderColor = placement.isSelected
+            ? TimelinePalette.clipSelectedStroke.cgColor
+            : TimelinePalette.clipStroke.cgColor
+        layer.borderWidth = placement.isSelected ? 2 : 1
+
+        layer.title.string = clipName(placement.clipID)
+        layer.title.foregroundColor = TimelinePalette.clipText.cgColor
+        layer.title.frame = CGRect(x: 6, y: 2,
+                                   width: max(0, placement.width - 12), height: 15)
+    }
+
+    /// Jméno souboru bez přípony. Klip vlastní jméno nemá — bere ho z assetu.
+    private func clipName(_ clipID: ClipID) -> String {
+        guard let clip = controller.project.timeline.clip(clipID),
+              let asset = controller.project.asset(clip.assetID) else { return "—" }
+        return asset.originalURL.deletingPathExtension().lastPathComponent
     }
 
     // MARK: - Barvy
@@ -174,6 +326,10 @@ final class TimelineDocumentView: NSView {
 
             CATransaction.commit()
         }
+
+        // Klipy drží barvy taky jako `CGColor` hodnoty — po změně vzhledu
+        // se musí přeložit znovu, jinak zamrznou ve starém režimu.
+        refreshClips()
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -193,6 +349,13 @@ final class TimelineDocumentView: NSView {
         let scale = window?.backingScaleFactor ?? 2
         backgroundLayer.contentsScale = scale
         for lane in laneLayers { lane.contentsScale = scale }
+        clipsContainer.contentsScale = scale
+        // I fond: vrstva odložená na Retině a připojená na externím displeji
+        // (nebo obráceně) by jinak nesla staré měřítko a text by se rozmazal.
+        for layer in mountedClipLayers.values + clipLayerPool {
+            layer.contentsScale = scale
+            layer.title.contentsScale = scale
+        }
     }
 
     /// Volá se i při přesunu okna na displej s jiným rozlišením, ne jen na začátku.

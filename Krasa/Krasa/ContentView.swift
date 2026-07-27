@@ -70,6 +70,7 @@ final class AppModel: ObservableObject {
             }
         }
         clips = found.sorted { $0.name < $1.name }
+        timeline.loadScannedClips(clips)
         status = "\(clips.count) klipů. Vyber jeden a přehraj, nebo spusť měření."
         if selected == nil, let first = clips.first { await select(first) }
     }

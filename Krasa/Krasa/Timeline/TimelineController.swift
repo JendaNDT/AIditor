@@ -50,4 +50,59 @@ final class TimelineController: ObservableObject {
         get { interaction.geometry }
         set { interaction.geometry = newValue }
     }
+
+    // MARK: - Import naskenovaných klipů (krok 5)
+
+    /// Postaví projekt znovu z naskenovaných klipů: každý za konec
+    /// předchozího, obraz na V1 a zvuk svázaně na A1.
+    ///
+    /// Znovu, ne přírůstkově: sken se pouští při každém startu i při každém
+    /// „Otevřít složku" a vrací vždy CELÝ seznam — přidávat by znamenalo
+    /// duplikovat. Až bude skutečný projektový soubor (fáze 5), tohle celé
+    /// zmizí; do té doby je timeline obraz posledního skenu.
+    ///
+    /// Délka assetu = počet vzorků / naměřená frekvence. `ClipTiming` nenese
+    /// délku v sekundách a `nominalFrameRate` lže — počet vzorků je měření.
+    func loadScannedClips(_ timings: [ClipTiming]) {
+        var built = Project.empty()
+
+        guard let videoTrack = built.timeline.tracks.first(where: { $0.kind == .video })?.id,
+              let audioTrack = built.timeline.tracks.first(where: { $0.kind == .audio })?.id
+        else { return }
+
+        for timing in timings {
+            guard timing.measuredFrameRate > 0, timing.sampleCount > 0 else { continue }
+            let seconds = Double(timing.sampleCount) / timing.measuredFrameRate
+
+            let asset = Asset(originalURL: timing.url,
+                              duration: SourceTime(seconds: seconds),
+                              measuredFrameRate: timing.measuredFrameRate,
+                              hasVideo: true,
+                              // Nepřímý, ale jediný dostupný signál: offset
+                              // zvukové stopy sonda vyplní, jen když zvuková
+                              // stopa existuje.
+                              hasAudio: timing.audioSourceOffset != nil)
+            built.addAsset(asset)
+
+            let start = built.duration
+            do {
+                if asset.hasAudio {
+                    let pair = try built.makeLinkedClips(assetID: asset.id, at: start)
+                    try built.insertLinked(video: pair.video, onVideoTrack: videoTrack,
+                                           audio: pair.audio, onAudioTrack: audioTrack)
+                } else {
+                    let clip = try built.makeClip(assetID: asset.id, at: start)
+                    try built.insert(clip, onTrack: videoTrack)
+                }
+            } catch {
+                // Klip kratší než snímek základny apod. — přeskočit, ne spadnout.
+                continue
+            }
+        }
+
+        project = built
+        selection = []
+        playhead = .zero
+        undo = UndoStack()
+    }
 }

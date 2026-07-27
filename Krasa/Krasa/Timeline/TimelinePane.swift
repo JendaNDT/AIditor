@@ -9,12 +9,22 @@
 //
 
 import AppKit
+import Combine
 import SwiftUI
 import TimelineModel
 
 final class TimelinePane: NSView {
 
     let controller: TimelineController
+    /// Odběr změn controlleru. Pane si o změnách projektu říká SÁM —
+    /// spoléhat na `updateNSView` nestačí: SwiftUI ho přeskočí, když se
+    /// hodnoty representable nezměnily, a reference na controller se nemění
+    /// nikdy. Přesně tak zůstala osa prázdná po prvním importu klipů
+    /// (28. 07. 2026): projekt se naplnil, ale nikdo to view neřekl.
+    ///
+    /// `objectWillChange` chodí PŘED změnou — proto `receive(on:)`, který
+    /// doručení odloží na další průchod smyčkou, až po zápisu hodnoty.
+    private var changeSubscription: AnyCancellable?
     let scrollView = NSScrollView()
     let documentView: TimelineDocumentView
     let rulerView: TimelineRulerView
@@ -97,6 +107,10 @@ final class TimelinePane: NSView {
             selector: #selector(clipViewBoundsChanged(_:)),
             name: NSView.boundsDidChangeNotification,
             object: scrollView.contentView)
+
+        changeSubscription = controller.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.reload() }
     }
 
     deinit {
@@ -178,15 +192,19 @@ final class TimelinePane: NSView {
 
     /// Pravítko bere z posunu jen `x`, hlavičky jen `y`. Kdyby braly obojí,
     /// odjelo by pravítko svisle a hlavičky vodorovně pryč z okna.
+    /// Klipy se přepočítávají na tomtéž místě — scroll je jediná událost,
+    /// při které se mění viditelný výřez bez layoutu.
     private func syncChrome() {
         let origin = scrollView.contentView.bounds.origin
         rulerView.scrollX = Double(origin.x)
         headersView.scrollY = Double(origin.y)
+        documentView.refreshClips()
     }
 
     /// Změnila se sada stop nebo obsah projektu.
     func reload() {
         documentView.rebuildLanes()
+        documentView.refreshClips()
         rulerView.needsDisplay = true
         headersView.needsDisplay = true
         needsLayout = true

@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná (182 testů), z deseti kroků hotových pět, kroky 6 a 7 (playhead + seek, tažení s undo) napsané a čekají na ověření okem. Klipy jsou na ose, hlava svázaná s přehrávačem, klipy jdou táhnout a trimovat s náhledem, přichytáváním a ⌘Z.**
+**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná (182 testů), z deseti kroků hotových pět, kroky 6–8 (playhead + seek, tažení s undo, zoom kotvený na kurzoru) napsané a čekají na ověření okem. Zbývá krok 9 (roll/slip, menu, kurzory) a 10 (vlnové průběhy).**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -41,7 +41,11 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   👀 **„Hotovo když" kroku 7 („přetáhneš klip, zkrátíš ho, ⌘Z to vrátí") čeká na ruku** — syntetická myš bez oprávnění zpřístupnění nejde (viz krok 6). Zkontroluj: tažení těla klipu ukazuje ducha a pustí klip na nové místo (přes souseda červeně a nepustí), tažení okraje trimuje, duch se přichytává na hrany/nulu/hlavu (Shift vypne), Escape tažení zruší, ⌘Z vrátí, klik vybírá (žlutý okraj) a klik do prázdna výběr zruší. Smoke test prošel: klipy i hlava se po změně kreslí stejně.
 
-Pak **krok 8: zoom** (pinch, ⌘+kolečko), kotvený na kurzoru, zamčený při tažení.
+🔄 **Krok 8 — zoom: NAPSANÝ, kotvení čeká na gesto (28. 07. 2026).** Pinch (`magnify`) a ⌘+kolečko na dokumentu osy; bez ⌘ jde kolečko dál a scroll view normálně scrolluje. Kotvení na kurzoru: nová geometrie → **synchronně** přerozměřit dokument → scroll tak, aby snímek pod kurzorem zůstal pod kurzorem; kotva se drží ve zlomkových snímcích (celé by při pinchi posouvaly obsah). Během tažení se zoom ignoruje (`FAZE_2_VIEW.md` 2.6). Meze 0,02–120 bodů/snímek zařezává `TimelineGeometry.setZoom` — otestovaná.
+
+  Cesta geometrie → přerozměření → překreslení **ověřena screenshotem** (dočasná sonda `setZoom(0,15)`, po ověření smazaná): čtyři klipy vedle sebe, pravítko samo zhrublo na 30s rozteč, úzký klip zkracuje jméno. 👀 **Kotvení na kurzoru a plynulost pinche chce ruku** — gesto se syntetizovat nedá: pinchni nad konkrétním klipem a zkontroluj, že zůstane pod prsty; ⌘+kolečko totéž; při rozjetém tažení nesmí zoom nic dělat.
+
+Pak **krok 9: roll, slip, kontextové menu, zkratky, kurzory.**
 
 👀 **Kroky 2 a 3 chtějí koukanec.** Krok 2 potvrzený (27. 07. 2026, 21:08). U kroku 3 se očima ověřuje, že při vodorovném scrollu jede timecode s obsahem a jména stop stojí, a při svislém naopak.
 

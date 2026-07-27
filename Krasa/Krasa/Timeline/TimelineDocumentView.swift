@@ -12,6 +12,41 @@
 import AppKit
 import TimelineModel
 
+/// Barvy časové osy.
+///
+/// ⚠️ **Sémantické systémové barvy se sem nehodí.** První verze kroku 2 brala
+/// pruhy z `controlBackgroundColor` a pozadí z `underPageBackgroundColor` —
+/// v tmavém režimu jsou obě skoro černé, takže osa vyšla jako jeden slitý
+/// tmavý blok a tři pruhy v ní nebyly poznat. Ty barvy mají svůj smysl
+/// (obsah okna, plocha pod dokumentem), ale nejsou navržené na to, aby se
+/// odlišily od sebe navzájem.
+///
+/// Proto vlastní paleta. `NSColor(name:dynamicProvider:)` drží obě větve
+/// v jedné hodnotě, takže i tady stačí barvu přeložit při změně vzhledu
+/// a nikde není druhá sada konstant.
+/// <https://developer.apple.com/documentation/appkit/nscolor/init(name:dynamicprovider:)>
+enum TimelinePalette {
+
+    private static func adaptive(_ name: String,
+                                 dark: CGFloat, light: CGFloat) -> NSColor {
+        NSColor(name: NSColor.Name(name)) { appearance in
+            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            return NSColor(white: isDark ? dark : light, alpha: 1)
+        }
+    }
+
+    /// Plocha pod stopami a za koncem projektu.
+    static let background = adaptive("timelineBackground", dark: 0.09, light: 0.78)
+    /// Pruh obrazové stopy. Nejsvětlejší — obraz je hlavní.
+    static let videoLane = adaptive("timelineVideoLane", dark: 0.24, light: 0.95)
+    /// Pruh zvukové stopy.
+    static let audioLane = adaptive("timelineAudioLane", dark: 0.17, light: 0.88)
+
+    static func lane(for kind: TrackKind) -> NSColor {
+        kind == .video ? videoLane : audioLane
+    }
+}
+
 final class TimelineDocumentView: NSView {
 
     /// Vlastník stavu. Silná reference je v pořádku, protože controller
@@ -118,16 +153,10 @@ final class TimelineDocumentView: NSView {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
 
-            layer?.backgroundColor = NSColor.underPageBackgroundColor.cgColor
+            layer?.backgroundColor = TimelinePalette.background.cgColor
 
             for (index, lane) in laneLayers.enumerated() where index < tracks.count {
-                // Obraz je světlejší než zvuk. Průhlednost se skládá přes
-                // tmavé pozadí dokumentu, takže zvukové pruhy vyjdou tmavší
-                // v obou režimech vzhledu bez druhé sady barev.
-                let base = NSColor.controlBackgroundColor
-                lane.backgroundColor = tracks[index].kind == .video
-                    ? base.cgColor
-                    : base.withAlphaComponent(0.55).cgColor
+                lane.backgroundColor = TimelinePalette.lane(for: tracks[index].kind).cgColor
             }
 
             CATransaction.commit()

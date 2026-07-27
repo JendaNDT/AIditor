@@ -410,8 +410,13 @@ struct ContentView: View {
             // obchází celou; stav osy přežije v `AppModelu`.
             if !model.chromeHidden {
                 Divider()
+                // Pevná výška, ne `idealHeight`. Přehrávač i osa jsou oba
+                // pružné `NSViewRepresentable`, takže se o volné místo
+                // podělily napůl a pod třemi pruhy (156 bodů) zbylo přes
+                // dvě stě bodů prázdna. Tady si osa říká přesně o svoje;
+                // roztahovací dělič je věc kroku 3, až přibude pravítko.
                 TimelinePaneView(controller: model.timeline)
-                    .frame(minHeight: 180, idealHeight: 220)
+                    .frame(height: 220)
             }
 
             HStack(spacing: 16) {

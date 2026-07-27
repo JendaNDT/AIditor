@@ -29,8 +29,9 @@ final class TimelinePane: NSView {
         scrollView.drawsBackground = true
         // Dynamickou `NSColor` si `NSScrollView` překládá při kreslení sám,
         // takže tahle jedna se na rozdíl od barev vrstev o tmavý režim
-        // starat nemusí.
-        scrollView.backgroundColor = .underPageBackgroundColor
+        // starat nemusí. Táž barva jako pozadí dokumentu, ať mezi plochou
+        // osy a zbytkem scroll view není vidět šev.
+        scrollView.backgroundColor = TimelinePalette.background
 
         // ⚠️ Zoom osy NIKDY přes `magnification`. Ta škáluje pixely, takže by
         // se s obsahem roztáhly i popisky a čáry, a hlavně by o tom

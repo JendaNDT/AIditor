@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná (182 testů), z deseti kroků hotové čtyři — osa se stopami, pravítko, hlavičky a rozvržení s recyklací (`TimelineLayout`). Klipy na ose zatím nejsou vidět, to je krok 5.**
+**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná (182 testů), z deseti kroků hotových pět — osa se stopami, pravítko, hlavičky, rozvržení s recyklací a KLIPY NA OSE. Naskenované klipy se zobrazují jako vrstvy na V1 + A1 se jmény.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -23,7 +23,13 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
 ✅ **Krok 4 — `TimelineLayout` + `LayerDiff` v `TimelineModelu`, s testy (28. 07. 2026).** Čistá funkce z (projekt, geometrie, scroll, výběr) na `[Placement]` a množinový diff „připojit / vrátit do fondu / přepsat rámec". **+19 testů, celkem 182, 0 selhání**; ve view se nezměnilo nic, přesně podle plánu. Klíčové záruky vymáhané testy: `toMount ∪ toUpdate` = přesně viditelné klipy v pořadí placements; `toRecycle` = co viselo a už nemá (deterministicky seřazené — množina pořadí nemá, výstup ho mít musí); nic není ve dvou seznamech; duplicitní ID se nepřipojí dvakrát. `toUpdate` dostává rámec VŽDY — diff zná jen ID, ne staré rámce, a zápis rámce s vypnutými akcemi je levnější než účetnictví, které by ho ušetřilo. Property test s náhodnými projekty a okny (50 kol, seedovaný generátor).
 
-Teď **krok 5: klipy jako recyklované `CALayer` ve view.** Desetiřádková smyčka nad `placements` + `diff`, fond vrstev, kreslení jména klipu. První krok, kde se klipy objeví na obrazovce — ověřuje se okem.
+✅ **Krok 5 — klipy jako recyklované `CALayer` (28. 07. 2026).** `ClipLayer` (výplň podle druhu stopy, obrys, `CATextLayer` se jménem — ŽÁDNÉ `draw`, viz past s `ContentLayer` v rizicích), fond vrstev a ta „desetiřádková smyčka" `placements` → `diff` v `TimelineDocumentView.refreshClips()`, volaná při scrollu, layoutu a reloadu. K tomu import: `TimelineController.loadScannedClips` staví projekt z naskenovaných klipů — obraz na V1, zvuk svázaně (`makeLinkedClips`) na A1, délka assetu z počtu vzorků a naměřené frekvence. Ověřeno okem na screenshotu běžící aplikace: klipy na V1 (modré) i A1 (zelené) se jmény.
+
+  ⚠️ **Nová past do sbírky: SwiftUI `updateNSView` se přeskočí, když se hodnoty representable nezměnily** — a reference na controller se nemění nikdy. Osa proto po importu zůstala prázdná: projekt se naplnil (debug log: V1=5, A1=5), ale `reload()` nikdo nezavolal. Oprava: `TimelinePane` odebírá `controller.objectWillChange` přes Combine (s `receive(on:)`, protože notifikace chodí PŘED změnou). Je to bratranec pasti „SwiftUI nesleduje vnořené ObservableObjecty" z fáze 1.
+
+  👀 **Zbývá koukanec na plynulost scrollu** (kritérium kroku: „scroll je plynulý") — recyklace je otestovaná množinově, ale ruka na trackpadu se automatizovaně nahradit nedá.
+
+Teď **krok 6: playhead + seek do přehrávače.** Klik do pravítka posune hlavu a monitor skočí na ten snímek.
 
 👀 **Kroky 2 a 3 chtějí koukanec.** Krok 2 potvrzený (27. 07. 2026, 21:08). U kroku 3 se očima ověřuje, že při vodorovném scrollu jede timecode s obsahem a jména stop stojí, a při svislém naopak.
 
@@ -61,7 +67,7 @@ Pak zbytek **`TimelineView` v AppKitu — poslední kus fáze 2.** Co v něm doo
 | pravítko a hlavičky stop přes `NSView.boundsDidChangeNotification` | ✅ krok 3 |
 | timecode a rozteč rysek | ✅ `Timecode` v modelu, 20 testů |
 | `TimelineLayout` + `LayerDiff` | ✅ krok 4, 19 testů |
-| klipy jako recyklované `CALayer` | ❌ krok 5 |
+| klipy jako recyklované `CALayer` | ✅ krok 5 |
 | vlnové průběhy jako `CGImage` dlaždice per zoom | ❌ |
 | kurzory, kontextové menu, klávesové zkratky | ❌ |
 
@@ -119,14 +125,14 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 2 — timeline.** `TimelineModel` hotový (182 testů) a napojený na `Krasa.xcodeproj`. Z deseti kroků stavby view hotové 1–4: controller, osa se stopami, pravítko + hlavičky, rozvržení s recyklací. Další je krok 5 — klipy jako recyklované `CALayer`.
+- **Fáze 2 — timeline.** `TimelineModel` hotový (182 testů) a napojený na `Krasa.xcodeproj`. Z deseti kroků stavby view hotové 1–5: controller, osa se stopami, pravítko + hlavičky, rozvržení s recyklací, klipy na ose. Další je krok 6 — playhead + seek.
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
 ### Cesta k v0.5 „MVP nula" (~6 měsíců při 30 h/týdně)
 - **F0** Spike 0 — ověření speed rampingu — ✅ **HOTOVO 26. 07. 2026**, hlavní riziko zavřené
 - **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
-- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (182 testů), z deseti kroků hotové 4**
+- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (182 testů), z deseti kroků hotových 5**
 - **F3** Speed ramping ostrý *(3 týdny)*
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)*
 - **F5** Projekt, autosave, undo, export *(3 týdny)*

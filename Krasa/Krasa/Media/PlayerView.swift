@@ -258,7 +258,18 @@ struct PlayerView: NSViewRepresentable {
     var onHostView: ((PlayerHostView) -> Void)?
 
     func makeNSView(context: Context) -> PlayerHostView {
-        let view = PlayerHostView(frame: .zero)
+        // ⚠️ Nenulový počáteční rámec, ne `.zero`.
+        //
+        // Stopa k černému náhledu (27. 07. 2026): obraz se objeví ve chvíli,
+        // kdy tlačítko „Okno vs celá obrazovka" překope layout. Vrstva tedy
+        // obsah má — jen se nezobrazí, dokud nepřijde přelayoutování.
+        // `AVPlayerLayer` založená v nulovém rámci je na tohle známý kandidát:
+        // vznikne s prázdnou plochou a další nastavení rámce už ji k prvnímu
+        // vykreslení nepobídne.
+        //
+        // Konkrétní čísla nic neznamenají — SwiftUI rámec hned přepíše.
+        // Jde jen o to, aby vrstva nezačínala na nule.
+        let view = PlayerHostView(frame: NSRect(x: 0, y: 0, width: 640, height: 360))
         view.playerLayer.player = player
         onHostView?(view)
         return view

@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná (182 testů), z deseti kroků hotových pět — osa se stopami, pravítko, hlavičky, rozvržení s recyklací a KLIPY NA OSE. Naskenované klipy se zobrazují jako vrstvy na V1 + A1 se jmény.**
+**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná (182 testů), z deseti kroků hotových pět a šestý (playhead + seek) napsaný, čeká na ověření okem. Klipy jsou na ose jako vrstvy na V1 + A1, hlava se kreslí a je obousměrně svázaná s přehrávačem.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -29,7 +29,13 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   👀 **Zbývá koukanec na plynulost scrollu** (kritérium kroku: „scroll je plynulý") — recyklace je otestovaná množinově, ale ruka na trackpadu se automatizovaně nahradit nedá.
 
-Teď **krok 6: playhead + seek do přehrávače.** Klik do pravítka posune hlavu a monitor skočí na ten snímek.
+🔄 **Krok 6 — playhead + seek do přehrávače: NAPSANÝ, čeká na koukanec (28. 07. 2026).** Červená `playheadLayer` přes celou výšku dokumentu (kreslí se, ověřeno screenshotem — stojí na nule). Klik/tažení v pravítku → `setPlayheadFromUser` → `AppModel.seekPlayer`: najde obrazový klip pod hlavou, případně vymění asset v přehrávači a seekne na `sourceOffset` (převod počítá model). Zpětný směr: při přehrávání jede hlava za `currentTime`; smyčce brání `isUserScrubbing` (hlavu táhne uživatel) a podmínka `isPlaying`, přesně podle `FAZE_2_VIEW.md` sekce 5. Hlava v mezeře/za koncem: posunout se smí, seekovat není kam — přehrávač zůstává.
+
+  Odběry v `TimelinePane` zúžené z plošného `objectWillChange` na cílené publishery (`$project`/geometrie → reload, `$selection` → refresh klipů, `$playhead` → jen přepis rámce jedné vrstvy) — hlava se při přehrávání hýbe 30×/s a plošná reakce by třicetkrát za sekundu přestavovala pruhy a překreslovala pravítko.
+
+  👀 **„Hotovo když" kroku 6 („klikneš do pravítka a monitor skočí") zbývá ověřit rukou.** Syntetický klik při automatickém ověřování narazil na oprávnění zpřístupnění (macOS ukázal dialog — klidně Zakázat, pro vývoj není potřeba). Zkontroluj: klik do pravítka skočí monitorem na správný snímek, tažení scrubuje, mezerník přehrává a hlava jede s obrazem, klik za posledním klipem hlavu posune a obraz nechá.
+
+Pak **krok 7: tažení — přesun a trim.** Přetáhneš klip, zkrátíš ho, ⌘Z to vrátí.
 
 👀 **Kroky 2 a 3 chtějí koukanec.** Krok 2 potvrzený (27. 07. 2026, 21:08). U kroku 3 se očima ověřuje, že při vodorovném scrollu jede timecode s obsahem a jména stop stojí, a při svislém naopak.
 

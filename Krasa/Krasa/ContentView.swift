@@ -8,7 +8,9 @@
 
 import AVFoundation
 import AppKit
+import Combine
 import SwiftUI
+import TimelineModel
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -31,6 +33,24 @@ final class AppModel: ObservableObject {
     /// Pauza mezi běhy. Air je bezventilátorový — bez chladnutí měří druhý
     /// běh teplejší stroj, ne jiný stav.
     static let coolDownSeconds: UInt64 = 20
+
+    /// Klip pod hlavou při posledním seeku z osy. Kotva zpětného směru:
+    /// podle ní se čas přehrávače překládá zpátky na snímek osy.
+    private var activeTimelineClipID: ClipID?
+    private var playbackTimeSubscription: AnyCancellable?
+
+    init() {
+        // Osa → přehrávač: uživatel posunul hlavu, přehrávač skočí.
+        timeline.onUserSeek = { [weak self] frame in
+            self?.seekPlayer(toTimelineFrame: frame)
+        }
+        // Přehrávač → osa: při přehrávání jede hlava za časem přehrávače.
+        // Smyčce brání dvojí pojistka: `isUserScrubbing` během tažení
+        // a `isPlaying` — hlava se veze jen za běžícím přehráváním.
+        playbackTimeSubscription = controller.$currentTime
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] time in self?.syncPlayhead(from: time) }
+    }
 
     func attach(_ view: PlayerHostView) { hostView = view }
 
@@ -78,6 +98,78 @@ final class AppModel: ObservableObject {
     func select(_ clip: ClipTiming) async {
         selected = clip
         try? await controller.load(url: clip.url, measuredFrameRate: clip.measuredFrameRate)
+    }
+
+    // MARK: Hlava osy ↔ přehrávač (krok 6)
+
+    /// Osa → přehrávač. Snímek osy se přeloží na klip pod hlavou a čas
+    /// v jeho zdroji; když hlava stojí v mezeře nebo za koncem, přehrávač
+    /// zůstává, kde je — hlava se posunout smí, seekovat není kam.
+    ///
+    /// Fáze 2 nemá kompozici (přijde ve fázi 3), takže „seek na ose" znamená:
+    /// najdi obrazový klip pod hlavou, nahraj jeho asset do přehrávače
+    /// a seekni na `sourceOffset`. Převod počítá model, ne UI.
+    private func seekPlayer(toTimelineFrame frame: Frames) {
+        let project = timeline.project
+        guard let videoTrack = project.timeline.tracks.first(where: { $0.kind == .video }),
+              let clip = videoTrack.clips.first(where: {
+                  $0.timelineStart <= frame && frame < $0.timelineEnd
+              }),
+              let asset = project.asset(clip.assetID)
+        else { return }
+
+        activeTimelineClipID = clip.id
+        let offset = Frames(frame.count - clip.timelineStart.count)
+        let source = project.sourceOffset(in: clip, atFrame: offset)
+        let target = CMTime(seconds: source.seconds,
+                            preferredTimescale: SourceTime.projectTimescale)
+
+        if selected?.url != asset.originalURL {
+            // Hlava přejela na jiný klip — nejdřív vyměnit asset v přehrávači.
+            guard let timing = clips.first(where: { $0.url == asset.originalURL }) else { return }
+            Task {
+                await select(timing)
+                controller.seek(to: target)
+            }
+        } else {
+            controller.seek(to: target)
+        }
+    }
+
+    /// Přehrávač → osa. Jen během přehrávání — seek z osy si hlavu už
+    /// nastavil sám a echo přes `currentTime` by s ní jen soupeřilo.
+    private func syncPlayhead(from time: CMTime) {
+        guard controller.isPlaying,
+              !timeline.isUserScrubbing,
+              time.isValid, time.seconds.isFinite,
+              let selectedURL = selected?.url
+        else { return }
+
+        let project = timeline.project
+
+        // Kotva: klip posledního seeku; když nesedí na načtený asset
+        // (uživatel vybral klip v sidebaru), najde se první obrazový klip
+        // toho assetu na ose.
+        var clip = activeTimelineClipID.flatMap { project.timeline.clip($0) }
+        if clip == nil || project.asset(clip!.assetID)?.originalURL != selectedURL {
+            clip = project.timeline.tracks.first(where: { $0.kind == .video })?
+                .clips.first(where: { project.asset($0.assetID)?.originalURL == selectedURL })
+            activeTimelineClipID = clip?.id
+        }
+        guard let clip, let asset = project.asset(clip.assetID),
+              asset.originalURL == selectedURL else { return }
+
+        let offsetSeconds = time.seconds - clip.sourceStart.seconds
+        guard offsetSeconds >= 0 else {
+            timeline.setPlayheadFromPlayback(clip.timelineStart)
+            return
+        }
+        // Hranice soustav: sekundy zdroje → snímky osy převádí model
+        // a zaokrouhluje dolů. Konec klipu je strop — přehrávač může jet
+        // dál (asset bývá delší než klip), hlava ne.
+        let offsetFrames = project.timeline.availableFrames(from: SourceTime(seconds: offsetSeconds))
+        let frame = min(clip.timelineStart + offsetFrames, clip.timelineEnd)
+        timeline.setPlayheadFromPlayback(frame)
     }
 
     // MARK: Měření — společné

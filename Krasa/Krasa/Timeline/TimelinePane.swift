@@ -16,15 +16,21 @@ import TimelineModel
 final class TimelinePane: NSView {
 
     let controller: TimelineController
-    /// Odběr změn controlleru. Pane si o změnách projektu říká SÁM —
-    /// spoléhat na `updateNSView` nestačí: SwiftUI ho přeskočí, když se
-    /// hodnoty representable nezměnily, a reference na controller se nemění
-    /// nikdy. Přesně tak zůstala osa prázdná po prvním importu klipů
-    /// (28. 07. 2026): projekt se naplnil, ale nikdo to view neřekl.
+    /// Odběry změn controlleru. Pane si o změnách říká SÁM — spoléhat na
+    /// `updateNSView` nestačí: SwiftUI ho přeskočí, když se hodnoty
+    /// representable nezměnily, a reference na controller se nemění nikdy.
+    /// Přesně tak zůstala osa prázdná po prvním importu klipů (28. 07. 2026):
+    /// projekt se naplnil, ale nikdo to view neřekl.
     ///
-    /// `objectWillChange` chodí PŘED změnou — proto `receive(on:)`, který
-    /// doručení odloží na další průchod smyčkou, až po zápisu hodnoty.
-    private var changeSubscription: AnyCancellable?
+    /// Odběry jsou CÍLENÉ, ne plošný `objectWillChange`: hlava se během
+    /// přehrávání mění 30×/s a plošná reakce by třicetkrát za sekundu
+    /// přestavovala pruhy a překreslovala pravítko. Takhle hlava stojí
+    /// jediný přepis rámce jedné vrstvy.
+    ///
+    /// `@Published` publisher posílá novou hodnotu ve `willSet`, kdy má
+    /// vlastnost ještě starou — proto všude `receive(on:)`, který doručení
+    /// odloží až za zápis. Bez něj by se kreslilo o krok pozadu.
+    private var changeSubscriptions: [AnyCancellable] = []
     let scrollView = NSScrollView()
     let documentView: TimelineDocumentView
     let rulerView: TimelineRulerView
@@ -108,9 +114,25 @@ final class TimelinePane: NSView {
             name: NSView.boundsDidChangeNotification,
             object: scrollView.contentView)
 
-        changeSubscription = controller.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.reload() }
+        changeSubscriptions = [
+            controller.$project
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.reload() },
+            controller.$interaction
+                .map(\.geometry)
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.reload() },
+            controller.$selection
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.documentView.refreshClips() },
+            controller.$playhead
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.documentView.updatePlayhead() },
+        ]
     }
 
     deinit {

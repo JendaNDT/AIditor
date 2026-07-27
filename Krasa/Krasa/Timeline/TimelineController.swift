@@ -35,6 +35,17 @@ final class TimelineController: ObservableObject {
     /// Přehrávací hlava. V modelu není a nemá tam být: je to stav UI.
     @Published var playhead: Frames = .zero
 
+    /// Volá se, když hlavu posune UŽIVATEL (klik nebo tažení v pravítku).
+    /// `AppModel` sem věší překlad na seek přehrávače. Aktualizace hlavy
+    /// z přehrávače tudy NEchodí — jinak by vznikla smyčka seek → hlava → seek.
+    var onUserSeek: ((Frames) -> Void)?
+
+    /// Hlavu právě táhne uživatel. Po tu dobu se ignorují aktualizace
+    /// z přehrávače — obousměrná vazba se nikdy nesmí zapnout naráz
+    /// (`FAZE_2_VIEW.md`, sekce 5). Schválně ne `@Published`: je to příznak
+    /// pro logiku, ne stav ke kreslení.
+    var isUserScrubbing = false
+
     /// Výběr. Totéž — stav UI, ne dokumentu.
     @Published var selection: Set<ClipID> = []
 
@@ -49,6 +60,22 @@ final class TimelineController: ObservableObject {
     var geometry: TimelineGeometry {
         get { interaction.geometry }
         set { interaction.geometry = newValue }
+    }
+
+    // MARK: - Přehrávací hlava (krok 6)
+
+    /// Posun hlavy uživatelem. Ořeže na rozsah projektu a ohlásí seek.
+    func setPlayheadFromUser(_ frame: Frames) {
+        let clamped = Frames(min(max(0, frame.count), project.duration.count))
+        if playhead != clamped { playhead = clamped }
+        onUserSeek?(clamped)
+    }
+
+    /// Posun hlavy podle času přehrávače. Během tažení uživatelem se zahazuje.
+    func setPlayheadFromPlayback(_ frame: Frames) {
+        guard !isUserScrubbing else { return }
+        let clamped = Frames(min(max(0, frame.count), project.duration.count))
+        if playhead != clamped { playhead = clamped }
     }
 
     // MARK: - Import naskenovaných klipů (krok 5)

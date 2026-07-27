@@ -100,6 +100,29 @@ final class TimelineRulerView: NSView {
         }
     }
 
+    // MARK: - Myš → přehrávací hlava (krok 6)
+
+    /// Klik i tažení v pravítku posouvá hlavu. Souřadnice se převádí přes
+    /// `scrollX` do soustavy dokumentu a přes geometrii na snímek — stejná
+    /// cesta, jakou jde kreslení, jen pozpátku. Meze hlídá controller.
+    override func mouseDown(with event: NSEvent) {
+        controller.isUserScrubbing = true
+        moveHead(with: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        moveHead(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        controller.isUserScrubbing = false
+    }
+
+    private func moveHead(with event: NSEvent) {
+        let x = convert(event.locationInWindow, from: nil).x + scrollX
+        controller.setPlayheadFromUser(controller.geometry.frame(atX: x))
+    }
+
     private func drawLabels(geometry: TimelineGeometry,
                             range: Range<Frames>,
                             interval: Frames,

@@ -92,6 +92,13 @@ enum TimelinePalette {
         light: NSColor(calibratedRed: 0.85, green: 0.55, blue: 0.00, alpha: 1))
     /// Jméno klipu.
     static let clipText = adaptive("clipText", dark: 0.94, light: 0.10)
+
+    /// Přehrávací hlava. Červená je konvence — jediná svislá červená čára
+    /// v celém okně, nesmí se s ničím plést.
+    static let playhead = adaptive(
+        "timelinePlayhead",
+        dark: NSColor(calibratedRed: 1.00, green: 0.27, blue: 0.23, alpha: 1),
+        light: NSColor(calibratedRed: 0.80, green: 0.00, blue: 0.05, alpha: 1))
 }
 
 /// Vrstva jednoho klipu. ŽÁDNÉ kreslení — jen barvy, obrys a `CATextLayer`
@@ -141,6 +148,9 @@ final class TimelineDocumentView: NSView {
     /// předchází.
     private var clipLayerPool: [ClipLayer] = []
 
+    /// Přehrávací hlava — svislá čára přes celou výšku dokumentu, nad klipy.
+    private let playheadLayer = CALayer()
+
     init(controller: TimelineController) {
         self.controller = controller
         super.init(frame: .zero)
@@ -151,6 +161,7 @@ final class TimelineDocumentView: NSView {
         wantsLayer = true
         layer?.addSublayer(backgroundLayer)
         layer?.addSublayer(clipsContainer)
+        layer?.addSublayer(playheadLayer)
         rebuildLanes()
     }
 
@@ -225,6 +236,20 @@ final class TimelineDocumentView: NSView {
 
         clipsContainer.frame = bounds
         refreshClips()
+        updatePlayhead()
+    }
+
+    // MARK: - Přehrávací hlava (krok 6)
+
+    /// Přemístí čáru hlavy. Volá se při každé změně `controller.playhead`
+    /// (během přehrávání 30×/s) — proto jen přepis rámce jedné vrstvy,
+    /// žádné placements, žádný diff.
+    func updatePlayhead() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let x = controller.geometry.x(for: controller.playhead)
+        playheadLayer.frame = CGRect(x: x - 1, y: 0, width: 2, height: bounds.height)
+        CATransaction.commit()
     }
 
     // MARK: - Klipy (krok 5)
@@ -319,6 +344,7 @@ final class TimelineDocumentView: NSView {
             CATransaction.setDisableActions(true)
 
             layer?.backgroundColor = TimelinePalette.background.cgColor
+            playheadLayer.backgroundColor = TimelinePalette.playhead.cgColor
 
             for (index, lane) in laneLayers.enumerated() where index < tracks.count {
                 lane.backgroundColor = TimelinePalette.lane(for: tracks[index].kind).cgColor

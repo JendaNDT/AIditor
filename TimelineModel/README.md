@@ -125,6 +125,25 @@ Dvě věci, které z toho plynou a jsou otestované:
 Přichytávání má i pořadí síly (nula > playhead > hrana klipu > marker), aby při
 shodné vzdálenosti výsledek nezávisel na pořadí v poli.
 
+## Rozvržení a recyklace vrstev
+
+`TimelineLayout` říká view, KTERÉ klipy jsou vidět, KDE leží a co s vrstvami:
+
+```swift
+let next = TimelineLayout.placements(project: project, geometry: g,
+                                     scrollX: 640, width: 1200,
+                                     selection: selectedIDs)
+let diff = TimelineLayout.diff(previous: mountedIDs, next: next)
+// diff.toMount    — připojit z fondu
+// diff.toRecycle  — vrátit do fondu (deterministicky seřazené)
+// diff.toUpdate   — zůstávají; rámec se přepisuje VŽDY, diff staré rámce nezná
+```
+
+Záruky vymáhané testy: `toMount ∪ toUpdate` je přesně obsah `next` v jeho
+pořadí, `toRecycle` je `previous − next`, nic není ve dvou seznamech a
+duplicitní ID se nepřipojí dvakrát. Chyby recyklace (klip visí po smazání, dva
+klipy na jedné vrstvě) jsou množinové — proto se rozhodují tady, a ne ve view.
+
 ## Interakce — co se stane při tažení
 
 `TimelineInteraction` je stavový automat mezi `mouseDown`, `mouseDragged`

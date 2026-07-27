@@ -11,6 +11,7 @@
 //
 
 import AVFoundation
+import AVKit
 import AppKit
 import SwiftUI
 
@@ -37,86 +38,59 @@ struct DisplayTick {
     let duration: CFTimeInterval
 }
 
-/// NSView s AVPlayerLayer a display linkem svázaným s displejem okna.
+/// NSView s `AVPlayerView` uvnitř a display linkem svázaným s displejem okna.
+///
+/// ⚠️ **Video kreslí `AVPlayerView` z AVKitu, ne vlastní `AVPlayerLayer`.**
+/// Vlastní vrstva se v tomhle okně nevykreslovala. Zjištěno 27. 07. 2026
+/// a je to nejdražší chyba dne, tak ať to tu zůstane zapsané:
+///
+/// - Obraz byl vidět **jen když kolem přehrávače nic nebylo** — po skrytí
+///   sidebaru a časové osy naskočil, po jejich návratu zase zmizel.
+/// - Zvětšení okna, výběr jiného klipu ani nové načtení nepomohly, takže
+///   to nebylo chybějící přelayoutování.
+/// - Všechny měřitelné hodnoty přitom byly správné: položka `readyToPlay`,
+///   `presentationSize` 3840×2160, vrstva připojená, `opacity 1`,
+///   `videoRect` neprázdný, `isReadyForDisplay == true`, nic ji
+///   nepřekrývalo, přehrávání běželo a zvuk byl slyšet.
+/// - Týž klip v QuickTime obraz ukázal, takže systém byl v pořádku.
+///
+/// Sedí to na poznámku z fáze 1: dokud je náhled holé video a nic přes něj
+/// neleží, jde na displej jako samostatná vrstva a GPU se skoro nezapojí.
+/// Jakmile se musí skládat, naše ručně postavená vrstva nevykreslila nic.
+///
+/// `AVPlayerView` tuhle cestu řeší sám. Platíme za to tím, že video už
+/// není v naší vrstvě — proto `videoBounds` místo `videoRect`.
+///
+/// <https://developer.apple.com/documentation/avkit/avplayerview>
 final class PlayerHostView: NSView {
 
-    let playerLayer = AVPlayerLayer()
+    /// Vlastní přehrávací view. `controlsStyle = .none`, ovládání máme svoje.
+    let playerView = AVPlayerView()
 
     /// Volá se při každém obnovení displeje. Sem se věší měření.
     var onDisplayTick: ((DisplayTick) -> Void)?
 
     private var link: CADisplayLink?
-    private var readyObservation: NSKeyValueObservation?
 
-    /// ⚠️ **`AVPlayerLayer` je vrstvou view, ne její podvrstvou.**
-    ///
-    /// Původně tu byla vlastní `CALayer` jako kořen a `playerLayer` v ní
-    /// viselas jako podvrstva. Struktura, kde si view kořenovou vrstvu vyrobí
-    /// samo a AVPlayerLayer do ní zavěsí, je uvnitř SwiftUI hostingu křehká:
-    /// **27. 07. 2026 přestal být obraz vidět, přestože se kód přehrávače
-    /// nezměnil ani řádkem.** Změřeno bylo, že položka je `readyToPlay`,
-    /// `videoRect` neprázdný, `isReadyForDisplay == true`, vrstva připojená,
-    /// `opacity 1`, nic ji nepřekrývá, přehrávání běží a zvuk je slyšet —
-    /// a přesto černo. Týž klip v QuickTime obraz ukázal, takže systém
-    /// v pořádku byl.
-    ///
-    /// Tohle je uspořádání, které pro `AVPlayerLayer` v AppKitu používají
-    /// Apple ukázky: žádná podvrstva, kterou by šlo ztratit.
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        playerLayer.videoGravity = .resizeAspect
-        playerLayer.backgroundColor = NSColor.black.cgColor
-        // Skrytá, dokud nemá co ukázat. Odkryje ji `readyObservation`.
-        playerLayer.isHidden = true
-        // Pořadí: nejdřív vrstva, pak `wantsLayer` — takhle se zakládá
-        // layer-hosting view.
-        layer = playerLayer
         wantsLayer = true
-        observeReadyForDisplay()
-    }
+        layer?.backgroundColor = NSColor.black.cgColor
 
-    /// ⚠️ **Bez tohohle zůstane náhled po startu černý, dokud se něco
-    /// nepřelayoutuje.** Odhaleno 27. 07. 2026 a stálo to hodinu hledání.
-    ///
-    /// Pořadí událostí při startu: SwiftUI view rozloží hned, ale klip se
-    /// načítá až po proměření pěti souborů, tedy o několik vteřin později.
-    /// Vrstva tak dostane obsah ve chvíli, kdy už žádné další rozložení
-    /// nepřijde — a bez něj se obraz neobjeví. Poznalo se to na tom, že
-    /// obraz naskočil přesně v okamžiku, kdy tlačítko „Okno vs celá
-    /// obrazovka" schovalo sidebar a osu, tedy při přestavbě layoutu.
-    ///
-    /// Proto se drží dokumentovaný postup: vrstva je skrytá, dokud
-    /// `isReadyForDisplay` nenaskočí, a teprve pak se odkryje.
-    ///
-    /// > „Use this property as an indicator of when best to show or
-    /// > animate-in an AVPlayerLayer into view. … This property is
-    /// > key-value observable."
-    ///
-    /// <https://developer.apple.com/documentation/avfoundation/avplayerlayer/isreadyfordisplay>
-    ///
-    /// Naskakuje znovu při každé výměně položky, takže to pokrývá i přepnutí
-    /// na jiný klip, ne jen první načtení.
-    private func observeReadyForDisplay() {
-        readyObservation = playerLayer.observe(\.isReadyForDisplay,
-                                               options: [.initial, .new]) { layer, _ in
-            let ready = layer.isReadyForDisplay
-            // KVO nemusí přijít na hlavním vlákně a vrstvami se jinde sahat nemá.
-            DispatchQueue.main.async {
-                CATransaction.begin()
-                CATransaction.setDisableActions(true)
-                layer.isHidden = !ready
-                CATransaction.commit()
-            }
-        }
+        playerView.controlsStyle = .none
+        playerView.videoGravity = .resizeAspect
+        playerView.autoresizingMask = [.width, .height]
+        playerView.frame = bounds
+        addSubview(playerView)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("nepoužívá se") }
 
-    // `layout()` se nepřepisuje: rámec kořenové vrstvy si drží AppKit sám
-    // a implicitní animace na ní nejsou. Dřív se tu `playerLayer.frame`
-    // nastavoval na `visibleBounds`, protože vrstva byla podvrstva a AppKit
-    // za ni neodpovídal.
+    override func layout() {
+        super.layout()
+        playerView.frame = bounds
+    }
 
     /// Průnik vlastní plochy s obsahem okna.
     ///
@@ -132,32 +106,15 @@ final class PlayerHostView: NSView {
         return clipped.isNull || clipped.isEmpty ? bounds : clipped
     }
 
-    /// ⚠️ **Ručně vytvořená vrstva `contentsScale` nedostane.** Výchozí hodnota
-    /// je 1,0, takže na Retina panelu má vrstva poloviční měřítko proti tomu,
-    /// v jakém se skládá okno. Timeline si to hlídá od kroku 2; přehrávač
-    /// z fáze 1 na to nikdy nesáhl.
-    ///
-    /// Dokud šlo video na displej jako samostatná vrstva, měřítko nikdo
-    /// neřešil. Jakmile se musí skládat přes GPU — a to je právě stav,
-    /// ve kterém je náhled černý — začne na něm záležet.
-    ///
-    /// <https://developer.apple.com/documentation/quartzcore/calayer/contentsscale>
-    private func applyContentsScale() {
-        playerLayer.contentsScale = window?.backingScaleFactor ?? 2
-    }
-
-    override func viewDidChangeBackingProperties() {
-        super.viewDidChangeBackingProperties()
-        applyContentsScale()
-    }
+    // `contentsScale` se tu už neřeší. Vlastní vrstvu nemáme a `AVPlayerView`
+    // si měřítko svých vrstev spravuje sám — přesně proto, aby to nikdo
+    // ručně nastavovat nemusel. (Timeline vlastní vrstvy má, tam to platí dál.)
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         link?.invalidate()
         link = nil
         guard window != nil else { return }
-
-        applyContentsScale()
 
         let displayLink = self.displayLink(target: self, selector: #selector(displayTick(_:)))
         displayLink.add(to: .main, forMode: .common)
@@ -214,7 +171,7 @@ final class PlayerHostView: NSView {
     /// protaženém okně výrazně. Srovnávat velikost okna místo tohohle by lhalo.
     /// https://developer.apple.com/documentation/avfoundation/avplayerlayer/videorect
     var videoBackingPixelSize: CGSize {
-        let rect = playerLayer.videoRect
+        let rect = playerView.videoBounds
         return CGSize(width: rect.width * backingScale, height: rect.height * backingScale)
     }
 
@@ -233,16 +190,13 @@ final class PlayerHostView: NSView {
     /// Druhá pojistka: okno může být „visible" a obraz přesto mimo.
     var videoVisibleFraction: Double {
         guard let content = window?.contentView, content !== self else { return 0 }
-        // ⚠️ `videoRect` je v souřadnicích VRSTVY. Od chvíle, kdy je
-        // `playerLayer` KOŘENOVOU vrstvou view, jsou její souřadnice totožné
-        // s `bounds` a žádný posun se nepřičítá.
+        // `videoBounds` je v souřadnicích `AVPlayerView`, a ten vyplňuje celé
+        // naše `bounds` — souřadnice tedy splývají a nic se neposouvá.
         //
-        // Dřív se tu posouvalo o `playerLayer.frame.origin`, protože vrstva
-        // byla podvrstva s vlastním rámcem. **Teď by ten posun byl chyba:**
-        // `frame` kořenové vrstvy je pozice view v NADŘAZENÉM view, takže
-        // by se přičetlo umístění přehrávače v okně a pojistka by hlásila
-        // nesmysl. Kdo sem někdy vrátí podvrstvu, musí vrátit i ten posun.
-        let rect = convert(playerLayer.videoRect, to: content)
+        // Dřív se tu přičítal počátek vrstvy, protože video kreslila naše
+        // vlastní `AVPlayerLayer`. Kdo se sem někdy vrátí s vlastní vrstvou,
+        // musí ten posun vrátit taky, jinak pojistka hlásí nesmysl.
+        let rect = convert(playerView.videoBounds, to: content)
         let area = rect.width * rect.height
         guard area > 0 else { return 0 }
         let clipped = rect.intersection(content.bounds)
@@ -330,14 +284,14 @@ struct PlayerView: NSViewRepresentable {
         // Konkrétní čísla nic neznamenají — SwiftUI rámec hned přepíše.
         // Jde jen o to, aby vrstva nezačínala na nule.
         let view = PlayerHostView(frame: NSRect(x: 0, y: 0, width: 640, height: 360))
-        view.playerLayer.player = player
+        view.playerView.player = player
         onHostView?(view)
         return view
     }
 
     func updateNSView(_ nsView: PlayerHostView, context: Context) {
-        if nsView.playerLayer.player !== player {
-            nsView.playerLayer.player = player
+        if nsView.playerView.player !== player {
+            nsView.playerView.player = player
         }
         // Po přepnutí na fullscreen a zpět může SwiftUI view přetvořit.
         // Bez tohohle by měření drželo starý PlayerHostView bez okna,

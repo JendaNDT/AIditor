@@ -19,6 +19,35 @@ final class TimelinePane: NSView {
     let documentView: TimelineDocumentView
     let rulerView: TimelineRulerView
     let headersView: TrackHeadersView
+    private let cornerView = CornerView()
+
+    /// Roh mezi pravítkem a hlavičkami. ŽÁDNÉ `draw(_:)` — jen vrstva
+    /// s barvou. Kreslené view tady dostane vadnou celookenní `ContentLayer`
+    /// (viz varování u `isFlipped` níž) — stalo se to `TimelinePane` i první
+    /// verzi tohohle rohu. Barva vrstvy se překládá přes
+    /// `performAsCurrentDrawingAppearance` a znovu při změně vzhledu,
+    /// stejný vzorec jako `TimelineDocumentView.applyColors()`.
+    private final class CornerView: NSView {
+        init() {
+            super.init(frame: .zero)
+            wantsLayer = true
+            applyColor()
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("nepoužívá se") }
+
+        private func applyColor() {
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                layer?.backgroundColor = TimelinePalette.chrome.cgColor
+            }
+        }
+
+        override func viewDidChangeEffectiveAppearance() {
+            super.viewDidChangeEffectiveAppearance()
+            applyColor()
+        }
+    }
 
     init(controller: TimelineController) {
         self.controller = controller
@@ -49,6 +78,7 @@ final class TimelinePane: NSView {
         addSubview(scrollView)
         addSubview(rulerView)
         addSubview(headersView)
+        addSubview(cornerView)
 
         // ⚠️ **Bez tohohle řádku notifikace nechodí vůbec.** Výchozí hodnota
         // je `false` a `NSScrollView` ji sám nezapíná. Chyba se navíc
@@ -80,12 +110,20 @@ final class TimelinePane: NSView {
     /// soustavě jako všechno ostatní na ose.
     override var isFlipped: Bool { true }
 
-    override func draw(_ dirtyRect: NSRect) {
-        // Roh mezi pravítkem a hlavičkami. Vlastní view by tam nedělal nic,
-        // co tenhle jeden řádek neudělá taky.
-        TimelinePalette.chrome.setFill()
-        dirtyRect.fill()
-    }
+    // ⚠️ **TimelinePane NESMÍ mít override `draw(_:)` — černí náhled videa.**
+    //
+    // Odhaleno 27. 07. 2026 diffem stromu vrstev: kořen `NSViewRepresentable`,
+    // který je `isFlipped` a zároveň kreslí, dostane na macOS 26 kreslicí
+    // `ContentLayer` s rámcem posunutým o zápornou pozici pane v okně —
+    // tady (0,-454 640×718), tedy přes CELÉ okno včetně přehrávače. Tmavá
+    // výplň osy se pak nakreslí přes video a náhled vypadá černý, přestože
+    // video vrstva obsah má. Přitom `TimelineRulerView` a `TrackHeadersView`
+    // kreslí úplně stejně a jejich vrstvy sedí — rozdíl je jen v tom, že
+    // nejsou kořenem representable. Roh proto kreslí samostatné `CornerView`.
+    //
+    // Pozor: rozhoduje EXISTENCE overridu, ne jeho obsah. Prázdné
+    // `draw(_:)` s okamžitým `return` vrstvu založí taky a náhled černí
+    // stejně — vyzkoušeno.
 
     override func layout() {
         super.layout()
@@ -93,6 +131,7 @@ final class TimelinePane: NSView {
         let headerWidth = TrackHeadersView.width
         let rulerHeight = TimelineRulerView.height
 
+        cornerView.frame = NSRect(x: 0, y: 0, width: headerWidth, height: rulerHeight)
         rulerView.frame = NSRect(x: headerWidth, y: 0,
                                  width: bounds.width - headerWidth, height: rulerHeight)
         headersView.frame = NSRect(x: 0, y: rulerHeight,

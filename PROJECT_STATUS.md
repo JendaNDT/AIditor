@@ -17,26 +17,11 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 
 ## ⏭️ Příští krok
 
-🔴 **Blokátor před krokem 4: náhled videa je ČERNÝ, a není to kód přehrávače.** Stav vyšetřování k 27. 07. 2026 pozdě večer, ať se dá navázat bez ztráty kontextu:
+✅ **Blokátor vyřešen: „černý náhled" nebyl vada přehrávače, video překrývala vadná kreslicí vrstva časové osy (27. 07. 2026 pozdě večer).** Rozhodovací experiment ze včerejšího zápisu proběhl a vyšel OBRÁCENĚ, než napovídal hlavní podezřelý: pipeline benchmarku (b) obraz nespustila — spouštěčem bylo skrytí chrome (a), protože s ním z hierarchie odchází osa. Bisekce po vrstvách a nakonec diff stromu vrstev černého a funkčního běhu ukázaly příčinu: **`TimelinePane` měl override `draw(_:)` a jeho kreslicí `ContentLayer` dostala na macOS 26 rámec přes celé okno** (0,-454 640×718 při vlastních 640×220) — tmavá výplň rohu osy se kreslila přes video. Detaily a poučení v sekci rizik.
 
-| vyloučeno | důkazem |
-|---|---|
-| AVFoundation pipeline | zvuk hraje, časomíra běží, položka `readyToPlay`, týž klip v QuickTime obraz ukáže |
-| naše `AVPlayerLayer` | vyměněná za `AVPlayerView` z AVKitu — černý úplně stejně |
-| SwiftUI sestava kolem | `--player-only` (okno JEN s přehrávačem, bez splitu, sidebaru, osy i transportu) — černý |
-| chybějící přelayoutování | maximalizace okna nepomůže; `isReadyForDisplay` hlídané přes KVO |
-| nulový rámec, seek po načtení, `contentsScale` | vyzkoušeno, bez účinku (u AVPlayerView už irelevantní) |
-| překryv, skrytý rodič, dvě instance, dvě vrstvy | změřeno, čisté |
+Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `draw` (barva přímo na vrstvě), `TimelinePane` už žádný override `draw(_:)` nemá. **Ověřeno sérií screenshotů běžící aplikace: obraz jede v plném layoutu se sidebarem, osou i transportem.** Diagnostické přepínače `--no-timeline` a `--player-only` i všechny sondy z vyšetřování jsou smazané; z vedlejších nálezů viz rizika (vadný záznam o `--player-only`, zbytečná výměna `AVPlayerLayer` → `AVPlayerView`).
 
-**Jediný stav, kdy obraz JE vidět:** průběh „Okno vs celá obrazovka" — naskočí při skrytí chrome, po návratu chrome zase zmizí. Ten tok ale dělá DVĚ věci naráz: (a) schová sidebar/osu/transport, (b) benchmark **znovu načte klip, připojí `AVPlayerItemVideoOutput`, seekne a spustí přehrávání**. Pozorované „hned, jak zmizí sloupec" je od (b) vzdálené jen 0,8 s — okem nerozlišitelné.
-
-**Rozhodovací experiment (zbývá provést):** stisknout **„Změřit náhled v okně"** — dělá (b) bez (a), chrome zůstává.
-- Obraz se objeví → spouštěčem je pipeline benchmarku (hlavní podezřelý: připojený video output) a oprava je zopakovat totéž v `load()`.
-- Zůstane černý → stisknout „Okno vs celá obrazovka" na aktuálním buildu s `AVPlayerView`: obraz → spouštěčem je opravdu skryté chrome; černý i tam → na tomhle buildu nefunguje nic a nejlevnější další krok je **restart Macu** (appka byla dnes ~15× zabita signálem uprostřed přehrávání; QuickTime funguje, takže systémová cesta je zdravá, ale per-app stav mediálních démonů restart rozsekne levněji než další kolo kódu).
-
-⚠️ **V `ContentView` jsou dva DOČASNÉ diagnostické přepínače na smazání:** `--no-timeline` a `--player-only`.
-
-Pak teprve **krok 4 stavby: `TimelineLayout` + `LayerDiff` v `TimelineModelu`, s testy.** Rozhodnutí, které vrstvy připojit z fondu, které vrátit a kterým jen přepsat rámec. Hotovo bude, až projde `swift test` — ve view se přitom nezmění nic. Je to jediný krok stavby, který má testy, a schválně ten, ve kterém se dá nejvíc ztratit.
+Teď **krok 4 stavby: `TimelineLayout` + `LayerDiff` v `TimelineModelu`, s testy.** Rozhodnutí, které vrstvy připojit z fondu, které vrátit a kterým jen přepsat rámec. Hotovo bude, až projde `swift test` — ve view se přitom nezmění nic. Je to jediný krok stavby, který má testy, a schválně ten, ve kterém se dá nejvíc ztratit.
 
 👀 **Kroky 2 a 3 chtějí koukanec.** Krok 2 potvrzený (27. 07. 2026, 21:08). U kroku 3 se očima ověřuje, že při vodorovném scrollu jede timecode s obsahem a jména stop stojí, a při svislém naopak.
 
@@ -162,6 +147,13 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 
 ## ⚠️ Známá rizika a korekce specifikace
 *(Detaily v `IMPLEMENTACNI_PLAN.md`, sekce 1.)*
+
+- **⚠️ Override `draw(_:)` na view uvnitř timeline pane vyrobí na macOS 26 kreslicí vrstvu přes CELÉ okno a překryje přehrávač.** Příčina „černého náhledu", rozřešeno 27. 07. 2026 diffem stromu vrstev (`layers_black` vs `layers_ok`): `TimelinePane` (640×220) dostal `ContentLayer` s rámcem (0,-454 640×718) — celé okno včetně titulkové lišty — a tmavou výplní osy zakryl `AVPlayerView`, který přitom celou dobu obsah MĚL (`FigVideoContainerLayer` 3840×2160 ve stromu seděl). Postižený byl kořen `NSViewRepresentable` i jeho nepřevrácený potomek (první verze `CornerView`); `TimelineRulerView` a `TrackHeadersView` (převrácené, nekořenové) kreslí bez potíží — přesná podmínka spouštěče známá není, tohle je změřený stav. Tři poučení:
+  1. **Rozhoduje EXISTENCE overridu, ne jeho obsah.** Prázdné `draw` s okamžitým `return` černí stejně — vyzkoušeno. Bisekce přes „vypnout tělo metody" proto viníka minula a našel ho až dump vrstev.
+  2. **Ploché barvy nekreslit, ale dávat vrstvě** (`wantsLayer` + `backgroundColor` + překlad přes `performAsCurrentDrawingAppearance`, vzorec `CornerView` v `TimelinePane.swift`).
+  3. Až příště „zmizí" obsah okna, **dumpni strom vrstev a hledej `ContentLayer` s rámcem větším než view** — série screenshotů z bisekce stála hodinu, diff stromů pět minut.
+
+  Vedlejší nálezy z téhož vyšetřování: dřívější záznam „`--player-only` je černý" byl **vadný** (na dnešním buildu holý přehrávač obraz ukazoval; spouštěčem byla vždy jen přítomnost osy) — nejspíš se tehdy pozoroval pauznutý přehrávač bez spuštěného přehrávání. A výměna vlastní `AVPlayerLayer` za `AVPlayerView` nebyla k opravě potřeba; `AVPlayerView` ale zůstává — dělá totéž a obsluhu vrstvy řeší za nás.
 
 - **⚠️ Měření doručených snímků je NASYCENÁ metrika a na velikost plochy je slepá.** Zjištěno 26. 07. 2026. Tři nezávislé důvody, každý sám o sobě stačí:
   1. `pollFrame` počítá **nejvýš jeden snímek na tik display linku**, takže na 60Hz panelu je strop 60 bez ohledu na to, co stroj zvládne.

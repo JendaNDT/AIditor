@@ -297,34 +297,8 @@ final class AppModel: ObservableObject {
 struct ContentView: View {
     @StateObject private var model = AppModel()
 
-    /// Diagnostický přepínač: `--no-timeline` postaví okno bez časové osy.
-    ///
-    /// Slouží k rozseknutí jediné otázky — jestli za černým náhledem stojí
-    /// timeline, nebo něco úplně jiného. Jeden build, dvě spuštění, žádné
-    /// hádání. Až bude odpověď, tenhle přepínač jde pryč.
-    static let timelineDisabled = CommandLine.arguments.contains("--no-timeline")
-
-    /// Diagnostický přepínač: `--player-only` postaví okno JEN s přehrávačem.
-    ///
-    /// Žádný `HSplitView`, žádný sidebar, žádná osa, žádný transport. Rozseká
-    /// poslední otázku u černého náhledu: jestli za to může naše SwiftUI
-    /// sestava, nebo přehrávač sám. Až bude odpověď, jde pryč.
-    static let playerOnly = CommandLine.arguments.contains("--player-only")
-
     var body: some View {
-        if Self.playerOnly {
-            playerOnlyProbe
-        } else {
-            fullLayout
-        }
-    }
-
-    /// Holý přehrávač na celé okno. Klip se vybere sám, přehrávání se spustí
-    /// mezerníkem — víc tu není schválně.
-    private var playerOnlyProbe: some View {
-        PlayerView(player: model.controller.player) { view in model.attach(view) }
-            .frame(minWidth: 900, minHeight: 560)
-            .task { await model.restoreAndScan() }
+        fullLayout
     }
 
     private var fullLayout: some View {
@@ -463,7 +437,7 @@ struct ContentView: View {
             // skrývání přes nulový rámec už jednou natáhlo layout na 4398
             // bodů a měření to nepoznalo (27. 07. 2026). `if` tuhle past
             // obchází celou; stav osy přežije v `AppModelu`.
-            if !model.chromeHidden && !Self.timelineDisabled {
+            if !model.chromeHidden {
                 Divider()
                 // Pevná výška, ne `idealHeight`. Přehrávač i osa jsou oba
                 // pružné `NSViewRepresentable`, takže se o volné místo

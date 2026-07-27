@@ -40,26 +40,21 @@ struct DisplayTick {
 
 /// NSView s `AVPlayerView` uvnitř a display linkem svázaným s displejem okna.
 ///
-/// ⚠️ **Video kreslí `AVPlayerView` z AVKitu, ne vlastní `AVPlayerLayer`.**
-/// Vlastní vrstva se v tomhle okně nevykreslovala. Zjištěno 27. 07. 2026
-/// a je to nejdražší chyba dne, tak ať to tu zůstane zapsané:
+/// ⚠️ **„Černý náhled" NIKDY nebyl vada přehrávače — video překrývala vadná
+/// kreslicí vrstva časové osy.** Rozřešeno 27. 07. 2026 diffem stromu vrstev:
+/// `TimelinePane` s overridem `draw(_:)` dostal na macOS 26 `ContentLayer`
+/// s rámcem přes CELÉ okno (0,-454 640×718 při vlastních 640×220) a tmavá
+/// výplň osy se kreslila přes video. Proto obraz naskočil po skrytí chrome
+/// (osa zmizela z hierarchie i s vadnou vrstvou) a zmizel s jejím návratem —
+/// a proto všechny hodnoty přehrávače byly celou dobu správné: položka
+/// `readyToPlay`, `presentationSize` 3840×2160, `isReadyForDisplay == true`,
+/// zvuk hrál. Detaily a oprava v `TimelinePane.swift`.
 ///
-/// - Obraz byl vidět **jen když kolem přehrávače nic nebylo** — po skrytí
-///   sidebaru a časové osy naskočil, po jejich návratu zase zmizel.
-/// - Zvětšení okna, výběr jiného klipu ani nové načtení nepomohly, takže
-///   to nebylo chybějící přelayoutování.
-/// - Všechny měřitelné hodnoty přitom byly správné: položka `readyToPlay`,
-///   `presentationSize` 3840×2160, vrstva připojená, `opacity 1`,
-///   `videoRect` neprázdný, `isReadyForDisplay == true`, nic ji
-///   nepřekrývalo, přehrávání běželo a zvuk byl slyšet.
-/// - Týž klip v QuickTime obraz ukázal, takže systém byl v pořádku.
-///
-/// Sedí to na poznámku z fáze 1: dokud je náhled holé video a nic přes něj
-/// neleží, jde na displej jako samostatná vrstva a GPU se skoro nezapojí.
-/// Jakmile se musí skládat, naše ručně postavená vrstva nevykreslila nic.
-///
-/// `AVPlayerView` tuhle cestu řeší sám. Platíme za to tím, že video už
-/// není v naší vrstvě — proto `videoBounds` místo `videoRect`.
+/// Video kreslí `AVPlayerView` z AVKitu. Vlastní `AVPlayerLayer` byla při
+/// hledání téhle chyby vyměněna v domnění, že je vadná — nebyla, ale
+/// `AVPlayerView` už tu zůstává: dělá totéž a řeší za nás obsluhu vrstvy.
+/// Platíme za to tím, že video není v naší vrstvě — proto `videoBounds`
+/// místo `videoRect`.
 ///
 /// <https://developer.apple.com/documentation/avkit/avplayerview>
 final class PlayerHostView: NSView {
@@ -272,17 +267,10 @@ struct PlayerView: NSViewRepresentable {
     var onHostView: ((PlayerHostView) -> Void)?
 
     func makeNSView(context: Context) -> PlayerHostView {
-        // ⚠️ Nenulový počáteční rámec, ne `.zero`.
-        //
-        // Stopa k černému náhledu (27. 07. 2026): obraz se objeví ve chvíli,
-        // kdy tlačítko „Okno vs celá obrazovka" překope layout. Vrstva tedy
-        // obsah má — jen se nezobrazí, dokud nepřijde přelayoutování.
-        // `AVPlayerLayer` založená v nulovém rámci je na tohle známý kandidát:
-        // vznikne s prázdnou plochou a další nastavení rámce už ji k prvnímu
-        // vykreslení nepobídne.
-        //
-        // Konkrétní čísla nic neznamenají — SwiftUI rámec hned přepíše.
-        // Jde jen o to, aby vrstva nezačínala na nule.
+        // Nenulový počáteční rámec, ne `.zero` — pozůstatek honu na černý
+        // náhled (skutečná příčina byla jinde, viz komentář nahoře), ale
+        // vrstva založená v nenulovém rámci nikdy nebyla na škodu, tak
+        // zůstává. Konkrétní čísla nic neznamenají, SwiftUI rámec přepíše.
         let view = PlayerHostView(frame: NSRect(x: 0, y: 0, width: 640, height: 360))
         view.playerView.player = player
         onHostView?(view)

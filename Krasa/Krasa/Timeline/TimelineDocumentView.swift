@@ -71,8 +71,11 @@ final class TimelineDocumentView: NSView {
     init(controller: TimelineController) {
         self.controller = controller
         super.init(frame: .zero)
+        // Jen `wantsLayer` — backing vrstvu si vyrobí AppKit a podvrstvy se
+        // do ní věší stejně. (Dřívější `layer = CALayer()` bylo při honu na
+        // černý náhled 27. 07. 2026 prověřeno a bylo nevinné; zůstává ale
+        // jednodušší varianta.)
         wantsLayer = true
-        layer = CALayer()
         layer?.addSublayer(backgroundLayer)
         rebuildLanes()
     }

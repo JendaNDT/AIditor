@@ -304,7 +304,30 @@ struct ContentView: View {
     /// hádání. Až bude odpověď, tenhle přepínač jde pryč.
     static let timelineDisabled = CommandLine.arguments.contains("--no-timeline")
 
+    /// Diagnostický přepínač: `--player-only` postaví okno JEN s přehrávačem.
+    ///
+    /// Žádný `HSplitView`, žádný sidebar, žádná osa, žádný transport. Rozseká
+    /// poslední otázku u černého náhledu: jestli za to může naše SwiftUI
+    /// sestava, nebo přehrávač sám. Až bude odpověď, jde pryč.
+    static let playerOnly = CommandLine.arguments.contains("--player-only")
+
     var body: some View {
+        if Self.playerOnly {
+            playerOnlyProbe
+        } else {
+            fullLayout
+        }
+    }
+
+    /// Holý přehrávač na celé okno. Klip se vybere sám, přehrávání se spustí
+    /// mezerníkem — víc tu není schválně.
+    private var playerOnlyProbe: some View {
+        PlayerView(player: model.controller.player) { view in model.attach(view) }
+            .frame(minWidth: 900, minHeight: 560)
+            .task { await model.restoreAndScan() }
+    }
+
+    private var fullLayout: some View {
         HSplitView {
             sidebar
                 .frame(minWidth: model.chromeHidden ? 0 : 260,

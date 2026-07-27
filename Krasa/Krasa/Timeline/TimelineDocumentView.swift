@@ -151,6 +151,19 @@ final class TimelineDocumentView: NSView {
     /// Přehrávací hlava — svislá čára přes celou výšku dokumentu, nad klipy.
     private let playheadLayer = CALayer()
 
+    // MARK: Overlay tažení (krok 7)
+    //
+    // Během tažení se do modelu NEZAPISUJE (`TimelineInteraction`), takže
+    // klipové vrstvy stojí na původních místech a hýbe se jen tenhle náhled.
+    // Duch = obrys s poloprůhlednou výplní; při neplatném cíli červeně.
+
+    private let dragOverlay = CALayer()
+    private let ghostLayer = CALayer()
+    /// Druhý duch pro roll — hýbou se dva klipy naráz.
+    private let partnerGhostLayer = CALayer()
+    /// Svislá vodicí čára na kandidátovi, na kterého se přichytilo.
+    private let snapGuideLayer = CALayer()
+
     init(controller: TimelineController) {
         self.controller = controller
         super.init(frame: .zero)
@@ -161,7 +174,18 @@ final class TimelineDocumentView: NSView {
         wantsLayer = true
         layer?.addSublayer(backgroundLayer)
         layer?.addSublayer(clipsContainer)
+        layer?.addSublayer(dragOverlay)
         layer?.addSublayer(playheadLayer)
+
+        for ghost in [ghostLayer, partnerGhostLayer] {
+            ghost.cornerRadius = 3
+            ghost.borderWidth = 1.5
+            ghost.isHidden = true
+            dragOverlay.addSublayer(ghost)
+        }
+        snapGuideLayer.isHidden = true
+        dragOverlay.addSublayer(snapGuideLayer)
+
         rebuildLanes()
     }
 
@@ -235,6 +259,7 @@ final class TimelineDocumentView: NSView {
         }
 
         clipsContainer.frame = bounds
+        dragOverlay.frame = bounds
         refreshClips()
         updatePlayhead()
     }
@@ -393,5 +418,160 @@ final class TimelineDocumentView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         applyContentsScale()
+    }
+
+    // MARK: - Cesta události (krok 7)
+    //
+    // View jen předává souřadnice a kreslí — CO se táhne, KAM to smí a JAK
+    // dopadne počítá `TimelineInteraction` a je to otestované. Undo se
+    // zapisuje dvěma způsoby a není to nedůslednost: u `move` neexistuje
+    // legální mezistav, stačí jeden `record()` před zápisem; u trimu a rollu
+    // jsou mezistavy legální, proto `beginInteraction`/`endInteraction`.
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        let point = convert(event.locationInWindow, from: nil)
+
+        guard let hit = controller.geometry.hitTest(x: point.x, y: point.y,
+                                                    in: controller.project.timeline) else {
+            if !controller.selection.isEmpty { controller.selection = [] }
+            return
+        }
+
+        if controller.selection != [hit.clipID] { controller.selection = [hit.clipID] }
+        controller.interaction.begin(hit: hit, in: controller.project,
+                                     playhead: controller.playhead)
+
+        // Roll a slip mají modifikátory až v kroku 9; trim vzniká ze zóny.
+        switch controller.interaction.drag?.kind {
+        case .trimStart, .trimEnd, .roll:
+            controller.undo.beginInteraction(controller.project)
+        default:
+            break
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard controller.interaction.isDragging else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        let preview = controller.interaction.preview(
+            atX: point.x, y: point.y,
+            in: controller.project,
+            snapping: !event.modifierFlags.contains(.shift))
+        updateDragOverlay(preview)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard controller.interaction.isDragging else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        let kind = controller.interaction.drag?.kind
+
+        let before = controller.project
+        var updated = controller.project
+        let changed = (try? controller.interaction.commit(
+            atX: point.x, y: point.y,
+            into: &updated,
+            snapping: !event.modifierFlags.contains(.shift))) ?? false
+
+        switch kind {
+        case .move, .slip:
+            if changed {
+                controller.undo.record(before)
+                controller.project = updated
+            }
+        case .trimStart, .trimEnd, .roll:
+            if changed { controller.project = updated }
+            // Když se nic nezměnilo, krok nevznikne — hlídá si to stack sám.
+            controller.undo.endInteraction(updated)
+        case nil:
+            break
+        }
+        updateDragOverlay(nil)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        // Escape ruší rozjeté tažení. Model se během tažení nesahal, takže
+        // stačí zapomenout stav interakce a základnu undo.
+        if event.keyCode == 53, controller.interaction.isDragging {
+            controller.interaction.cancel()
+            _ = controller.undo.cancelInteraction()
+            updateDragOverlay(nil)
+            return
+        }
+
+        if event.modifierFlags.contains(.command),
+           event.charactersIgnoringModifiers?.lowercased() == "z" {
+            if event.modifierFlags.contains(.shift) {
+                controller.redoStep()
+            } else {
+                controller.undoStep()
+            }
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    // MARK: - Kreslení náhledu tažení
+
+    /// Přepíše duchy podle `DragPreview`, `nil` všechno schová.
+    private func updateDragOverlay(_ preview: DragPreview?) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+
+        guard let preview else {
+            ghostLayer.isHidden = true
+            partnerGhostLayer.isHidden = true
+            snapGuideLayer.isHidden = true
+            return
+        }
+
+        let timeline = controller.project.timeline
+        let geometry = controller.geometry
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let accent = preview.isValid ? TimelinePalette.clipSelectedStroke
+                                         : TimelinePalette.playhead
+            ghostLayer.borderColor = accent.cgColor
+            ghostLayer.backgroundColor = accent.withAlphaComponent(0.22).cgColor
+            partnerGhostLayer.borderColor = accent.cgColor
+            partnerGhostLayer.backgroundColor = accent.withAlphaComponent(0.12).cgColor
+            snapGuideLayer.backgroundColor = TimelinePalette.clipSelectedStroke.cgColor
+        }
+
+        ghostLayer.isHidden = false
+        ghostLayer.frame = ghostFrame(trackID: preview.trackID,
+                                      start: preview.start, duration: preview.duration,
+                                      timeline: timeline, geometry: geometry)
+
+        if let partner = preview.partner {
+            partnerGhostLayer.isHidden = false
+            partnerGhostLayer.frame = ghostFrame(trackID: preview.trackID,
+                                                 start: partner.start, duration: partner.duration,
+                                                 timeline: timeline, geometry: geometry)
+        } else {
+            partnerGhostLayer.isHidden = true
+        }
+
+        if let snapped = preview.snappedTo {
+            snapGuideLayer.isHidden = false
+            let x = geometry.x(for: snapped.frame)
+            snapGuideLayer.frame = CGRect(x: x - 0.5, y: 0, width: 1, height: bounds.height)
+        } else {
+            snapGuideLayer.isHidden = true
+        }
+    }
+
+    private func ghostFrame(trackID: TrackID, start: Frames, duration: Frames,
+                            timeline: Timeline, geometry: TimelineGeometry) -> CGRect {
+        guard let index = timeline.tracks.firstIndex(where: { $0.id == trackID }) else {
+            return .zero
+        }
+        return CGRect(x: geometry.x(for: start),
+                      y: geometry.y(ofTrackAt: index, in: timeline),
+                      width: geometry.width(of: duration),
+                      height: geometry.height(of: timeline.tracks[index].kind))
     }
 }

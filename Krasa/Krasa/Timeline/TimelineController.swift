@@ -78,6 +78,18 @@ final class TimelineController: ObservableObject {
         if playhead != clamped { playhead = clamped }
     }
 
+    // MARK: - Undo (krok 7)
+
+    func undoStep() {
+        guard let previous = undo.undo(current: project) else { return }
+        project = previous
+    }
+
+    func redoStep() {
+        guard let next = undo.redo(current: project) else { return }
+        project = next
+    }
+
     // MARK: - Import naskenovaných klipů (krok 5)
 
     /// Postaví projekt znovu z naskenovaných klipů: každý za konec

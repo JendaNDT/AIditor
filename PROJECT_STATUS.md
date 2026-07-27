@@ -1,10 +1,10 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 27. 07. 2026*
+*Naposled aktualizováno: 28. 07. 2026*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), fáze 3 rozjetá — přehrávač už hraje celou osu.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (188 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. Kroky 6–9 čekají na ověření interakcí rukou; vlna na klipu je ověřená screenshotem.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), fáze 3 rozjetá — přehrávač hraje celou osu VČETNĚ rychlostních křivek.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (208 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. Kroky 6–9 čekají na ověření interakcí rukou; vlna na klipu je ověřená screenshotem.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -63,7 +63,18 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   **Vazba hlava ↔ přehrávač z kroku 6 se tím ZJEDNODUŠILA:** snímek osy je přímo čas kompozice (`CompositionBuilder.time/frame`), per-klipové mapování přes assety je smazané. Sidebar dál umí sólo poslech zdroje (`PlayerContent.solo`) kvůli kontrole klipu a benchmarkům; klik do pravítka vrací přehrávač na osu.
 
-  Rampy zatím hrají 1×. **Další moduly fáze 3:** (2) aplikace `SpeedRampEngine` segmentace na klip s rampou — `scaleTimeRange` pozpátku, mez skoku 1,5 %, `.timeDomain` korekce výšky; (3) `SpeedRampEditor` UI se žlutou zónou pod `výstupFps / zdrojFps` (limit per klip ze změřené frekvence) a zobrazením `limitedByFrameRate`. „Hotovo když: nakreslíš křivku myší, náhled ji ukáže, zvuk drží."
+✅ **Modul 2 — rychlostní křivky hrají v kompozici (28. 07. 2026).** Klip s rampou se v kompozici škáluje po úsecích (`scaleTimeRange` POZPÁTKU — vzorec ověřený nástrojem `Ramp` ve Spiku 0), mez skoku rychlosti 1,5 %, `.timeDomain` korekce výšky na player itemu. Rozložení práce:
+
+  - **Uzly rampy jsou kotvené ve ZDROJOVÉM čase** (rozhodnutí z návrhu modelu: zpomalení má po trimu zůstat „na hodu kyticí"), kdežto `SpeedRampEngine` počítá po výstupní ose. Most: engine umí `anchoredToSource(_:)` (výstupní ofsety dopočítá z průměrné rychlosti intervalů — táž kvadratura jako integrální tabulka, takže uzly leží na svých zdrojových pozicích přesně) a **okénkovou segmentaci** — klip po trimu pokrývá jen výsek křivky. **53 testů enginu.**
+  - **`TimelineModel` závisí na `SpeedRampEngine`** (oba čistý Swift, dál se testují i na Linuxu). Vyměněný vnitřek `sourceConsumption`/`sourceOffset` přesně podle plánu — operace se nemusely přepisovat. Meze trimu (`remainingSourceFrames`, `availableSourceFramesBefore`) se u rampy přepočítávají rychlostí křivky. **`trimStart` a `slip` přešly na `sourceOffset`** — dosavadní vzorec `sourceStart + sourceTime(delta)` platil jen při 1×. Nová operace `setSpeedRamp` (link-aware — dvojče dostane tutéž křivku, jinak se rozejde obraz se zvukem; zrychlení za konec souboru operace odmítne), validace `invalidSpeedRamp`, `RampPlaybackPlan` — segmentace v celých tickách (kumulativní hranice, poslední úsek dotažený na spotřebu). **208 testů modelu.**
+  - Křivka enginu se staví nad celou doménou zdroje assetu (před prvním uzlem a za posledním jede krajní rychlostí), takže pozice klipu na křivce je prosté `outputTime(atSource: sourceStart)` a trim/slip/split nemají zvláštní případy.
+  - **Zaokrouhlení na hranici sekund→ticky: dolů s tolerancí 1e-3 ticku.** Referenční hodnota drží: klasický ramp přes 5 s spotřebuje **přesně 281 250 ticků** (3,125 s). Split rampovaného klipu uprostřed zpomalení smí kvantizací `sourceStart` ujet o jednotky ticků (1 tick × 1/rychlost, u 0,25× až 4 ticky = 44 µs) — testy to dokumentují, proti snímku (3000 ticků) je to nic.
+  - **Ověřeno skriptem na reálném klipu** (dva klipy na stopě, první s rampou): délka kompozice na tick přesná (240 snímků = 720 000 ticků), 150 úseků navazuje beze zbytku, druhý klip začíná přesně na 5 s se správným zdrojem — škálování pozpátku ho neposunulo — a uprostřed zpomalení je rychlost 0,2500×.
+  - **Dočasný ovladač pro koukanec:** kontextové menu klipu → „Zpomalit 0,25× (testovací rampa)" / „Zrušit zpomalení". Křivka se natáhne tak, aby klip zůstal stejně dlouhý (kotví se přes 62,5 % spotřeby). Zmizí, až modul 3 přinese editor.
+
+  👀 **Koukanec modulu 2:** na importovaném klipu vyvolej testovací rampu (pravé tlačítko), pusť přehrávání přes klip — má být vidět plynulé zpomalení do 0,25× a zpět, **zvuk bez lupanců a bez „mickey-mouse" výšky** (`.timeDomain` drží formanty; na 1× úsecích nedělá nic). ⌘Z rampu vrátí. Pozor: obraz se zpomalí i tam, kde zdroj nemá dost snímků (60fps zdroj na 0,25× při 30fps výstupu duplikuje ~13,5 % snímků — viz pravidlo o hloubce zpomalení); žlutá zóna v UI je až modul 3.
+
+  **Zbývá modul 3:** `SpeedRampEditor` UI se žlutou zónou pod `výstupFps / zdrojFps` (limit per klip ze změřené frekvence) a zobrazením `limitedByFrameRate`. „Hotovo když: nakreslíš křivku myší, náhled ji ukáže, zvuk drží."
 
 👀 **Kroky 2 a 3 chtějí koukanec.** Krok 2 potvrzený (27. 07. 2026, 21:08). U kroku 3 se očima ověřuje, že při vodorovném scrollu jede timecode s obsahem a jména stop stojí, a při svislém naopak.
 
@@ -124,7 +135,7 @@ Pak zbytek **`TimelineView` v AppKitu — poslední kus fáze 2.** Co v něm doo
 Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších podmínek, než jaké budou v praxi — závěr je proto konzervativní. Otevřená položka „přeměřit náhled na celou obrazovku" je tím uzavřená.
 
 ## ✅ Hotovo
-- **`SpeedRampEngine` — první modul, zkompilovaný a otestovaný.** **41 testů**, 0 selhání, Swift 6.3.3. Bézier easing, integrace rychlostní křivky, inverzní mapování pro scrubbing, segmentace pro `scaleTimeRange` zarovnaná na hranice snímků a řízená mezí skoku rychlosti, `Codable` pro `project.json`. Ověřeno proti nezávislé Python referenci na analyticky spočitatelných případech.
+- **`SpeedRampEngine` — první modul, zkompilovaný a otestovaný.** **53 testů**, 0 selhání, Swift 6.3.3. Bézier easing, integrace rychlostní křivky, inverzní mapování pro scrubbing, segmentace pro `scaleTimeRange` zarovnaná na hranice snímků a řízená mezí skoku rychlosti, `Codable` pro `project.json`. Ověřeno proti nezávislé Python referenci na analyticky spočitatelných případech.
 - **`MediaProbe` — sonda na vlastnosti klipů.** Rozlišení, orientace, kodeky, fps, edit list a hlavně **skutečné délky vzorků přes `AVSampleCursor`** (fallback `AVAssetReader`). Rozlišuje zaokrouhlení / zahozený snímek / proměnlivé časování. Naměřené hodnoty v `MediaProbe/RESULTS.md`. První kód, který sáhl na AVFoundation.
 - **`Flatten` — zploštění VFR na pevnou snímkovou mřížku.** Krok 3 spiku. Cílová frekvence z měřeného modu, čtení přes `AVComposition` (edit list), zero-order hold převzorkování, ProRes 422 Proxy v plném rozlišení, zvuk LPCM. **Ověřeno na třech klipech: všechny `CFR` s kolísáním 0,00 %, synchron tlesknutí 0,00 ms, kódování 257–426 fps.**
 - **`Ramp` — plynulá rychlostní křivka segmentací.** Krok 4 spiku, jádro produktu. `scaleTimeRange` pozpátku, časy kumulativně v celých tickách, segmentace podle meze skoku rychlosti (výchozí 1,5 %), korekce výšky `.timeDomain`. **Ověřeno na třech klipech: `CFR` 30 fps, kolísání 0,00 %, délky sedí do jednoho snímku, žádné lupance ani při 545 segmentech.**
@@ -145,7 +156,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
   **GPU baseline pro fáze 2–3.** Holý náhled 4K/60 na popředí, ať v okně nebo na celé obrazovce, stojí **pod 0,3 % GPU rezidence** — video jde na displej jako samostatná vrstva a GPU se skoro nezapojí. S aplikací na pozadí, kdy se skládat musí, to skočí na ~10 %. Až se ve fázi 3 přidá vlastní compositor nebo efekty, přepne se to natrvalo do té dražší cesty; tohle jsou hodnoty, proti kterým se to pozná. Podrobnosti v sekci rizik.
 
   Dřívější zápis „okno 1280×1192 px" byla plocha **vrstvy** v backing pixelech, ne okna ani obrazu. Samotný obraz měl 1280×720 px.
-- **`TimelineModel` — logika, geometrie a interakce časové osy.** **188 testů, 0 selhání.** Čistý Swift bez AVFoundation a bez AppKitu, takže se přeloží a otestuje i na Linuxu — díky tomu byl ověřený dřív, než se sáhlo na UI.
+- **`TimelineModel` — logika, geometrie a interakce časové osy.** **208 testů, 0 selhání.** Čistý Swift bez AVFoundation a bez AppKitu (jediná závislost: `SpeedRampEngine`, také čistý Swift), takže se přeloží a otestuje i na Linuxu — díky tomu byl ověřený dřív, než se sáhlo na UI.
   - **Datový model:** dvě časové soustavy s jedinou hranicí mezi nimi (`Frames` na ose, `SourceTime` ve zdroji), deset invariantů kontrolovaných po každé operaci, kompletní sada operací (vložení, přepis, ripple, split, join, trim, slip, roll, vazba obrazu na zvuk), dotazy na meze tažení a snapshot undo nad celým projektem.
   - **`TimelineGeometry`:** mapování čas↔pixel při zoomu, viditelný rozsah binárním půlením, rozvržení stop, hit testing s okraji klipů, přichytávání s pořadím síly kandidátů. Šířka úchopu a tolerance přichytávání jsou v **bodech**, ne ve snímcích — jinak by po odzoomování nešel chytit okraj klipu a po přiblížení by přichytávání skákalo přes půl obrazovky.
   - **`TimelineInteraction`:** stavový automat tažení. Určení druhu podle toho, co je pod myší, průběžný náhled s přichytáváním a kontrolou legálnosti, meze trimu a rollu, výsledná operace na modelu. Během tažení se do modelu nezapisuje.
@@ -159,14 +170,14 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 2 — timeline.** `TimelineModel` hotový (188 testů), view má napsaných všech deset kroků. Zbývá koukanec na interakce 6–10 a výkonový test (1000 klipů, scroll bez vypadlého tiku).
+- **Fáze 2 — timeline.** `TimelineModel` hotový (208 testů), view má napsaných všech deset kroků. Zbývá koukanec na interakce 6–10 a výkonový test (1000 klipů, scroll bez vypadlého tiku).
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
 ### Cesta k v0.5 „MVP nula" (~6 měsíců při 30 h/týdně)
 - **F0** Spike 0 — ověření speed rampingu — ✅ **HOTOVO 26. 07. 2026**, hlavní riziko zavřené
 - **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
-- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (188 testů), všech deset kroků view napsaných; zbývá koukanec interakcí a výkonový test**
+- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (208 testů), všech deset kroků view napsaných; zbývá koukanec interakcí a výkonový test**
 - **F3** Speed ramping ostrý *(3 týdny)*
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)*
 - **F5** Projekt, autosave, undo, export *(3 týdny)*
@@ -289,7 +300,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 ### Kód
 - `SpeedRampEngine/` – **matematika rychlostní křivky.** Čistý Swift, žádné závislosti
   - `Sources/SpeedRampEngine/SpeedRampEngine.swift` – křivka, mapování, segmentace
-  - `Tests/SpeedRampEngineTests/SpeedRampEngineTests.swift` – **41 testů**
+  - `Tests/SpeedRampEngineTests/SpeedRampEngineTests.swift` – **53 testů**
   - `README.md` – API, naměřené hodnoty, volba jemnosti segmentace
   - `ref_speedramp.py` – Python reference, proti které se to ověřovalo
 - `TimelineModel/` – **logika časové osy.** Čistý Swift, žádné závislosti, přeloží se i na Linuxu
@@ -303,7 +314,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
   - `Sources/TimelineModel/Interaction.swift` – stavový automat tažení: náhled, meze, výsledná operace
   - `Sources/TimelineModel/Timecode.swift` – popisky pravítka: `HH:MM:SS:FF` a volba rozteče rysek
   - `Sources/TimelineModel/Layout.swift` – rozvržení viditelných klipů (`Placement`) a recyklační diff vrstev
-  - `Tests/TimelineModelTests/` – **188 testů**
+  - `Tests/TimelineModelTests/` – **208 testů**
   - `README.md` – API, dvě časové soustavy, co se snadno rozbije
 - `Krasa/Krasa/Timeline/` – **timeline v appce**
   - `TimelineController.swift` – vlastník stavu: projekt, undo, interakce (a v ní **jediná kopie geometrie**), playhead, výběr

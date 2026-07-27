@@ -114,7 +114,7 @@ Pět klipů ze Samsungu, 4K HEVC. Čísla a metoda v `MediaProbe/RESULTS.md`.
 ## Hotové moduly
 
 ### `SpeedRampEngine/`
-Matematika rychlostní křivky. Čistý Swift, žádné závislosti. **41 testů, ověřeno.**
+Matematika rychlostní křivky. Čistý Swift, žádné závislosti. **53 testů, ověřeno.**
 
 ```swift
 let ramp = try SpeedRamp.classicSlowMotion(sourceDuration: 8.0, slowSpeed: 0.25)
@@ -127,8 +127,12 @@ Referenční hodnota: ramp 1,0 → 0,25 → 1,0 přes 5 s spotřebuje **přesně
 Testy pustíš přes `cd SpeedRampEngine && swift test`.
 
 ### `TimelineModel/`
-Logika, geometrie a interakce časové osy. Čistý Swift, žádné závislosti, **žádné
-AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **143 testů, ověřeno.**
+Logika, geometrie a interakce časové osy. Čistý Swift, jediná závislost
+`SpeedRampEngine` (také čistý Swift), **žádné AVFoundation ani AppKit** —
+přeloží se a otestuje i na Linuxu. **208 testů, ověřeno.** Od fáze 3 umí
+`sourceConsumption`/`sourceOffset` rychlostní křivku (uzly kotvené ve
+zdrojovém čase) a `rampPlaybackPlan` vydává segmentaci v celých tickách
+pro `scaleTimeRange`.
 
 ```swift
 var project = Project.empty()                        // V1 + A1 + A2

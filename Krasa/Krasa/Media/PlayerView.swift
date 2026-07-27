@@ -132,11 +132,32 @@ final class PlayerHostView: NSView {
         return clipped.isNull || clipped.isEmpty ? bounds : clipped
     }
 
+    /// ⚠️ **Ručně vytvořená vrstva `contentsScale` nedostane.** Výchozí hodnota
+    /// je 1,0, takže na Retina panelu má vrstva poloviční měřítko proti tomu,
+    /// v jakém se skládá okno. Timeline si to hlídá od kroku 2; přehrávač
+    /// z fáze 1 na to nikdy nesáhl.
+    ///
+    /// Dokud šlo video na displej jako samostatná vrstva, měřítko nikdo
+    /// neřešil. Jakmile se musí skládat přes GPU — a to je právě stav,
+    /// ve kterém je náhled černý — začne na něm záležet.
+    ///
+    /// <https://developer.apple.com/documentation/quartzcore/calayer/contentsscale>
+    private func applyContentsScale() {
+        playerLayer.contentsScale = window?.backingScaleFactor ?? 2
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        applyContentsScale()
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         link?.invalidate()
         link = nil
         guard window != nil else { return }
+
+        applyContentsScale()
 
         let displayLink = self.displayLink(target: self, selector: #selector(displayTick(_:)))
         displayLink.add(to: .main, forMode: .common)

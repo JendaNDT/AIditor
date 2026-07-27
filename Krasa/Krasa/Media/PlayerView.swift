@@ -47,26 +47,37 @@ final class PlayerHostView: NSView {
 
     private var link: CADisplayLink?
 
+    /// ⚠️ **`AVPlayerLayer` je vrstvou view, ne její podvrstvou.**
+    ///
+    /// Původně tu byla vlastní `CALayer` jako kořen a `playerLayer` v ní
+    /// viselas jako podvrstva. Struktura, kde si view kořenovou vrstvu vyrobí
+    /// samo a AVPlayerLayer do ní zavěsí, je uvnitř SwiftUI hostingu křehká:
+    /// **27. 07. 2026 přestal být obraz vidět, přestože se kód přehrávače
+    /// nezměnil ani řádkem.** Změřeno bylo, že položka je `readyToPlay`,
+    /// `videoRect` neprázdný, `isReadyForDisplay == true`, vrstva připojená,
+    /// `opacity 1`, nic ji nepřekrývá, přehrávání běží a zvuk je slyšet —
+    /// a přesto černo. Týž klip v QuickTime obraz ukázal, takže systém
+    /// v pořádku byl.
+    ///
+    /// Tohle je uspořádání, které pro `AVPlayerLayer` v AppKitu používají
+    /// Apple ukázky: žádná podvrstva, kterou by šlo ztratit.
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        wantsLayer = true
-        layer = CALayer()
-        layer?.backgroundColor = NSColor.black.cgColor
         playerLayer.videoGravity = .resizeAspect
-        layer?.addSublayer(playerLayer)
+        playerLayer.backgroundColor = NSColor.black.cgColor
+        // Pořadí: nejdřív vrstva, pak `wantsLayer` — takhle se zakládá
+        // layer-hosting view.
+        layer = playerLayer
+        wantsLayer = true
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("nepoužívá se") }
 
-    override func layout() {
-        super.layout()
-        // Vrstva se nesmí animovat při změně velikosti okna, jinak obraz „plave".
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        playerLayer.frame = visibleBounds
-        CATransaction.commit()
-    }
+    // `layout()` se nepřepisuje: rámec kořenové vrstvy si drží AppKit sám
+    // a implicitní animace na ní nejsou. Dřív se tu `playerLayer.frame`
+    // nastavoval na `visibleBounds`, protože vrstva byla podvrstva a AppKit
+    // za ni neodpovídal.
 
     /// Průnik vlastní plochy s obsahem okna.
     ///
@@ -128,8 +139,11 @@ final class PlayerHostView: NSView {
 
     /// Plocha vrstvy v backing pixelech — tolik pixelů GPU doopravdy skládá.
     /// Body samy o sobě nestačí: na Retina panelu je jich čtyřikrát míň.
-    /// Počítá se z `visibleBounds`, ne z `bounds` — vrstva má od zavedení
-    /// ořezu právě tenhle rámec.
+    ///
+    /// Bere se `visibleBounds`, ne `bounds`: vrstva sice od chvíle, kdy je
+    /// kořenová, kopíruje celé `bounds`, ale měřit se má jen ta část, která
+    /// leží uvnitř okna. Jinak by se do čísla započítalo i to, co je mimo
+    /// obrazovku — právě ta chyba, kvůli které `visibleBounds` vzniklo.
     var layerBackingPixelSize: CGSize {
         let rect = visibleBounds
         return CGSize(width: rect.width * backingScale, height: rect.height * backingScale)
@@ -159,14 +173,16 @@ final class PlayerHostView: NSView {
     /// Druhá pojistka: okno může být „visible" a obraz přesto mimo.
     var videoVisibleFraction: Double {
         guard let content = window?.contentView, content !== self else { return 0 }
-        // `videoRect` je v souřadnicích VRSTVY, `convert(_:to:)` čeká souřadnice
-        // view. Dokud byl `playerLayer.frame == bounds`, obojí splývalo. Od
-        // zavedení `visibleBounds` má vrstva nenulový počátek — a to přesně
-        // v případě, kvůli kterému tahle pojistka vznikla. Bez posunu by tady
-        // vyšel nesmysl zrovna tam, kde na výsledku záleží.
-        let inSelf = playerLayer.videoRect.offsetBy(dx: playerLayer.frame.minX,
-                                                    dy: playerLayer.frame.minY)
-        let rect = convert(inSelf, to: content)
+        // ⚠️ `videoRect` je v souřadnicích VRSTVY. Od chvíle, kdy je
+        // `playerLayer` KOŘENOVOU vrstvou view, jsou její souřadnice totožné
+        // s `bounds` a žádný posun se nepřičítá.
+        //
+        // Dřív se tu posouvalo o `playerLayer.frame.origin`, protože vrstva
+        // byla podvrstva s vlastním rámcem. **Teď by ten posun byl chyba:**
+        // `frame` kořenové vrstvy je pozice view v NADŘAZENÉM view, takže
+        // by se přičetlo umístění přehrávače v okně a pojistka by hlásila
+        // nesmysl. Kdo sem někdy vrátí podvrstvu, musí vrátit i ten posun.
+        let rect = convert(playerLayer.videoRect, to: content)
         let area = rect.width * rect.height
         guard area > 0 else { return 0 }
         let clipped = rect.intersection(content.bounds)

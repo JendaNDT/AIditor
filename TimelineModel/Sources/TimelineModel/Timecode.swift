@@ -49,9 +49,12 @@ public struct Timecode: Hashable, Sendable {
         return sign + String(format: "%02d:%02d:%02d:%02d", hours, minutes, seconds, frames)
     }
 
-    /// Zkrácený tvar pro pravítko: hodiny se vypouštějí, dokud nejsou potřeba.
-    /// Na svatebním filmu se hodina nepřekročí, takže `MM:SS:FF` je to,
-    /// co uživatel uvidí prakticky vždycky.
+    /// Zkrácený tvar: hodiny se vypouštějí, dokud nejsou potřeba.
+    ///
+    /// ⚠️ **Na pravítko se nehodí a schválně se tam nepoužívá.** Tři skupiny
+    /// si čtenář přečte jako `HH:MM:SS`, takže `00:04:00` vypadá na čtyři
+    /// minuty a znamená čtyři sekundy. Je to určené na místa, kde je jasné,
+    /// o jaký údaj jde — třeba délka vybraného klipu vedle jeho jména.
     public var shortText: String {
         let sign = isNegative ? "−" : ""
         if hours > 0 {

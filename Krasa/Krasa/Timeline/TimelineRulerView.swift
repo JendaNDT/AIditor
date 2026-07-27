@@ -42,9 +42,15 @@ final class TimelineRulerView: NSView {
     /// nemusí v půlce souboru obracet.
     override var isFlipped: Bool { true }
 
-    /// Popisek se musí vejít i s mezerou. 84 bodů je `00:00:00:00`
-    /// monospaced desítkou plus vzduch na obou stranách.
-    private static let minimumLabelSpacing: Double = 84
+    /// Popisek se musí vejít i s mezerou: `00:00:00:00` monospaced desítkou
+    /// plus vzduch na obou stranách.
+    ///
+    /// ⚠️ Na pravítku je **plný čtyřskupinový timecode**, ne zkrácený
+    /// `MM:SS:FF`. Zkrácený se vejde do menší šířky, ale tři skupiny si
+    /// každý přečte jako `HH:MM:SS` — `00:04:00` pak vypadá na čtyři minuty
+    /// a znamená čtyři sekundy. Číslo, které nelže a přitom mate, je pořád
+    /// špatné číslo. Čtyři skupiny používá každý NLE právě proto.
+    private static let minimumLabelSpacing: Double = 100
 
     private static let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
 
@@ -110,7 +116,7 @@ final class TimelineRulerView: NSView {
             TimelinePalette.tick.setFill()
             NSRect(x: x, y: bounds.height - 9, width: 1, height: 8).fill()
 
-            let label = frame.timecode(frameRate: frameRate).shortText
+            let label = frame.timecode(frameRate: frameRate).text
             let string = NSAttributedString(string: label, attributes: attributes)
             // Dva body vpravo od rysky, ať popisek nesedí na čáře.
             string.draw(at: NSPoint(x: x + 3, y: 3))

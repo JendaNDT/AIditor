@@ -17,7 +17,26 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 
 ## ⏭️ Příští krok
 
-**Krok 4 stavby: `TimelineLayout` + `LayerDiff` v `TimelineModelu`, s testy.** Rozhodnutí, které vrstvy připojit z fondu, které vrátit a kterým jen přepsat rámec. Hotovo bude, až projde `swift test` — ve view se přitom nezmění nic. Je to jediný krok stavby, který má testy, a schválně ten, ve kterém se dá nejvíc ztratit.
+🔴 **Blokátor před krokem 4: náhled videa je ČERNÝ, a není to kód přehrávače.** Stav vyšetřování k 27. 07. 2026 pozdě večer, ať se dá navázat bez ztráty kontextu:
+
+| vyloučeno | důkazem |
+|---|---|
+| AVFoundation pipeline | zvuk hraje, časomíra běží, položka `readyToPlay`, týž klip v QuickTime obraz ukáže |
+| naše `AVPlayerLayer` | vyměněná za `AVPlayerView` z AVKitu — černý úplně stejně |
+| SwiftUI sestava kolem | `--player-only` (okno JEN s přehrávačem, bez splitu, sidebaru, osy i transportu) — černý |
+| chybějící přelayoutování | maximalizace okna nepomůže; `isReadyForDisplay` hlídané přes KVO |
+| nulový rámec, seek po načtení, `contentsScale` | vyzkoušeno, bez účinku (u AVPlayerView už irelevantní) |
+| překryv, skrytý rodič, dvě instance, dvě vrstvy | změřeno, čisté |
+
+**Jediný stav, kdy obraz JE vidět:** průběh „Okno vs celá obrazovka" — naskočí při skrytí chrome, po návratu chrome zase zmizí. Ten tok ale dělá DVĚ věci naráz: (a) schová sidebar/osu/transport, (b) benchmark **znovu načte klip, připojí `AVPlayerItemVideoOutput`, seekne a spustí přehrávání**. Pozorované „hned, jak zmizí sloupec" je od (b) vzdálené jen 0,8 s — okem nerozlišitelné.
+
+**Rozhodovací experiment (zbývá provést):** stisknout **„Změřit náhled v okně"** — dělá (b) bez (a), chrome zůstává.
+- Obraz se objeví → spouštěčem je pipeline benchmarku (hlavní podezřelý: připojený video output) a oprava je zopakovat totéž v `load()`.
+- Zůstane černý → stisknout „Okno vs celá obrazovka" na aktuálním buildu s `AVPlayerView`: obraz → spouštěčem je opravdu skryté chrome; černý i tam → na tomhle buildu nefunguje nic a nejlevnější další krok je **restart Macu** (appka byla dnes ~15× zabita signálem uprostřed přehrávání; QuickTime funguje, takže systémová cesta je zdravá, ale per-app stav mediálních démonů restart rozsekne levněji než další kolo kódu).
+
+⚠️ **V `ContentView` jsou dva DOČASNÉ diagnostické přepínače na smazání:** `--no-timeline` a `--player-only`.
+
+Pak teprve **krok 4 stavby: `TimelineLayout` + `LayerDiff` v `TimelineModelu`, s testy.** Rozhodnutí, které vrstvy připojit z fondu, které vrátit a kterým jen přepsat rámec. Hotovo bude, až projde `swift test` — ve view se přitom nezmění nic. Je to jediný krok stavby, který má testy, a schválně ten, ve kterém se dá nejvíc ztratit.
 
 👀 **Kroky 2 a 3 chtějí koukanec.** Krok 2 potvrzený (27. 07. 2026, 21:08). U kroku 3 se očima ověřuje, že při vodorovném scrollu jede timecode s obsahem a jména stop stojí, a při svislém naopak.
 
@@ -172,6 +191,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
   Skrývala se za tím, že se první klip vybíral sám: dokud v přehrávači něco bylo, nebylo poznat, že ručně vybrat nejde. Správně je `List(selection:)` a výběr držený v modelu, ne v `@State` ve view. Zvýrazněný řádek je vedlejší zisk — předtím nešlo poznat, který klip je načtený.
 
   **Poučení do fáze 2:** UI napsané „ze zvyku z iOSu" projde překladem i kontrolou a přesto nefunguje. Sedí to k témuž vzorci jako barvy vrstev — chyba, kterou odhalí jen ruka na myši.
+- **⚠️ SwiftUI nesleduje vnořené `ObservableObject`y.** Odhaleno 27. 07. 2026, v projektu od fáze 1. `ContentView` drží `AppModel`, ale `currentTime` a `isPlaying` publikuje `AppModel.controller` — jiný objekt, jehož změny view nepřekreslí. Časomíra proto trvale ukazovala `0:00.000` a tlačítko se nepřepínalo na „Pauza", **přestože přehrávání prokazatelně běželo** (60 ohlášení za 2 s, čas 1,867 s — data byla v pořádku, jen je nikdo neposlouchal). Oprava: malé view `TransportBar` s `@ObservedObject` přímo na controlleru. Schválně malé — pozorovatel času chodí 30×/s a překreslovat celé okno by znamenalo 30×/s volat `updateNSView` na časové ose.
 - **⚠️ `CALayer.render(in:)` a `cacheDisplay(in:to:)` se nedají použít k ověření, jak vrstva doopravdy leží.** Zjištěno 27. 07. 2026 při kroku 2 fáze 2. Otázka zněla, jestli podvrstvy dědí `NSView.isFlipped`. `render(in:)` vrátil, že se převrácením nic nemění — a přitom `layer.isGeometryFlipped` bylo prokazatelně `true`. Ta metoda převrácení **ignoruje**. `cacheDisplay` byl ještě horší: jednou obsah vrstvy zachytil, podruhé při stejném kódu vůbec.
 
   **Odpověď je ano, dědí** — AppKit `isGeometryFlipped` u převráceného layer-backed view sám nastaví a SDK k té vlastnosti říká *„geometry of the layer **and its sublayers** is flipped vertically"*. `TimelineGeometry.y(ofTrackAt:)` jde vrstvě předat rovnou.

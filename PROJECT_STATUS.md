@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná (188 testů), z deseti kroků hotových pět, kroky 6–9 napsané a čekají na ověření okem (playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory). Zbývá krok 10 — vlnové průběhy.**
+**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (188 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. Kroky 6–9 čekají na ověření interakcí rukou; vlna na klipu je ověřená screenshotem.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -51,7 +51,11 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   👀 Koukanec kroku 9: ⌥-tažení hranice mezi sousedy roluje (oba duchy), ⌘-tažení v těle slipuje, kurzor se mění na okraji, pravé tlačítko ukazuje menu a položky dělají, co říkají, Delete a ⌘B fungují.
 
-Pak **krok 10: vlnové průběhy** — špičky na pozadí + dlaždice, poslední kus fáze 2.
+✅ **Krok 10 — vlnové průběhy (28. 07. 2026): NAPSANÝ a vlna ověřená screenshotem.** Přesně dvě vrstvy mezipaměti z návrhu 2.7: **špičky** (min/max na okno 256 vzorků, `AVAssetReader` nad `AVCompozicí` — kompozice ctí edit list, takže vlna není o 44 ms vedle zvuku; disková cache s otiskem cesta+velikost+mtime v Application Support/Waveforms) a **dlaždice** (`CGImage` klíčem asset + mocnina dvou zoomu + index, líně na pozadí; mezi úrovněmi se natahují, takže pinch mezipaměť nezahazuje). Žádný `CATiledLayer` — jeho úrovně detailu jsou vázané na měřítko vrstvy. Dlaždice se skládají jen pro viditelný výřez klipu a jsou assetové: trim ani slip je nezahazuje. U titěrných klipů se vlna i titulek schovávají úplně, nezmenšují (návrh, sekce 6). Špičky jdou z originálu, ale přes `Asset.url(usingProxies:)` — jediné místo rozhodující o souboru. Render černou s alfou → dlaždice nezávisí na světlém/tmavém režimu. **Ověřeno okem: obálka s transienty (rány sekerou) na zvukovém klipu A1 hned při prvním spuštění.**
+
+  👀 Koukanec kroku 10: pinch nad zvukovým klipem — vlna se během gesta smí lehce rozmazat, po ustálení ostrá, a hlavně NIC nesmí sekat. A výkonový test z návrhu (sekce 6): scroll přes celou osu bez vypadlého tiku.
+
+**Fáze 2 tím má napsaných všech deset kroků.** Zbývá souhrnný koukanec na interakce (checklist u kroků 6–9) a pak výkonový rozpočet: 1000 klipů, scroll přes celou osu, žádný vypadlý tik. Po odsouhlasení okem je na řadě **fáze 3 — speed ramping ostrý**.
 
 👀 **Kroky 2 a 3 chtějí koukanec.** Krok 2 potvrzený (27. 07. 2026, 21:08). U kroku 3 se očima ověřuje, že při vodorovném scrollu jede timecode s obsahem a jména stop stojí, a při svislém naopak.
 
@@ -90,8 +94,8 @@ Pak zbytek **`TimelineView` v AppKitu — poslední kus fáze 2.** Co v něm doo
 | timecode a rozteč rysek | ✅ `Timecode` v modelu, 20 testů |
 | `TimelineLayout` + `LayerDiff` | ✅ krok 4, 19 testů |
 | klipy jako recyklované `CALayer` | ✅ krok 5 |
-| vlnové průběhy jako `CGImage` dlaždice per zoom | ❌ |
-| kurzory, kontextové menu, klávesové zkratky | ❌ |
+| vlnové průběhy jako `CGImage` dlaždice per zoom | ✅ krok 10 |
+| kurzory, kontextové menu, klávesové zkratky | ✅ krok 9 |
 
 **Do view patří jen kreslení a předávání událostí.** Co v něm bude navíc, to už nikdo neotestuje — a je to jediná část fáze 2, která se dá ověřit výhradně okem na běžící aplikaci.
 
@@ -147,14 +151,14 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 2 — timeline.** `TimelineModel` hotový (188 testů) a napojený na `Krasa.xcodeproj`. Z deseti kroků stavby view hotové 1–5 a napsané 6–9. Zbývá krok 10 — vlnové průběhy — a koukanec na interakce 6–9.
+- **Fáze 2 — timeline.** `TimelineModel` hotový (188 testů), view má napsaných všech deset kroků. Zbývá koukanec na interakce 6–10 a výkonový test (1000 klipů, scroll bez vypadlého tiku).
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
 ### Cesta k v0.5 „MVP nula" (~6 měsíců při 30 h/týdně)
 - **F0** Spike 0 — ověření speed rampingu — ✅ **HOTOVO 26. 07. 2026**, hlavní riziko zavřené
 - **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
-- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (188 testů), z deseti kroků hotových 5 a napsané 6–9**
+- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (188 testů), všech deset kroků view napsaných; zbývá koukanec interakcí a výkonový test**
 - **F3** Speed ramping ostrý *(3 týdny)*
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)*
 - **F5** Projekt, autosave, undo, export *(3 týdny)*

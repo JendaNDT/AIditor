@@ -75,6 +75,23 @@ final class PlaybackController: ObservableObject {
                 : CMTime(value: 1, timescale: 30)
         }
         currentTime = .zero
+
+        // Vynucené vykreslení prvního snímku po výměně položky.
+        //
+        // ⚠️ **Zatím NEOVĚŘENÝ pokus o opravu černého náhledu** (27. 07. 2026).
+        // Poctivě: prokázané to není. Změřeno bylo, že položka je připravená,
+        // `videoRect` neprázdný, `isReadyForDisplay == true` a snímek se přes
+        // `AVPlayerItemVideoOutput` doručí i BEZ tohohle seeku. Zbývá možnost,
+        // že `AVPlayerLayer` je jiný odběratel než video output a bez pobídky
+        // nevykreslí — ta se z kódu ověřit nedá, jen okem na obrazovce.
+        //
+        // Kdyby se ukázalo, že obraz je černý i s tímhle řádkem, příčina je
+        // jinde a řádek může jít pryč: sám o sobě nic nerozbije, ale ani
+        // nemá cenu držet nefunkční pokus.
+        //
+        // Nulová tolerance schválně, podle QA1820 — a zároveň to zaručí
+        // opravdu první snímek, ne nejbližší klíčový.
+        await player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
     // MARK: - Přehrávání

@@ -30,6 +30,9 @@ public enum Violation: Hashable, Sendable {
     /// 10. Nesmyslné hodnoty času.
     case invalidTime(ClipID)
     case invalidAsset(AssetID)
+    /// 11. Rychlostní křivka s neplatnými uzly. Výpočty ji ignorují (klip
+    /// hraje 1×), ale mlčky by se ztratit neměla.
+    case invalidSpeedRamp(ClipID)
 }
 
 extension Project {
@@ -69,6 +72,10 @@ extension Project {
                 // 10. platný zdrojový čas
                 if clip.sourceStart.value < 0 {
                     out.append(.invalidTime(clip.id))
+                }
+                // 11. použitelná rychlostní křivka
+                if let ramp = clip.speedRamp, !ramp.isUsable {
+                    out.append(.invalidSpeedRamp(clip.id))
                 }
                 // 2. překryv — stačí porovnat se sousedem, pole je seřazené
                 if i + 1 < track.clips.count, clip.overlaps(track.clips[i + 1]) {

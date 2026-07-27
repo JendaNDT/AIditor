@@ -30,6 +30,8 @@ public enum TimelineError: Error, Hashable, Sendable {
     case wrongTrackKind(expected: TrackKind, got: TrackKind)
     case assetStillInUse(AssetID)
     case notJoinable(reason: String)
+    /// Rychlostní křivka s neplatnými uzly (nerostoucí časy, nulová rychlost).
+    case invalidSpeedRamp
 }
 
 // MARK: - Assety
@@ -488,7 +490,10 @@ extension Project {
         var trimmed = clip
         trimmed.timelineStart = newStart
         trimmed.duration = clip.timelineEnd - newStart
-        trimmed.sourceStart = clip.sourceStart + timeline.sourceTime(delta)
+        // Přes `sourceOffset`, ne `sourceStart + sourceTime(delta)` — ten
+        // vzorec platí jen při rychlosti 1×. Se zápornou deltou (prodloužení
+        // doleva) vrací pozici na křivce před začátkem klipu.
+        trimmed.sourceStart = sourceOffset(in: clip, atFrame: delta)
 
         var copy = self
         var tracks = copy.timeline.tracks
@@ -551,8 +556,11 @@ extension Project {
 
         var copy = self
         var tracks = copy.timeline.tracks
+        // Přes `sourceOffset` — u klipu s rampou znamená slip o `delta`
+        // snímků „ukaž to, co bylo vidět o `delta` snímků dál", ne posun
+        // zdroje o délku převedenou při 1×.
         tracks[at.trackIndex].clips[at.clipIndex].sourceStart =
-            clip.sourceStart + timeline.sourceTime(delta)
+            sourceOffset(in: clip, atFrame: delta)
         copy.timeline.tracks = tracks
         self = copy
     }

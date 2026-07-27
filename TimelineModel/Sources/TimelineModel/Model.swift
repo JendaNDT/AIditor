@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import SpeedRampEngine
 
 // MARK: - Identifikátory
 
@@ -37,7 +38,11 @@ public struct LinkID: Hashable, Codable, Sendable, RawRepresentable {
     public init() { self.rawValue = UUID().uuidString }
 }
 
-// MARK: - Rychlostní křivka (místo pro fázi 3)
+// MARK: - Rychlostní křivka
+
+/// Náběh mezi uzly — tentýž typ jako v enginu, jen pod jménem, které nenutí
+/// klienty modelu importovat `SpeedRampEngine`.
+public typealias SpeedEase = SpeedRampEngine.BezierEase
 
 /// Uzel rychlostní křivky.
 ///
@@ -47,15 +52,18 @@ public struct LinkID: Hashable, Codable, Sendable, RawRepresentable {
 public struct SpeedNode: Hashable, Codable, Sendable {
     public var sourceTime: SourceTime
     public var speed: Double
+    /// Jak se přechází do následujícího uzlu. U posledního uzlu se nepoužije.
+    public var easeToNext: SpeedEase
 
-    public init(sourceTime: SourceTime, speed: Double) {
+    public init(sourceTime: SourceTime, speed: Double, easeToNext: SpeedEase = .easeInOut) {
         self.sourceTime = sourceTime
         self.speed = speed
+        self.easeToNext = easeToNext
     }
 }
 
-/// Fáze 3 tohle napojí na `SpeedRampEngine`. Ve fázi 2 je to jen úložiště,
-/// aby datový model nemusel měnit tvar.
+/// Rychlostní křivka klipu. Matematiku počítá `SpeedRampEngine`;
+/// most mezi zdrojově kotvenými uzly a enginem je v `SpeedMath.swift`.
 public struct SpeedRamp: Hashable, Codable, Sendable {
     public var nodes: [SpeedNode]
     public init(nodes: [SpeedNode]) { self.nodes = nodes }
@@ -341,34 +349,53 @@ public struct Project: Hashable, Codable, Sendable {
 
     /// Kolik zdrojového materiálu klip spotřebuje.
     ///
-    /// Fáze 2: `sourceTime(clip.duration)`.
-    /// Fáze 3: integrál rychlostní křivky ze `SpeedRampEngine`.
+    /// Bez rampy `sourceTime(clip.duration)` — přesný zlomek. S rampou
+    /// integrál rychlostní křivky ze `SpeedRampEngine`, zaokrouhlený na tick
+    /// dolů (viz `SpeedMath.swift`).
     ///
     /// **Žádná operace ať nepočítá spotřebu jinak než touhle funkcí.** Jinak
-    /// bude fáze 3 znamenat přepsat šest operací a jednu validaci místo
-    /// vnitřku jedné funkce.
+    /// znamená každá změna výpočtu přepsat šest operací a jednu validaci
+    /// místo vnitřku jedné funkce.
     public func sourceConsumption(of clip: Clip) -> SourceTime {
-        timeline.sourceTime(clip.duration)
+        guard let window = rampWindow(for: clip) else {
+            return timeline.sourceTime(clip.duration)
+        }
+        return rampConsumption(window: window, clip: clip, frames: clip.duration)
     }
 
     /// Kde ve zdroji leží snímek `offset` od začátku klipu.
     ///
     /// Split i trim jdou přes tohle, ne přes „délku převedenou na zdrojový
     /// čas" — ten vzorec platí jen při rychlosti 1×.
+    ///
+    /// Platí `sourceOffset(in: clip, atFrame: clip.duration)
+    /// == clip.sourceStart + sourceConsumption(of: clip)` — obě strany jdou
+    /// přes týž výpočet, na tom stojí `join`.
     public func sourceOffset(in clip: Clip, atFrame offset: Frames) -> SourceTime {
-        clip.sourceStart + timeline.sourceTime(offset)
+        guard let window = rampWindow(for: clip) else {
+            return clip.sourceStart + timeline.sourceTime(offset)
+        }
+        return clip.sourceStart + rampConsumption(window: window, clip: clip, frames: offset)
     }
 
-    /// Kolik snímků zdroje klipu ještě zbývá za jeho koncem.
+    /// Kolik snímků OSY lze klip ještě prodloužit za jeho konec, než dojde
+    /// zdroj. Bez rampy je to totéž jako počet zbývajících zdrojových snímků;
+    /// s rampou se zbytek zdroje přepočítává rychlostí konce křivky.
     public func remainingSourceFrames(after clip: Clip) -> Frames {
         guard let asset = asset(clip.assetID) else { return .zero }
-        let used = clip.sourceStart + sourceConsumption(of: clip)
-        guard used < asset.duration else { return .zero }
-        return timeline.availableFrames(from: asset.duration - used)
+        guard let window = rampWindow(for: clip) else {
+            let used = clip.sourceStart + sourceConsumption(of: clip)
+            guard used < asset.duration else { return .zero }
+            return timeline.availableFrames(from: asset.duration - used)
+        }
+        return rampRemainingFrames(window: window, clip: clip, assetDuration: asset.duration)
     }
 
-    /// Kolik snímků zdroje je k dispozici před začátkem klipu.
+    /// Kolik snímků OSY je k dispozici před začátkem klipu.
     public func availableSourceFramesBefore(_ clip: Clip) -> Frames {
-        timeline.availableFrames(from: clip.sourceStart)
+        guard let window = rampWindow(for: clip) else {
+            return timeline.availableFrames(from: clip.sourceStart)
+        }
+        return rampAvailableFramesBefore(window: window)
     }
 }

@@ -223,6 +223,51 @@ final class TimelinePane: NSView {
         documentView.refreshClips()
     }
 
+    // MARK: - Zoom (krok 8)
+
+    /// Zoom kotvený na kurzoru: snímek pod kurzorem zůstane pod kurzorem.
+    ///
+    /// Pořadí je důležité a je tu schválně synchronně, bez čekání na odběry:
+    /// 1. nová geometrie, 2. HNED přerozměřit dokument (jinak by se scroll
+    /// zařízl o starou šířku a obsah při zoomu dovnitř poskočil), 3. scroll
+    /// tak, aby kotva zůstala na místě. Kotva se drží ve ZLOMKOVÝCH snímcích —
+    /// zaokrouhlení na celý snímek by při každém kroku pinche obsah posouvalo.
+    ///
+    /// Během tažení se zoom ignoruje (`FAZE_2_VIEW.md` 2.6): kandidáti
+    /// přichytávání jsou spočítaní při `begin` a změna měřítka by uprostřed
+    /// tažení posunula tolerance.
+    func zoom(scale: Double, atWindowLocation location: NSPoint) {
+        guard !controller.interaction.isDragging, scale > 0 else { return }
+
+        let clipView = scrollView.contentView
+        let documentX = Double(documentView.convert(location, from: nil).x)
+        let viewportX = documentX - Double(clipView.bounds.origin.x)
+
+        let oldPointsPerFrame = controller.geometry.pointsPerFrame
+        var geometry = controller.geometry
+        geometry.setZoom(oldPointsPerFrame * scale)
+        guard geometry.pointsPerFrame != oldPointsPerFrame else { return }
+
+        let anchorFrame = documentX / oldPointsPerFrame     // zlomkové snímky
+        controller.geometry = geometry
+
+        sizeDocument()
+        documentView.needsLayout = true
+
+        let newDocumentX = anchorFrame * geometry.pointsPerFrame
+        let target = NSPoint(x: max(0, newDocumentX - viewportX),
+                             y: clipView.bounds.origin.y)
+        clipView.scroll(to: target)
+        scrollView.reflectScrolledClipView(clipView)
+
+        // Scroll pošle boundsDidChange a odběr geometrie doručí reload,
+        // ale až v dalším průchodu smyčkou — tohle drží obraz bez mezikroku.
+        documentView.refreshClips()
+        documentView.updatePlayhead()
+        rulerView.needsDisplay = true
+        syncChrome()
+    }
+
     /// Změnila se sada stop nebo obsah projektu.
     func reload() {
         documentView.rebuildLanes()

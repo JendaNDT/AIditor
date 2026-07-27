@@ -513,6 +513,32 @@ final class TimelineDocumentView: NSView {
         super.keyDown(with: event)
     }
 
+    // MARK: - Zoom (krok 8)
+
+    /// Kotvení a přerozměření dělá pane — vlastní scroll view i pravítko.
+    private var pane: TimelinePane? {
+        enclosingScrollView?.superview as? TimelinePane
+    }
+
+    /// Pinch. `magnification` je PŘÍRŮSTEK, ne absolutní hodnota.
+    /// <https://developer.apple.com/documentation/appkit/nsevent/magnification>
+    override func magnify(with event: NSEvent) {
+        pane?.zoom(scale: 1 + Double(event.magnification),
+                   atWindowLocation: event.locationInWindow)
+    }
+
+    /// ⌘ + kolečko/trackpad = zoom; bez ⌘ jde událost dál a scroll view
+    /// normálně scrolluje. Událost dostává dokument dřív než scroll view,
+    /// takže se dá takhle vybrat, co si nechat.
+    override func scrollWheel(with event: NSEvent) {
+        guard event.modifierFlags.contains(.command) else {
+            super.scrollWheel(with: event)
+            return
+        }
+        let scale = 1 + Double(event.scrollingDeltaY) * 0.015
+        pane?.zoom(scale: scale, atWindowLocation: event.locationInWindow)
+    }
+
     // MARK: - Kreslení náhledu tažení
 
     /// Přepíše duchy podle `DragPreview`, `nil` všechno schová.

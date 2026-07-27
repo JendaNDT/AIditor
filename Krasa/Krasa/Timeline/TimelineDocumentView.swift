@@ -45,6 +45,16 @@ enum TimelinePalette {
     static func lane(for kind: TrackKind) -> NSColor {
         kind == .video ? videoLane : audioLane
     }
+
+    /// Pozadí pravítka a hlaviček. Mezi pozadím osy a pruhy, ať je poznat,
+    /// že je to ovládací lišta a ne obsah.
+    static let chrome = adaptive("timelineChrome", dark: 0.14, light: 0.86)
+    /// Popisky timecode a jména stop.
+    static let text = adaptive("timelineText", dark: 0.68, light: 0.28)
+    /// Rysky pravítka.
+    static let tick = adaptive("timelineTick", dark: 0.42, light: 0.52)
+    /// Předěly mezi pravítkem, hlavičkami a plochou osy.
+    static let separator = adaptive("timelineSeparator", dark: 0.28, light: 0.66)
 }
 
 final class TimelineDocumentView: NSView {

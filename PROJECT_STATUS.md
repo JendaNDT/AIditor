@@ -19,7 +19,7 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 
 **Krok 3 stavby: pravítko a hlavičky stop, synchronizované přes `boundsDidChange`.** Hotovo bude, až budeš scrollovat osou a timecode i jména stop pojedou s ní.
 
-👀 **Nejdřív si ale koukni na krok 2 — je to jediná část fáze 2, která se ověří výhradně okem.** Pusť appku: pod přehrávačem má být osa se **třemi pruhy**, horní (V1) znatelně vyšší než dva spodní, a má jít vodorovně scrollovat. Čísla souhlasí (níže), ale že to i vypadá k světu, můžeš potvrdit jen ty.
+✅ **Krok 2 je potvrzený i okem** (27. 07. 2026, 21:08). Tři pruhy, horní vyšší, pod nimi pozadí dokumentu; přehrávač dostal místo zpátky.
 
 ✅ **Krok 1 — `TimelineModel` napojený na `Krasa.xcodeproj`** (commit `3f5f9cb`). Lokální balíček stejným vzorcem jako `ProbeKit` a `SpeedRampEngine`. Přibyl `TimelineController` — vlastník stavu podle `FAZE_2_VIEW.md` 2.1, kde má **geometrie jediné úložiště** (`interaction.geometry`) a controller ji vystavuje jen průchodem.
 
@@ -30,6 +30,10 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
   **Rozvržení ověřeno čísly proti `TimelineGeometry`**, na skutečných souborech aplikace, ne na kopii logiky: `V1 y=0 h=64`, `A1 y=66 h=44`, `A2 y=112 h=44`, dokument 1200 bodů proti 700 viditelným (tedy je co scrollovat). Aplikace se spustí bez pádu.
 
   🚩 **Při měření náhledu se osa z hierarchie odstraní, ne skryje.** Timeline je první věc v projektu, nad kterou musí WindowServer skládat — nechat ji na obrazovce znamená měřit něco jiného než čísla z fáze 1. A skrývání nulovým rámcem už jednou layout rozbilo, aniž si toho měření všimlo.
+
+  ⚠️ **První verze prošla všemi kontrolami a přitom nebyla vidět.** Pruhy braly barvu ze `systémových sémantických` barev (`controlBackgroundColor` proti `underPageBackgroundColor`) — ty se ale v tmavém režimu liší o **0,039** ve složce bílé, takže z osy byl jeden slitý blok. Kontrola ověřovala, že vrstva barvu *má*, ne že je *k rozeznání*; test „hodnota není nil" je slabší, než vypadá. Opraveno vlastní paletou přes `NSColor(name:dynamicProvider:)`: rozdíl **0,150** u obrazové stopy a 0,080 u zvukové, v obou režimech vzhledu.
+
+  Druhá věc, kterou čísla nechytila: osa i přehrávač jsou oba pružné `NSViewRepresentable`, takže si volné místo rozdělily napůl a osa zabírala 427 bodů. Teď má pevných 220; roztahovací dělič je věc kroku 3.
 
 Pak zbytek **`TimelineView` v AppKitu — poslední kus fáze 2.** Co v něm doopravdy zbývá:
 

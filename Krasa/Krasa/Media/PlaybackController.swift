@@ -85,6 +85,11 @@ final class PlaybackController: ObservableObject {
     func loadComposition(_ composition: AVComposition, frameRate: Int) {
         pause()
         let item = AVPlayerItem(asset: composition)
+        // Korekce výšky pro škálované zvukové úseky rampy. `.timeDomain`
+        // zachovává transienty (rozhodnutí ze Spiku 0 — `.spectral` je
+        // rozmazává do plechovosti); na úsecích 1× nedělá nic.
+        // <https://developer.apple.com/documentation/avfoundation/avplayeritem/audiotimepitchalgorithm-swift.property>
+        item.audioTimePitchAlgorithm = .timeDomain
         player.replaceCurrentItem(with: item)
         duration = composition.duration
         frameDuration = CMTime(value: CMTimeValue(Int64(SourceTime.projectTimescale) / Int64(frameRate)),

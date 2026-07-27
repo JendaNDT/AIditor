@@ -718,7 +718,22 @@ final class TimelineDocumentView: NSView {
         ripple.target = self
         menu.addItem(ripple)
 
+        // Dočasné, než modul 3 přinese SpeedRampEditor: nasadit/sundat
+        // klasické zpomalení, ať se dá rampa pouštět a poslouchat už teď.
+        menu.addItem(.separator())
+        let hasRamp = controller.project.timeline.clip(hit.clipID)?.speedRamp != nil
+        let ramp = NSMenuItem(title: hasRamp ? "Zrušit zpomalení (testovací)"
+                                             : "Zpomalit 0,25× (testovací rampa)",
+                              action: #selector(menuToggleRamp(_:)), keyEquivalent: "")
+        ramp.target = self
+        menu.addItem(ramp)
+
         return menu
+    }
+
+    @objc private func menuToggleRamp(_ sender: Any?) {
+        guard let clipID = menuClipID else { return }
+        controller.toggleTestRamp(clipID)
     }
 
     @objc private func menuSplit(_ sender: Any?) {

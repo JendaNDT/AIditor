@@ -2,10 +2,9 @@
 //  CompositionBuilder.swift
 //  Projekt Krása
 //
-//  Fáze 3, modul 1: z timeline projektu postavit `AVComposition`, aby
+//  Fáze 3, moduly 1 a 2: z timeline projektu postavit `AVComposition`, aby
 //  přehrávač hrál CELOU OSU — sekvenci klipů se správnými výřezy zdrojů —
-//  a ne jediný soubor. Rychlostní křivky (segmentace přes `SpeedRampEngine`)
-//  přijdou v dalším modulu na tomhle základě; teď hrají všechny klipy 1×.
+//  včetně rychlostních křivek.
 //
 //  Rozhodnutí, která tu platí:
 //  - Časy výhradně v timescale projektu (90 000). Frames → CMTime přes
@@ -13,12 +12,17 @@
 //  - Zdrojový výřez počítá MODEL (`sourceOffset`, `sourceConsumption`) —
 //    tady se jen převádí na `CMTime`. Kdyby si to počítala kompozice sama,
 //    rozejde se s trimem a splitem.
+//  - Rampu počítá také model (`rampPlaybackPlan` — segmentace v celých
+//    tickách, mez skoku 1,5 % ze Spiku 0). Tady se jen volá `scaleTimeRange`
+//    POZPÁTKU, od posledního úseku k prvnímu: škálování úseku posune všechno
+//    ZA ním, ale nic před ním — vzorec ověřený nástrojem `Ramp`.
 //  - Který soubor hraje, říká `Asset.url(usingProxies:)` — jediné místo
 //    v projektu, kde se vybírá mezi originálem a proxy.
 //  - Mezery na stopě jsou legální: prázdný úsek kompozice je černá/ticho.
 //
 //  <https://developer.apple.com/documentation/avfoundation/avmutablecomposition>
 //  <https://developer.apple.com/documentation/avfoundation/avmutablecompositiontrack/inserttimerange(_:of:at:)>
+//  <https://developer.apple.com/documentation/avfoundation/avmutablecompositiontrack/scaletimerange(_:toduration:)>
 //
 
 import AVFoundation
@@ -71,6 +75,25 @@ enum CompositionBuilder {
                 let at = CMTime(value: Int64(clip.timelineStart.count) * ticksPerFrame,
                                 timescale: SourceTime.projectTimescale)
                 try compositionTrack.insertTimeRange(range, of: sourceTrack, at: at)
+
+                // Rychlostní křivka: vložený rozsah (zatím 1:1) se přeškáluje
+                // po úsecích plánu. Pozpátku — škálování posouvá jen obsah za
+                // úsekem, takže pozice dřívějších úseků zůstávají platné.
+                // Po posledním škálování zabírá klip přesně svůj slot na ose.
+                if let plan = project.rampPlaybackPlan(of: clip) {
+                    for segment in plan.segments.reversed() {
+                        guard segment.sourceDurationTicks > 0, segment.outputTicks > 0 else { continue }
+                        let segmentRange = CMTimeRange(
+                            start: CMTime(value: at.value + segment.sourceStartTicks,
+                                          timescale: SourceTime.projectTimescale),
+                            duration: CMTime(value: segment.sourceDurationTicks,
+                                             timescale: SourceTime.projectTimescale))
+                        compositionTrack.scaleTimeRange(
+                            segmentRange,
+                            toDuration: CMTime(value: segment.outputTicks,
+                                               timescale: SourceTime.projectTimescale))
+                    }
+                }
             }
         }
 

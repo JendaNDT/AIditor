@@ -119,6 +119,31 @@ final class TimelineController: ObservableObject {
         selection.remove(clipID)
     }
 
+    /// Testovací rampa (fáze 3, modul 2): klasické zpomalení 1× → 0,25× → 1×
+    /// přes klip, dokud nemá `SpeedRampEditor` vlastní UI (modul 3). Když už
+    /// klip křivku má, akce ji smaže. Dvojče řeší model (`setSpeedRamp` je
+    /// link-aware), undo jeden krok.
+    func toggleTestRamp(_ clipID: ClipID) {
+        guard let clip = project.timeline.clip(clipID) else { return }
+        var updated = project
+        if clip.speedRamp != nil {
+            guard (try? updated.setSpeedRamp(clipID: clipID, ramp: nil)) != nil else { return }
+        } else {
+            // Křivka natažená tak, aby výstup zůstal dlouhý jako klip:
+            // easeInOut ramp na 0,25× má průměrnou rychlost 0,625, takže se
+            // kotví přes 62,5 % dosavadní spotřeby. Klip se neprodlužuje,
+            // sousedi zůstávají na místě — jen konec záběru zůstane nevyužitý.
+            let consumption = project.sourceConsumption(of: clip)
+            let span = SourceTime(seconds: consumption.seconds * 0.625)
+            let ramp = SpeedRamp.classicSlowMotion(from: clip.sourceStart,
+                                                   spanning: span,
+                                                   slowSpeed: 0.25)
+            guard (try? updated.setSpeedRamp(clipID: clipID, ramp: ramp)) != nil else { return }
+        }
+        undo.record(project)
+        project = updated
+    }
+
     // MARK: - Undo (krok 7)
 
     func undoStep() {

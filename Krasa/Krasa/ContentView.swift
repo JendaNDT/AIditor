@@ -325,6 +325,22 @@ struct ContentView: View {
         }
     }
 
+    /// Vybraný klip drží `AppModel`, ne `@State` ve view.
+    ///
+    /// Jedno úložiště, žádná synchronizace — stejný důvod, proč geometrii
+    /// osy vlastní `TimelineController`. Se dvěma kopiemi by se po přetvoření
+    /// view rozešel zvýrazněný řádek od klipu načteného v přehrávači.
+    private var clipSelection: Binding<URL?> {
+        Binding(
+            get: { model.selected?.url },
+            set: { url in
+                guard let url,
+                      let clip = model.clips.first(where: { $0.url == url }),
+                      clip.url != model.selected?.url else { return }
+                Task { await model.select(clip) }
+            })
+    }
+
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -337,7 +353,18 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            List(model.clips, id: \.url) { clip in
+            // ⚠️ Výběr přes `selection:`, NE přes `.onTapGesture` na řádku.
+            //
+            // Na macOS stojí `List` nad `NSTableView` a ten si myš bere na
+            // vlastní výběr — gesto uvnitř řádku se pak nespustí a klik na
+            // klip nedělá nic. Na iOSu tentýž kód funguje, takže se ta chyba
+            // snadno napíše a těžko všimne. Odhaleno 27. 07. 2026, ale je
+            // v projektu od fáze 1: dokud se první klip vybíral sám, nebylo
+            // poznat, že ručně vybrat nejde.
+            //
+            // Vedlejší zisk: `selection:` zvýrazní vybraný řádek. Předtím
+            // nešlo poznat, který klip je v přehrávači načtený.
+            List(model.clips, id: \.url, selection: clipSelection) { clip in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(clip.name).font(.system(.body, design: .monospaced))
                     Text("\(clip.verdict.shortLabel) · \(String(format: "%.2f", clip.measuredFrameRate)) fps"
@@ -345,8 +372,6 @@ struct ContentView: View {
                         .font(.caption)
                         .foregroundStyle(clip.isVariable ? .orange : .secondary)
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { Task { await model.select(clip) } }
             }
 
             Button(model.isMeasuring ? "Měřím…" : "Změřit náhled v okně") {

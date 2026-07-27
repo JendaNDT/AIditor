@@ -485,3 +485,149 @@ final class SpeedRampAdaptiveSegmentTests: XCTestCase {
         XCTAssertLessThan(slope, prumernaStrmost * 3)
     }
 }
+
+// MARK: - Zdrojově kotvené uzly
+
+final class SourceAnchoredTests: XCTestCase {
+
+    func testLinearniPrechodMaAnalytickouDelku() throws {
+        // Lineární ease 1,0 → 0,5: průměrná rychlost 0,75. Zdrojový úsek 1,5 s
+        // tedy trvá přesně 2,0 s výstupu.
+        let ramp = try SpeedRamp.anchoredToSource([
+            SourceAnchoredNode(sourceOffset: 0.0, speed: 1.0, easeToNext: .linear),
+            SourceAnchoredNode(sourceOffset: 1.5, speed: 0.5, easeToNext: .linear),
+        ])
+        XCTAssertEqual(ramp.outputDuration, 2.0, accuracy: 1e-9)
+        XCTAssertEqual(ramp.sourceConsumed, 1.5, accuracy: 1e-9)
+    }
+
+    func testUzlyLeziNaSvychZdrojovychPozicich() throws {
+        // Křivka s různými easingy — zdrojová pozice každého uzlu musí sedět
+        // přesně, protože kvadratura konstrukce je táž jako u integrální tabulky.
+        let sources = [0.0, 0.8, 2.3, 3.125]
+        let speeds = [1.0, 0.25, 0.6, 1.0]
+        let eases: [BezierEase] = [.easeInOut, .easeOut, .easeIn, .linear]
+        let ramp = try SpeedRamp.anchoredToSource(zip(zip(sources, speeds), eases).map {
+            SourceAnchoredNode(sourceOffset: $0.0, speed: $0.1, easeToNext: $1)
+        })
+
+        for (i, node) in ramp.nodes.enumerated() {
+            XCTAssertEqual(ramp.sourceTime(atOutput: node.outputOffset), sources[i],
+                           accuracy: 1e-9, "uzel \(i) neleží na své zdrojové pozici")
+            XCTAssertEqual(node.speed, speeds[i], accuracy: 1e-12)
+        }
+    }
+
+    func testKlasickyTvarOdpovidaReferenci() throws {
+        // Zdrojově kotvená obdoba referenční hodnoty: ramp 1,0 → 0,25 → 1,0
+        // s easeInOut, který má spotřebovat přesně 3,125 s zdroje za 5 s
+        // výstupu. EaseInOut je symetrický (∫ = 0,5), takže uzly leží na
+        // 0 / 1,5625 / 3,125 s zdroje.
+        let ramp = try SpeedRamp.anchoredToSource([
+            SourceAnchoredNode(sourceOffset: 0.0, speed: 1.0, easeToNext: .easeInOut),
+            SourceAnchoredNode(sourceOffset: 1.5625, speed: 0.25, easeToNext: .easeInOut),
+            SourceAnchoredNode(sourceOffset: 3.125, speed: 1.0, easeToNext: .easeInOut),
+        ])
+        XCTAssertEqual(ramp.outputDuration, 5.0, accuracy: 1e-9)
+        XCTAssertEqual(ramp.sourceConsumed, 3.125, accuracy: 1e-9)
+    }
+
+    func testOdmitneNerostouciZdrojoveCasy() {
+        XCTAssertThrowsError(try SpeedRamp.anchoredToSource([
+            SourceAnchoredNode(sourceOffset: 0.0, speed: 1.0),
+            SourceAnchoredNode(sourceOffset: 0.0, speed: 0.5),
+        ])) {
+            XCTAssertEqual($0 as? SpeedRampError, .nonIncreasingTime(index: 1))
+        }
+    }
+
+    func testOdmitneJedinyUzel() {
+        XCTAssertThrowsError(try SpeedRamp.anchoredToSource([
+            SourceAnchoredNode(sourceOffset: 0.0, speed: 1.0),
+        ])) {
+            XCTAssertEqual($0 as? SpeedRampError, .tooFewNodes)
+        }
+    }
+
+    func testOdmitneNulovouRychlost() {
+        XCTAssertThrowsError(try SpeedRamp.anchoredToSource([
+            SourceAnchoredNode(sourceOffset: 0.0, speed: 0.0),
+            SourceAnchoredNode(sourceOffset: 1.0, speed: 1.0),
+        ]))
+    }
+}
+
+// MARK: - Okénková segmentace
+
+final class WindowedSegmentationTests: XCTestCase {
+
+    private func classicRamp() throws -> SpeedRamp {
+        try SpeedRamp.fitting(sourceDuration: 8.0, shape: [
+            SpeedNode(outputOffset: 0, speed: 1.0, easeToNext: .easeInOut),
+            SpeedNode(outputOffset: 1, speed: 0.25, easeToNext: .easeInOut),
+            SpeedNode(outputOffset: 2, speed: 1.0, easeToNext: .easeInOut),
+        ])
+    }
+
+    func testCeleOknoSoucetSediNaZdrojIVystup() throws {
+        let ramp = try classicRamp()
+        let frames = Int((ramp.outputDuration * 30).rounded(.down))
+        let segments = try ramp.segments(outputFrameRate: 30, framesPerSegment: 3,
+                                         windowStart: 0, windowFrames: frames)
+
+        let outputSum = segments.reduce(0) { $0 + $1.outputDuration }
+        XCTAssertEqual(outputSum, Double(frames) / 30.0, accuracy: 1e-9)
+
+        let sourceSum = segments.reduce(0) { $0 + $1.sourceDuration }
+        XCTAssertEqual(sourceSum, ramp.sourceTime(atOutput: Double(frames) / 30.0), accuracy: 1e-9)
+    }
+
+    func testUsekyNavazujiBezeZbytku() throws {
+        let ramp = try classicRamp()
+        let segments = try ramp.segments(outputFrameRate: 30, framesPerSegment: 4,
+                                         windowStart: 2.2, windowFrames: 90)
+        var cursor = 0.0
+        for segment in segments {
+            XCTAssertEqual(segment.sourceStart, cursor, accuracy: 1e-12)
+            cursor += segment.sourceDuration
+        }
+    }
+
+    func testVysekOdpovidaMapovaniKrivky() throws {
+        // Zdroj spotřebovaný oknem [t0, t0 + D] musí být rozdíl mapování,
+        // ne „kus celokřivkové segmentace" — okno začíná uprostřed easingu.
+        let ramp = try classicRamp()
+        let t0 = 1.7
+        let frames = 60
+        let segments = try ramp.segments(outputFrameRate: 30, framesPerSegment: 2,
+                                         windowStart: t0, windowFrames: frames)
+        let sourceSum = segments.reduce(0) { $0 + $1.sourceDuration }
+        let expected = ramp.sourceTime(atOutput: t0 + Double(frames) / 30.0) - ramp.sourceTime(atOutput: t0)
+        XCTAssertEqual(sourceSum, expected, accuracy: 1e-9)
+    }
+
+    func testOknoZaKoncemKrivkyJedeRychlostiPoslednihoUzlu() throws {
+        let ramp = try classicRamp()
+        // Okno celé za koncem křivky: rychlost konstantní 1,0 → jediný úsek.
+        let plan = try ramp.segmentation(outputFrameRate: 30, maxSpeedStep: 0.015,
+                                        windowStart: ramp.outputDuration + 1, windowFrames: 30)
+        XCTAssertEqual(plan.segmentCount, 1)
+        XCTAssertEqual(plan.segments[0].speed, 1.0, accuracy: 1e-9)
+        XCTAssertFalse(plan.limitedByFrameRate)
+    }
+
+    func testOkenkovaMezSeDodrzi() throws {
+        let ramp = try classicRamp()
+        let plan = try ramp.segmentation(outputFrameRate: 30, maxSpeedStep: 0.015,
+                                        windowStart: 0.9, windowFrames: 150)
+        XCTAssertLessThanOrEqual(plan.achievedMaxStep, 0.015)
+        XCTAssertFalse(plan.limitedByFrameRate)
+        let outputFrames = plan.segments.reduce(0) { $0 + Int(($1.outputDuration * 30).rounded()) }
+        XCTAssertEqual(outputFrames, 150)
+    }
+
+    func testPrumerEasinguSediNaAnalytickychHodnotach() {
+        XCTAssertEqual(BezierEase.linear.integralAverage, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(BezierEase.easeInOut.integralAverage, 0.5, accuracy: 1e-9)  // symetrie
+    }
+}

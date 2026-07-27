@@ -47,7 +47,7 @@ public enum SpeedRampError: Error, Equatable, CustomStringConvertible {
 
 /// Náběhová funkce se stejnou sémantikou jako CSS `cubic-bezier(x1, y1, x2, y2)`.
 /// Krajní body jsou pevně (0,0) a (1,1).
-public struct BezierEase: Equatable, Codable, Sendable {
+public struct BezierEase: Equatable, Hashable, Codable, Sendable {
     public var x1: Double
     public var y1: Double
     public var x2: Double
@@ -107,6 +107,21 @@ public struct BezierEase: Equatable, Codable, Sendable {
         if u >= 1 { return 1 }
         return Self.bezier(y1, y2, solveParameter(for: u))
     }
+
+    /// Průměrná hodnota náběhu na [0, 1], tedy ∫₀¹ ease(u) du.
+    ///
+    /// Stejná kvadratura (Simpson, 512 vzorků) jako integrální tabulka křivky —
+    /// záměrně: konstrukce ze zdrojově kotvených uzlů pak trefí zdrojové
+    /// pozice uzlů přesně, ne jen přibližně.
+    var integralAverage: Double {
+        let n = 512
+        var sum = value(at: 0) + value(at: 1)
+        for k in 1..<n {
+            let weight: Double = (k % 2 == 1) ? 4 : 2
+            sum += weight * value(at: Double(k) / Double(n))
+        }
+        return sum / (3.0 * Double(n))
+    }
 }
 
 // MARK: - Uzel
@@ -121,6 +136,27 @@ public struct SpeedNode: Equatable, Codable, Sendable {
 
     public init(outputOffset: Double, speed: Double, easeToNext: BezierEase = .easeInOut) {
         self.outputOffset = outputOffset
+        self.speed = speed
+        self.easeToNext = easeToNext
+    }
+}
+
+// MARK: - Zdrojově kotvený uzel
+
+/// Uzel rychlostní křivky kotvený ve **zdrojovém** čase.
+///
+/// Timeline model ukládá uzly takhle schválně: když zpomalení sedí na hodu
+/// kyticí a klip se zepředu zkrátí, zpomalení má zůstat na hodu kyticí.
+/// Na výstupní osu (kterou počítá zbytek enginu) se převádí přes
+/// `SpeedRamp.anchoredToSource(_:)`.
+public struct SourceAnchoredNode: Equatable, Hashable, Sendable {
+    /// Pozice ve zdroji, v sekundách. Musí být ostře rostoucí.
+    public var sourceOffset: Double
+    public var speed: Double
+    public var easeToNext: BezierEase
+
+    public init(sourceOffset: Double, speed: Double, easeToNext: BezierEase = .easeInOut) {
+        self.sourceOffset = sourceOffset
         self.speed = speed
         self.easeToNext = easeToNext
     }
@@ -193,6 +229,43 @@ public struct SpeedRamp: Equatable, Codable, Sendable {
     }
 
     public static func == (lhs: SpeedRamp, rhs: SpeedRamp) -> Bool { lhs.nodes == rhs.nodes }
+
+    /// Postaví křivku ze **zdrojově kotvených** uzlů.
+    ///
+    /// Výstupní ofsety se dopočítají tak, aby křivka procházela zdrojovou
+    /// pozicí každého uzlu: mezi uzly `a` a `b` se spotřebuje
+    /// `Δt · (a.speed + (b.speed − a.speed) · ∫ease)`, takže
+    /// `Δt = Δs / průměrná rychlost`. Výstupní nula křivky odpovídá
+    /// zdrojové pozici prvního uzlu — volající si ji musí pamatovat.
+    public static func anchoredToSource(_ nodes: [SourceAnchoredNode]) throws -> SpeedRamp {
+        guard nodes.count >= 2 else { throw SpeedRampError.tooFewNodes }
+        let sorted = nodes.sorted { $0.sourceOffset < $1.sourceOffset }
+        for i in sorted.indices {
+            guard sorted[i].speed >= Self.minimumSpeed else {
+                throw SpeedRampError.nonPositiveSpeed(index: i, speed: sorted[i].speed)
+            }
+            if i > 0 {
+                guard sorted[i].sourceOffset > sorted[i - 1].sourceOffset else {
+                    throw SpeedRampError.nonIncreasingTime(index: i)
+                }
+            }
+        }
+
+        var output = 0.0
+        var converted: [SpeedNode] = []
+        converted.reserveCapacity(sorted.count)
+        for i in sorted.indices {
+            converted.append(SpeedNode(outputOffset: output,
+                                       speed: sorted[i].speed,
+                                       easeToNext: sorted[i].easeToNext))
+            if i < sorted.count - 1 {
+                let a = sorted[i], b = sorted[i + 1]
+                let meanSpeed = a.speed + (b.speed - a.speed) * a.easeToNext.integralAverage
+                output += (b.sourceOffset - a.sourceOffset) / meanSpeed
+            }
+        }
+        return try SpeedRamp(nodes: converted)
+    }
 
     /// Natáhne tvar křivky tak, aby spotřeboval **přesně** `sourceDuration` zdrojového času.
     /// Škáluje se čas uzlů, ne rychlosti — tvar křivky zůstává.
@@ -410,6 +483,120 @@ public struct SpeedRamp: Equatable, Codable, Sendable {
         while achieved > maxSpeedStep && chosen > 1 {
             chosen = max(1, chosen / 2)
             result = try segments(outputFrameRate: outputFrameRate, framesPerSegment: chosen)
+            achieved = Self.largestSpeedStep(in: result)
+        }
+
+        return SegmentationPlan(segments: result,
+                                framesPerSegment: chosen,
+                                requestedMaxStep: maxSpeedStep,
+                                achievedMaxStep: achieved,
+                                limitedByFrameRate: achieved > maxSpeedStep)
+    }
+
+    // MARK: Segmentace okna
+
+    /// Největší strmost křivky uvnitř výstupního okna `[windowStart, windowStart + windowDuration]`.
+    /// Za koncem křivky je rychlost konstantní (poslední uzel), strmost nula.
+    func maxSpeedSlope(outputFrameRate: Double, windowStart: Double, windowDuration: Double) -> Double {
+        guard windowDuration > 0, outputFrameRate > 0 else { return 0 }
+
+        let samples = max(2048, Int((windowDuration * outputFrameRate * 4).rounded()))
+        let dt = windowDuration / Double(samples)
+        var maxSlope = 0.0
+        var previous = speed(atOutput: windowStart)
+
+        for index in 1...samples {
+            let current = speed(atOutput: windowStart + windowDuration * Double(index) / Double(samples))
+            maxSlope = max(maxSlope, abs(current - previous) / dt)
+            previous = current
+        }
+        return maxSlope
+    }
+
+    /// Úseky pro **výsek** křivky: okno začíná na výstupním čase `windowStart`
+    /// a trvá přesně `windowFrames` výstupních snímků.
+    ///
+    /// Klip na ose po trimu nepokrývá celou křivku, ale její výsek — a výsek
+    /// může přesahovat i za poslední uzel (tam křivka pokračuje rychlostí
+    /// posledního uzlu, stejně jako `sourceTime(atOutput:)`).
+    ///
+    /// `sourceStart` úseků je relativní k **začátku okna**, ne k začátku
+    /// křivky — volající zná zdrojovou pozici okna a přičte si ji sám.
+    /// Hranice úseků sedí na hranicích výstupních snímků a zdrojové pozice
+    /// se počítají kumulativně, takže úseky na sebe navazují beze zbytku.
+    public func segments(outputFrameRate: Double,
+                         framesPerSegment: Int,
+                         windowStart: Double,
+                         windowFrames: Int) throws -> [RampSegment] {
+        guard outputFrameRate > 0, outputFrameRate.isFinite else {
+            throw SpeedRampError.invalidFrameRate(outputFrameRate)
+        }
+        guard windowFrames > 0 else { return [] }
+        let start = max(0, windowStart)
+        let perSegment = max(1, framesPerSegment)
+        let count = Int(ceil(Double(windowFrames) / Double(perSegment)))
+
+        let windowSource = sourceTime(atOutput: start)
+        var result: [RampSegment] = []
+        result.reserveCapacity(count)
+
+        var previousSource = windowSource
+        for k in 0..<count {
+            let startFrame = k * perSegment
+            let endFrame = min(windowFrames, (k + 1) * perSegment)
+            let outputEnd = start + Double(endFrame) / outputFrameRate
+            let sourceEnd = sourceTime(atOutput: outputEnd)
+            result.append(RampSegment(
+                sourceStart: previousSource - windowSource,
+                sourceDuration: sourceEnd - previousSource,
+                outputDuration: Double(endFrame - startFrame) / outputFrameRate
+            ))
+            previousSource = sourceEnd
+        }
+        return result
+    }
+
+    /// Segmentace výseku křivky řízená mezí skoku rychlosti — okénková
+    /// obdoba `segmentation(outputFrameRate:maxSpeedStep:)`, stejná logika:
+    /// konzervativní odhad ze strmosti, ověření na skutečných úsecích,
+    /// půlení jako pojistka.
+    public func segmentation(outputFrameRate: Double,
+                             maxSpeedStep: Double,
+                             windowStart: Double,
+                             windowFrames: Int) throws -> SegmentationPlan {
+        guard outputFrameRate > 0, outputFrameRate.isFinite else {
+            throw SpeedRampError.invalidFrameRate(outputFrameRate)
+        }
+        guard maxSpeedStep > 0, maxSpeedStep.isFinite else {
+            throw SpeedRampError.invalidSpeedStep(maxSpeedStep)
+        }
+
+        let start = max(0, windowStart)
+        let totalFrames = max(1, windowFrames)
+        let slope = maxSpeedSlope(outputFrameRate: outputFrameRate,
+                                  windowStart: start,
+                                  windowDuration: Double(totalFrames) / outputFrameRate)
+
+        var chosen: Int
+        if slope <= 0 {
+            chosen = totalFrames
+        } else {
+            chosen = Int((maxSpeedStep * outputFrameRate / slope).rounded(.down))
+        }
+        chosen = min(totalFrames, max(1, chosen))
+
+        var result = try segments(outputFrameRate: outputFrameRate,
+                                  framesPerSegment: chosen,
+                                  windowStart: start,
+                                  windowFrames: totalFrames)
+        var achieved = Self.largestSpeedStep(in: result)
+
+        while achieved > maxSpeedStep && chosen > 1 {
+            chosen = max(1, chosen / 2)
+            result = try segments(outputFrameRate: outputFrameRate,
+                                  framesPerSegment: chosen,
+                                  windowStart: start,
+                                  windowFrames: totalFrames)
             achieved = Self.largestSpeedStep(in: result)
         }
 

@@ -297,6 +297,13 @@ final class AppModel: ObservableObject {
 struct ContentView: View {
     @StateObject private var model = AppModel()
 
+    /// Diagnostický přepínač: `--no-timeline` postaví okno bez časové osy.
+    ///
+    /// Slouží k rozseknutí jediné otázky — jestli za černým náhledem stojí
+    /// timeline, nebo něco úplně jiného. Jeden build, dvě spuštění, žádné
+    /// hádání. Až bude odpověď, tenhle přepínač jde pryč.
+    static let timelineDisabled = CommandLine.arguments.contains("--no-timeline")
+
     var body: some View {
         HSplitView {
             sidebar
@@ -433,7 +440,7 @@ struct ContentView: View {
             // skrývání přes nulový rámec už jednou natáhlo layout na 4398
             // bodů a měření to nepoznalo (27. 07. 2026). `if` tuhle past
             // obchází celou; stav osy přežije v `AppModelu`.
-            if !model.chromeHidden {
+            if !model.chromeHidden && !Self.timelineDisabled {
                 Divider()
                 // Pevná výška, ne `idealHeight`. Přehrávač i osa jsou oba
                 // pružné `NSViewRepresentable`, takže se o volné místo
@@ -444,29 +451,53 @@ struct ContentView: View {
                     .frame(height: 220)
             }
 
-            HStack(spacing: 16) {
-                Button(model.controller.isPlaying ? "Pauza" : "Přehrát") {
-                    model.controller.togglePlayPause()
-                }
-                .keyboardShortcut(.space, modifiers: [])
-
-                Button("◀︎ snímek") { model.controller.step(frames: -1) }
-                    .keyboardShortcut(.leftArrow, modifiers: [])
-                Button("snímek ▶︎") { model.controller.step(frames: 1) }
-                    .keyboardShortcut(.rightArrow, modifiers: [])
-
-                Spacer()
-                Text(timecode(model.controller.currentTime))
-                    .font(.system(.body, design: .monospaced))
-            }
-            .padding(10)
-            .frame(height: model.chromeHidden ? 0 : nil)
-            .opacity(model.chromeHidden ? 0 : 1)
-            .clipped()
+            TransportBar(controller: model.controller, hidden: model.chromeHidden)
         }
     }
+}
 
-    private func timecode(_ time: CMTime) -> String {
+/// Ovládání přehrávání. Vlastní view schválně.
+///
+/// ⚠️ **SwiftUI nesleduje vnořené `ObservableObject`y.** `ContentView` drží
+/// `AppModel`, ale `currentTime` a `isPlaying` jsou publikované na
+/// `AppModel.controller`, což je jiný objekt — změna v něm tedy `ContentView`
+/// nepřekreslí. Projevovalo se to tak, že **časový údaj trvale ukazoval
+/// `0:00.000` a tlačítko se nikdy nepřepnulo na „Pauza"**, přestože
+/// přehrávání běželo a zvuk byl slyšet. V projektu to bylo od fáze 1
+/// a odhaleno až 27. 07. 2026 ruční zkouškou.
+///
+/// Řešením je `@ObservedObject` na controlleru — ale v malém view, ne
+/// v `ContentView`. Kdyby se překresloval celý obsah okna, dělo by se to
+/// třicetkrát za sekundu (tolikrát chodí pozorovatel času) a s ním by se
+/// třicetkrát za sekundu volalo `updateNSView` na časové ose. Takhle se
+/// překresluje jen tenhle proužek.
+private struct TransportBar: View {
+    @ObservedObject var controller: PlaybackController
+    let hidden: Bool
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Button(controller.isPlaying ? "Pauza" : "Přehrát") {
+                controller.togglePlayPause()
+            }
+            .keyboardShortcut(.space, modifiers: [])
+
+            Button("◀︎ snímek") { controller.step(frames: -1) }
+                .keyboardShortcut(.leftArrow, modifiers: [])
+            Button("snímek ▶︎") { controller.step(frames: 1) }
+                .keyboardShortcut(.rightArrow, modifiers: [])
+
+            Spacer()
+            Text(Self.timecode(controller.currentTime))
+                .font(.system(.body, design: .monospaced))
+        }
+        .padding(10)
+        .frame(height: hidden ? 0 : nil)
+        .opacity(hidden ? 0 : 1)
+        .clipped()
+    }
+
+    private static func timecode(_ time: CMTime) -> String {
         guard time.isValid, time.seconds.isFinite else { return "—" }
         let total = time.seconds
         let minutes = Int(total) / 60

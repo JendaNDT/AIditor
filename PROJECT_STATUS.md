@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (188 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. Kroky 6–9 čekají na ověření interakcí rukou; vlna na klipu je ověřená screenshotem.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), fáze 3 rozjetá — přehrávač už hraje celou osu.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (188 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. Kroky 6–9 čekají na ověření interakcí rukou; vlna na klipu je ověřená screenshotem.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -55,7 +55,15 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   👀 Koukanec kroku 10: pinch nad zvukovým klipem — vlna se během gesta smí lehce rozmazat, po ustálení ostrá, a hlavně NIC nesmí sekat. A výkonový test z návrhu (sekce 6): scroll přes celou osu bez vypadlého tiku.
 
-**Fáze 2 tím má napsaných všech deset kroků.** Zbývá souhrnný koukanec na interakce (checklist u kroků 6–9) a pak výkonový rozpočet: 1000 klipů, scroll přes celou osu, žádný vypadlý tik. Po odsouhlasení okem je na řadě **fáze 3 — speed ramping ostrý**.
+**Fáze 2 tím má napsaných všech deset kroků.** Zbývá souhrnný koukanec na interakce (checklist u kroků 6–9) a pak výkonový rozpočet: 1000 klipů, scroll přes celou osu, žádný vypadlý tik.
+
+## 🔄 FÁZE 3 — speed ramping ostrý (rozjetá 28. 07. 2026)
+
+✅ **Modul 1 — `CompositionBuilder`: přehrávač hraje CELOU OSU.** `AVMutableComposition` z timeline projektu: stopa kompozice na stopu osy, výřez zdroje každého klipu počítá model (`sourceStart` + `sourceConsumption`), časy výhradně v timescale 90 000 (nikdy sekundy s plovoucí čárkou), soubor vybírá `Asset.url(usingProxies:)`. Kompozice se přestavuje při každé změně projektu (import, střih, undo) s debounce 250 ms. **Ověřeno průjezdem hranice klipů:** přehrávání běželo v čase 0:34 na kompozici, kde sólo první klip končí ve 26 s — hraje sekvence, ne soubor.
+
+  **Vazba hlava ↔ přehrávač z kroku 6 se tím ZJEDNODUŠILA:** snímek osy je přímo čas kompozice (`CompositionBuilder.time/frame`), per-klipové mapování přes assety je smazané. Sidebar dál umí sólo poslech zdroje (`PlayerContent.solo`) kvůli kontrole klipu a benchmarkům; klik do pravítka vrací přehrávač na osu.
+
+  Rampy zatím hrají 1×. **Další moduly fáze 3:** (2) aplikace `SpeedRampEngine` segmentace na klip s rampou — `scaleTimeRange` pozpátku, mez skoku 1,5 %, `.timeDomain` korekce výšky; (3) `SpeedRampEditor` UI se žlutou zónou pod `výstupFps / zdrojFps` (limit per klip ze změřené frekvence) a zobrazením `limitedByFrameRate`. „Hotovo když: nakreslíš křivku myší, náhled ji ukáže, zvuk drží."
 
 👀 **Kroky 2 a 3 chtějí koukanec.** Krok 2 potvrzený (27. 07. 2026, 21:08). U kroku 3 se očima ověřuje, že při vodorovném scrollu jede timecode s obsahem a jména stop stojí, a při svislém naopak.
 

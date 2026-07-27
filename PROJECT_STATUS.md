@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová, otestovaná a napojená na appku; view navržené, kreslicí kód nezačatý.**
+**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná (163 testů), z deseti kroků view stojí tři — osa se stopami, pravítko a hlavičky. Klipy na ní zatím nejsou.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -17,13 +17,13 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 
 ## ⏭️ Příští krok
 
-**Krok 3 stavby: pravítko a hlavičky stop, synchronizované přes `boundsDidChange`.** Hotovo bude, až budeš scrollovat osou a timecode i jména stop pojedou s ní.
+**Krok 4 stavby: `TimelineLayout` + `LayerDiff` v `TimelineModelu`, s testy.** Rozhodnutí, které vrstvy připojit z fondu, které vrátit a kterým jen přepsat rámec. Hotovo bude, až projde `swift test` — ve view se přitom nezmění nic. Je to jediný krok stavby, který má testy, a schválně ten, ve kterém se dá nejvíc ztratit.
 
-✅ **Krok 2 je potvrzený i okem** (27. 07. 2026, 21:08). Tři pruhy, horní vyšší, pod nimi pozadí dokumentu; přehrávač dostal místo zpátky.
+👀 **Kroky 2 a 3 chtějí koukanec.** Krok 2 potvrzený (27. 07. 2026, 21:08). U kroku 3 se očima ověřuje, že při vodorovném scrollu jede timecode s obsahem a jména stop stojí, a při svislém naopak.
 
 ✅ **Krok 1 — `TimelineModel` napojený na `Krasa.xcodeproj`** (commit `3f5f9cb`). Lokální balíček stejným vzorcem jako `ProbeKit` a `SpeedRampEngine`. Přibyl `TimelineController` — vlastník stavu podle `FAZE_2_VIEW.md` 2.1, kde má **geometrie jediné úložiště** (`interaction.geometry`) a controller ji vystavuje jen průchodem.
 
-  Ověřeno, ne odhadnuto: `xcodebuild` bez chyb i varování, Xcode hlásí `Explicit dependency on target 'TimelineModel'`, v binárce je **5039 symbolů modulu** `TimelineModel` a 143 testů balíčku dál prochází. *(Samotné „BUILD SUCCEEDED" nedokazuje nic — projekt se přeložil i předtím, než o balíčku věděl.)*
+  Ověřeno, ne odhadnuto: `xcodebuild` bez chyb i varování, Xcode hlásí `Explicit dependency on target 'TimelineModel'`, v binárce je **5039 symbolů modulu** `TimelineModel` a 143 testů balíčku dál procházelo. *(Samotné „BUILD SUCCEEDED" nedokazuje nic — projekt se přeložil i předtím, než o balíčku věděl.)*
 
 ✅ **Krok 2 — `TimelineDocumentView` v `NSScrollView`, pruhy stop** (commit `28a5af3`). `isFlipped = true`, pruhy jako `CALayer`, `TimelinePane` s scroll view a most do SwiftUI (`TimelinePaneView` — ne `TimelineView`, to jméno už `SwiftUI` zabírá). Osa sedí pod přehrávačem.
 
@@ -33,7 +33,15 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 
   ⚠️ **První verze prošla všemi kontrolami a přitom nebyla vidět.** Pruhy braly barvu ze `systémových sémantických` barev (`controlBackgroundColor` proti `underPageBackgroundColor`) — ty se ale v tmavém režimu liší o **0,039** ve složce bílé, takže z osy byl jeden slitý blok. Kontrola ověřovala, že vrstva barvu *má*, ne že je *k rozeznání*; test „hodnota není nil" je slabší, než vypadá. Opraveno vlastní paletou přes `NSColor(name:dynamicProvider:)`: rozdíl **0,150** u obrazové stopy a 0,080 u zvukové, v obou režimech vzhledu.
 
-  Druhá věc, kterou čísla nechytila: osa i přehrávač jsou oba pružné `NSViewRepresentable`, takže si volné místo rozdělily napůl a osa zabírala 427 bodů. Teď má pevných 220; roztahovací dělič je věc kroku 3.
+  Druhá věc, kterou čísla nechytila: osa i přehrávač jsou oba pružné `NSViewRepresentable`, takže si volné místo rozdělily napůl a osa zabírala 427 bodů. Teď má pevných 220.
+
+✅ **Krok 3 — pravítko s timecode a hlavičky stop** (commit `8b5fba0`). Hlavičky 96 bodů vlevo, pravítko 26 bodů nahoře, obojí **mimo** `NSScrollView`: dostávají `contentView.bounds.origin` a každé si bere jen svou složku. Uvnitř scroll view by pravítko odjelo svisle a hlavičky vodorovně.
+
+  **Timecode a volba rozteče rysek jsou v `TimelineModelu`, ne ve view.** Obojí je čistá funkce s porovnatelnou návratovou hodnotou; ve view by to nikdo neotestoval a chyba by se poznala jen tím, že si někdo všimne špatného popisku u hrany okna. **+20 testů, celkem 163, 0 selhání.** *(Je to druhé rozšíření modelu ve fázi 2 — `FAZE_2_VIEW.md` počítalo jen s `TimelineLayout`. Důvod je ale tentýž a pravidlo „co bude ve view navíc, to nikdo neotestuje" je silnější.)*
+
+  **Bez drop-frame, a je to rozhodnutí, ne opomenutí.** Drop-frame timecode řeší rozpor mezi 29,97 snímku za sekundu a hodinami na zdi. Základna projektu je celé číslo, takže žádný rozpor nevzniká a po `00:00:29:29` následuje rovnou `00:00:30:00`. Kdyby se někdy zaváděla necelá základna, `Timecode.swift` je jedno ze dvou míst k přepsání.
+
+  Ověřeno: vodorovný scroll hne jen pravítkem, svislý jen hlavičkami, popisky stojí na násobcích rozteče (při výchozím zoomu po sekundě, 120 bodů).
 
 Pak zbytek **`TimelineView` v AppKitu — poslední kus fáze 2.** Co v něm doopravdy zbývá:
 
@@ -44,8 +52,10 @@ Pak zbytek **`TimelineView` v AppKitu — poslední kus fáze 2.** Co v něm doo
 | střihové operace a jejich pravidla | ✅ `Project` |
 | undo | ✅ `UndoStack` |
 | `NSView` v `NSScrollView`, pruhy stop | ✅ krok 2 |
+| pravítko a hlavičky stop přes `NSView.boundsDidChangeNotification` | ✅ krok 3 |
+| timecode a rozteč rysek | ✅ `Timecode` v modelu, 20 testů |
+| `TimelineLayout` + `LayerDiff` | ❌ krok 4 |
 | klipy jako recyklované `CALayer` | ❌ krok 5 |
-| pravítko a hlavičky stop přes `NSView.boundsDidChangeNotification` | ❌ krok 3 |
 | vlnové průběhy jako `CGImage` dlaždice per zoom | ❌ |
 | kurzory, kontextové menu, klávesové zkratky | ❌ |
 
@@ -89,7 +99,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
   **GPU baseline pro fáze 2–3.** Holý náhled 4K/60 na popředí, ať v okně nebo na celé obrazovce, stojí **pod 0,3 % GPU rezidence** — video jde na displej jako samostatná vrstva a GPU se skoro nezapojí. S aplikací na pozadí, kdy se skládat musí, to skočí na ~10 %. Až se ve fázi 3 přidá vlastní compositor nebo efekty, přepne se to natrvalo do té dražší cesty; tohle jsou hodnoty, proti kterým se to pozná. Podrobnosti v sekci rizik.
 
   Dřívější zápis „okno 1280×1192 px" byla plocha **vrstvy** v backing pixelech, ne okna ani obrazu. Samotný obraz měl 1280×720 px.
-- **`TimelineModel` — logika, geometrie a interakce časové osy.** **143 testů, 0 selhání.** Čistý Swift bez AVFoundation a bez AppKitu, takže se přeloží a otestuje i na Linuxu — díky tomu byl ověřený dřív, než se sáhlo na UI.
+- **`TimelineModel` — logika, geometrie a interakce časové osy.** **163 testů, 0 selhání.** Čistý Swift bez AVFoundation a bez AppKitu, takže se přeloží a otestuje i na Linuxu — díky tomu byl ověřený dřív, než se sáhlo na UI.
   - **Datový model:** dvě časové soustavy s jedinou hranicí mezi nimi (`Frames` na ose, `SourceTime` ve zdroji), deset invariantů kontrolovaných po každé operaci, kompletní sada operací (vložení, přepis, ripple, split, join, trim, slip, roll, vazba obrazu na zvuk), dotazy na meze tažení a snapshot undo nad celým projektem.
   - **`TimelineGeometry`:** mapování čas↔pixel při zoomu, viditelný rozsah binárním půlením, rozvržení stop, hit testing s okraji klipů, přichytávání s pořadím síly kandidátů. Šířka úchopu a tolerance přichytávání jsou v **bodech**, ne ve snímcích — jinak by po odzoomování nešel chytit okraj klipu a po přiblížení by přichytávání skákalo přes půl obrazovky.
   - **`TimelineInteraction`:** stavový automat tažení. Určení druhu podle toho, co je pod myší, průběžný náhled s přichytáváním a kontrolou legálnosti, meze trimu a rollu, výsledná operace na modelu. Během tažení se do modelu nezapisuje.
@@ -110,7 +120,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 ### Cesta k v0.5 „MVP nula" (~6 měsíců při 30 h/týdně)
 - **F0** Spike 0 — ověření speed rampingu — ✅ **HOTOVO 26. 07. 2026**, hlavní riziko zavřené
 - **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
-- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (143 testů) a napojený na appku, view navržené, kreslicí kód nezačatý (1 z 10 kroků)**
+- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (163 testů), z deseti kroků view hotové 3**
 - **F3** Speed ramping ostrý *(3 týdny)*
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)*
 - **F5** Projekt, autosave, undo, export *(3 týdny)*
@@ -232,12 +242,15 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
   - `Sources/TimelineModel/UndoStack.swift` – snapshot undo nad celým projektem
   - `Sources/TimelineModel/Geometry.swift` – matematika view: zoom, viditelný rozsah, hit testing, přichytávání
   - `Sources/TimelineModel/Interaction.swift` – stavový automat tažení: náhled, meze, výsledná operace
-  - `Tests/TimelineModelTests/` – **143 testů**
+  - `Sources/TimelineModel/Timecode.swift` – popisky pravítka: `HH:MM:SS:FF` a volba rozteče rysek
+  - `Tests/TimelineModelTests/` – **163 testů**
   - `README.md` – API, dvě časové soustavy, co se snadno rozbije
 - `Krasa/Krasa/Timeline/` – **timeline v appce**
   - `TimelineController.swift` – vlastník stavu: projekt, undo, interakce (a v ní **jediná kopie geometrie**), playhead, výběr
   - `TimelineDocumentView.swift` – plocha osy: `isFlipped`, pruhy stop, barvy přežívající přepnutí do tmavého režimu, Retina
-  - `TimelinePane.swift` – `NSScrollView`, velikost scrollovatelné plochy, most do SwiftUI
+  - `TimelinePane.swift` – rozvržení, `NSScrollView`, synchronizace pravítka a hlaviček se scrollem, most do SwiftUI
+  - `TimelineRulerView.swift` – timecode a rysky, posun podle `bounds.origin.x`
+  - `TrackHeadersView.swift` – jména stop, posun podle `bounds.origin.y`
 - `MediaProbe/` – **balíček se třemi nástroji a sdílenou knihovnou**
   - `Sources/ProbeKit/` – sdílené jádro: klasifikace délek vzorků, verdikt CFR/VFR, edit list, `CFRRenderer`, `VideoResampler`
   - `Sources/MediaProbe/` – sonda: `swift run MediaProbe`

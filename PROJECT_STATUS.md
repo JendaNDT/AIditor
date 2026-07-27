@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová a otestovaná, view navržené, kód view nezačatý.**
+**Stav: Spike 0 i fáze 1 hotové, hlavní technické riziko zavřené.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 je rozdělaná: logika časové osy hotová, otestovaná a napojená na appku; view navržené, kreslicí kód nezačatý.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -17,13 +17,13 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 
 ## ⏭️ Příští krok
 
-**Napojit `TimelineModel` do `Krasa.xcodeproj` a postavit `TimelineView` podle `FAZE_2_VIEW.md`.**
+**Krok 2 stavby: `TimelineDocumentView` v `NSScrollView` podle `FAZE_2_VIEW.md`.** Hotovo bude, až uvidíš tři prázdné pruhy V1/A1/A2 a půjde jimi scrollovat.
 
-✅ *Předchozí příští krok je hotový.* `TimelineModel` **je v gitu** (commit `fcf08eb`, 27. 07. 2026 20:04) a **na macOS se přeložil** — v `TimelineModel/.build` je triple `arm64-apple-macosx` a bundle `TimelineModelPackageTests.xctest`, postavené toolchainem z `/Applications/Xcode.app` minutu před commitem. Status tvrdil opak, protože se aktualizoval dřív, než ten krok proběhl.
+✅ **Krok 1 je hotový — `TimelineModel` je napojený na `Krasa.xcodeproj`** (commit `3f5f9cb`, 27. 07. 2026). Lokální balíček stejným vzorcem jako `ProbeKit` a `SpeedRampEngine`: `XCLocalSwiftPackageReference ../TimelineModel` + produkt ve `Frameworks`. Přibyl `Krasa/Timeline/TimelineController.swift` — vlastník stavu podle `FAZE_2_VIEW.md` 2.1, kde má **geometrie jediné úložiště** (`interaction.geometry`) a controller ji vystavuje jen průchodem.
 
-🔴 **Zato `TimelineModel` NENÍ napojený na Xcode projekt.** V `Krasa.xcodeproj/project.pbxproj` je 9× `SpeedRampEngine` a 6× `ProbeKit`, ale `TimelineModel` **nula**. Balíček je hotový a otestovaný, ale aplikace o něm neví — je to první krok stavby ve `FAZE_2_VIEW.md`, sekce 7.
+  Ověřeno, ne odhadnuto: `xcodebuild` bez chyb i varování, Xcode hlásí `Explicit dependency on target 'TimelineModel'`, v binárce je **5039 symbolů modulu** `TimelineModel` a 143 testů balíčku dál prochází. *(Samotné „BUILD SUCCEEDED" nedokazuje nic — projekt se přeložil i předtím, než o balíčku věděl.)*
 
-Pak **`TimelineView` v AppKitu — poslední kus fáze 2.** Co v něm doopravdy zbývá:
+Pak zbytek **`TimelineView` v AppKitu — poslední kus fáze 2.** Co v něm doopravdy zbývá:
 
 | část | stav |
 |---|---|
@@ -90,14 +90,14 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 2 — timeline.** `TimelineModel` hotový, otestovaný a v gitu; přeložený na Linuxu i na macOS. **Není ale napojený na `Krasa.xcodeproj`** — aplikace o balíčku neví. `TimelineView` navržený (`FAZE_2_VIEW.md`), kód nezačatý.
+- **Fáze 2 — timeline.** `TimelineModel` hotový, otestovaný, v gitu a **napojený na `Krasa.xcodeproj`** (krok 1 z deseti). `TimelineView` navržený (`FAZE_2_VIEW.md`), kreslicí kód nezačatý — stojí zatím jen `TimelineController` jako vlastník stavu.
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
 ### Cesta k v0.5 „MVP nula" (~6 měsíců při 30 h/týdně)
 - **F0** Spike 0 — ověření speed rampingu — ✅ **HOTOVO 26. 07. 2026**, hlavní riziko zavřené
 - **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
-- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (143 testů), view navržené, kód view nezačatý**
+- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (143 testů) a napojený na appku, view navržené, kreslicí kód nezačatý (1 z 10 kroků)**
 - **F3** Speed ramping ostrý *(3 týdny)*
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)*
 - **F5** Projekt, autosave, undo, export *(3 týdny)*
@@ -215,6 +215,8 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
   - `Sources/TimelineModel/Interaction.swift` – stavový automat tažení: náhled, meze, výsledná operace
   - `Tests/TimelineModelTests/` – **143 testů**
   - `README.md` – API, dvě časové soustavy, co se snadno rozbije
+- `Krasa/Krasa/Timeline/` – **timeline v appce**
+  - `TimelineController.swift` – vlastník stavu: projekt, undo, interakce (a v ní **jediná kopie geometrie**), playhead, výběr
 - `MediaProbe/` – **balíček se třemi nástroji a sdílenou knihovnou**
   - `Sources/ProbeKit/` – sdílené jádro: klasifikace délek vzorků, verdikt CFR/VFR, edit list, `CFRRenderer`, `VideoResampler`
   - `Sources/MediaProbe/` – sonda: `swift run MediaProbe`

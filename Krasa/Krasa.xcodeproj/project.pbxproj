@@ -18,6 +18,8 @@
 		D8D296ED416C1618E779BF80 /* PlaybackBenchmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9168C630193BE62D64B5B960 /* PlaybackBenchmark.swift */; };
 		35F555F0783E426C92AA424B /* ProbeKit in Frameworks */ = {isa = PBXBuildFile; productRef = B0DAC348D3FBC2130428908B /* ProbeKit */; };
 		D37162A8507F2462184062CA /* SpeedRampEngine in Frameworks */ = {isa = PBXBuildFile; productRef = AF884B639665597476B455E5 /* SpeedRampEngine */; };
+		C4A1E9D2073B48F19A55D310 /* TimelineModel in Frameworks */ = {isa = PBXBuildFile; productRef = E7B26F4A15CD8B03D2914C68 /* TimelineModel */; };
+		2F71D6C304AB859E1D3E7F0A /* TimelineController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0E48B9A17D3F62E0B95741 /* TimelineController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +33,7 @@
 		A457BB75BADC45205B9B3F69 /* SystemConditions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemConditions.swift; sourceTree = "<group>"; };
 		9168C630193BE62D64B5B960 /* PlaybackBenchmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackBenchmark.swift; sourceTree = "<group>"; };
 		E8CE4721331CF75E9478C7F2 /* Krasa.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Krasa.entitlements; sourceTree = "<group>"; };
+		5C0E48B9A17D3F62E0B95741 /* TimelineController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -40,6 +43,7 @@
 			files = (
 				35F555F0783E426C92AA424B /* ProbeKit in Frameworks */,
 				D37162A8507F2462184062CA /* SpeedRampEngine in Frameworks */,
+				C4A1E9D2073B48F19A55D310 /* TimelineModel in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,6 +74,7 @@
 				16260C585190F1B74295BB31 /* ContentView.swift */,
 				BD13434066203B2825EE5A5F /* Media */,
 				34AA73FFCE9BBCC557385235 /* Measure */,
+				8B4A0F27C6D91E53B7402AD8 /* Timeline */,
 				E8CE4721331CF75E9478C7F2 /* Krasa.entitlements */,
 			);
 			path = Krasa;
@@ -95,6 +100,14 @@
 			path = Measure;
 			sourceTree = "<group>";
 		};
+		8B4A0F27C6D91E53B7402AD8 /* Timeline */ = {
+			isa = PBXGroup;
+			children = (
+				5C0E48B9A17D3F62E0B95741 /* TimelineController.swift */,
+			);
+			path = Timeline;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -114,6 +127,7 @@
 			packageProductDependencies = (
 				B0DAC348D3FBC2130428908B /* ProbeKit */,
 				AF884B639665597476B455E5 /* SpeedRampEngine */,
+				E7B26F4A15CD8B03D2914C68 /* TimelineModel */,
 			);
 			productName = Krasa;
 			productReference = 7D1043473D55BFA90E8530D3 /* Krasa.app */;
@@ -145,6 +159,7 @@
 			packageReferences = (
 				3035421092D70BB86EE474F3 /* XCLocalSwiftPackageReference "../MediaProbe" */,
 				2BCE1BA8852C9332D0F8EFE2 /* XCLocalSwiftPackageReference "../SpeedRampEngine" */,
+				9A3D5C81B24E7F0658AD1E92 /* XCLocalSwiftPackageReference "../TimelineModel" */,
 			);
 			productRefGroup = 00C45FD35CB0F9C5F764F070 /* Products */;
 			projectDirPath = "";
@@ -178,6 +193,7 @@
 				2D92BF1645FAEB9D099F10E6 /* PlayerView.swift in Sources */,
 				1F9F8B29E107494593AB0078 /* SystemConditions.swift in Sources */,
 				D8D296ED416C1618E779BF80 /* PlaybackBenchmark.swift in Sources */,
+				2F71D6C304AB859E1D3E7F0A /* TimelineController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -303,6 +319,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../SpeedRampEngine;
 		};
+		9A3D5C81B24E7F0658AD1E92 /* XCLocalSwiftPackageReference "../TimelineModel" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../TimelineModel;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -313,6 +333,10 @@
 		AF884B639665597476B455E5 /* SpeedRampEngine */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = SpeedRampEngine;
+		};
+		E7B26F4A15CD8B03D2914C68 /* TimelineModel */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TimelineModel;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

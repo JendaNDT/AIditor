@@ -23,6 +23,9 @@ final class AppModel: ObservableObject {
 
     let importer = MediaImporter()
     let controller = PlaybackController()
+    /// Stav časové osy. Žije v modelu, ne ve view — `TimelinePaneView` se
+    /// smí kdykoli přetvořit, `TimelineController` to nesmí pocítit.
+    let timeline = TimelineController()
     private(set) var hostView: PlayerHostView?
 
     /// Pauza mezi běhy. Air je bezventilátorový — bez chladnutí měří druhý
@@ -395,6 +398,21 @@ struct ContentView: View {
                 model.attach(view)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // 🚩 Při měření náhledu se osa z hierarchie ODSTRANÍ, ne jen skryje.
+            //
+            // Dva důvody, každý sám o sobě dostatečný. Za prvé: timeline je
+            // první věc v projektu, nad kterou musí WindowServer něco skládat,
+            // a čísla z fáze 1 jsou naměřená bez ní — nechat ji na obrazovce
+            // znamená měřit něco jiného a tvrdit, že je to totéž. Za druhé:
+            // skrývání přes nulový rámec už jednou natáhlo layout na 4398
+            // bodů a měření to nepoznalo (27. 07. 2026). `if` tuhle past
+            // obchází celou; stav osy přežije v `AppModelu`.
+            if !model.chromeHidden {
+                Divider()
+                TimelinePaneView(controller: model.timeline)
+                    .frame(minHeight: 180, idealHeight: 220)
+            }
 
             HStack(spacing: 16) {
                 Button(model.controller.isPlaying ? "Pauza" : "Přehrát") {

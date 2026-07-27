@@ -20,6 +20,8 @@
 		D37162A8507F2462184062CA /* SpeedRampEngine in Frameworks */ = {isa = PBXBuildFile; productRef = AF884B639665597476B455E5 /* SpeedRampEngine */; };
 		C4A1E9D2073B48F19A55D310 /* TimelineModel in Frameworks */ = {isa = PBXBuildFile; productRef = E7B26F4A15CD8B03D2914C68 /* TimelineModel */; };
 		2F71D6C304AB859E1D3E7F0A /* TimelineController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0E48B9A17D3F62E0B95741 /* TimelineController.swift */; };
+		A9E3B57C1F0842D6C7B93E15 /* TimelineDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D82F4A0E51C7B394D06A2F8 /* TimelineDocumentView.swift */; };
+		74CB19E8D3A05F2718BE6C40 /* TimelinePane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B5A7D3629F41E8C5A72D094 /* TimelinePane.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +36,8 @@
 		9168C630193BE62D64B5B960 /* PlaybackBenchmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackBenchmark.swift; sourceTree = "<group>"; };
 		E8CE4721331CF75E9478C7F2 /* Krasa.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Krasa.entitlements; sourceTree = "<group>"; };
 		5C0E48B9A17D3F62E0B95741 /* TimelineController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineController.swift; sourceTree = "<group>"; };
+		6D82F4A0E51C7B394D06A2F8 /* TimelineDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineDocumentView.swift; sourceTree = "<group>"; };
+		0B5A7D3629F41E8C5A72D094 /* TimelinePane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelinePane.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -104,6 +108,8 @@
 			isa = PBXGroup;
 			children = (
 				5C0E48B9A17D3F62E0B95741 /* TimelineController.swift */,
+				6D82F4A0E51C7B394D06A2F8 /* TimelineDocumentView.swift */,
+				0B5A7D3629F41E8C5A72D094 /* TimelinePane.swift */,
 			);
 			path = Timeline;
 			sourceTree = "<group>";
@@ -194,6 +200,8 @@
 				1F9F8B29E107494593AB0078 /* SystemConditions.swift in Sources */,
 				D8D296ED416C1618E779BF80 /* PlaybackBenchmark.swift in Sources */,
 				2F71D6C304AB859E1D3E7F0A /* TimelineController.swift in Sources */,
+				A9E3B57C1F0842D6C7B93E15 /* TimelineDocumentView.swift in Sources */,
+				74CB19E8D3A05F2718BE6C40 /* TimelinePane.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

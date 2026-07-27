@@ -17,11 +17,19 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 
 ## ⏭️ Příští krok
 
-**Krok 2 stavby: `TimelineDocumentView` v `NSScrollView` podle `FAZE_2_VIEW.md`.** Hotovo bude, až uvidíš tři prázdné pruhy V1/A1/A2 a půjde jimi scrollovat.
+**Krok 3 stavby: pravítko a hlavičky stop, synchronizované přes `boundsDidChange`.** Hotovo bude, až budeš scrollovat osou a timecode i jména stop pojedou s ní.
 
-✅ **Krok 1 je hotový — `TimelineModel` je napojený na `Krasa.xcodeproj`** (commit `3f5f9cb`, 27. 07. 2026). Lokální balíček stejným vzorcem jako `ProbeKit` a `SpeedRampEngine`: `XCLocalSwiftPackageReference ../TimelineModel` + produkt ve `Frameworks`. Přibyl `Krasa/Timeline/TimelineController.swift` — vlastník stavu podle `FAZE_2_VIEW.md` 2.1, kde má **geometrie jediné úložiště** (`interaction.geometry`) a controller ji vystavuje jen průchodem.
+👀 **Nejdřív si ale koukni na krok 2 — je to jediná část fáze 2, která se ověří výhradně okem.** Pusť appku: pod přehrávačem má být osa se **třemi pruhy**, horní (V1) znatelně vyšší než dva spodní, a má jít vodorovně scrollovat. Čísla souhlasí (níže), ale že to i vypadá k světu, můžeš potvrdit jen ty.
+
+✅ **Krok 1 — `TimelineModel` napojený na `Krasa.xcodeproj`** (commit `3f5f9cb`). Lokální balíček stejným vzorcem jako `ProbeKit` a `SpeedRampEngine`. Přibyl `TimelineController` — vlastník stavu podle `FAZE_2_VIEW.md` 2.1, kde má **geometrie jediné úložiště** (`interaction.geometry`) a controller ji vystavuje jen průchodem.
 
   Ověřeno, ne odhadnuto: `xcodebuild` bez chyb i varování, Xcode hlásí `Explicit dependency on target 'TimelineModel'`, v binárce je **5039 symbolů modulu** `TimelineModel` a 143 testů balíčku dál prochází. *(Samotné „BUILD SUCCEEDED" nedokazuje nic — projekt se přeložil i předtím, než o balíčku věděl.)*
+
+✅ **Krok 2 — `TimelineDocumentView` v `NSScrollView`, pruhy stop** (commit `28a5af3`). `isFlipped = true`, pruhy jako `CALayer`, `TimelinePane` s scroll view a most do SwiftUI (`TimelinePaneView` — ne `TimelineView`, to jméno už `SwiftUI` zabírá). Osa sedí pod přehrávačem.
+
+  **Rozvržení ověřeno čísly proti `TimelineGeometry`**, na skutečných souborech aplikace, ne na kopii logiky: `V1 y=0 h=64`, `A1 y=66 h=44`, `A2 y=112 h=44`, dokument 1200 bodů proti 700 viditelným (tedy je co scrollovat). Aplikace se spustí bez pádu.
+
+  🚩 **Při měření náhledu se osa z hierarchie odstraní, ne skryje.** Timeline je první věc v projektu, nad kterou musí WindowServer skládat — nechat ji na obrazovce znamená měřit něco jiného než čísla z fáze 1. A skrývání nulovým rámcem už jednou layout rozbilo, aniž si toho měření všimlo.
 
 Pak zbytek **`TimelineView` v AppKitu — poslední kus fáze 2.** Co v něm doopravdy zbývá:
 
@@ -31,8 +39,9 @@ Pak zbytek **`TimelineView` v AppKitu — poslední kus fáze 2.** Co v něm doo
 | logika tažení, náhled, meze, výsledná operace | ✅ `TimelineInteraction` |
 | střihové operace a jejich pravidla | ✅ `Project` |
 | undo | ✅ `UndoStack` |
-| `NSView` v `NSScrollView`, klipy jako `CALayer` | ❌ |
-| pravítko a hlavičky stop přes `NSViewBoundsDidChangeNotification` | ❌ |
+| `NSView` v `NSScrollView`, pruhy stop | ✅ krok 2 |
+| klipy jako recyklované `CALayer` | ❌ krok 5 |
+| pravítko a hlavičky stop přes `NSView.boundsDidChangeNotification` | ❌ krok 3 |
 | vlnové průběhy jako `CGImage` dlaždice per zoom | ❌ |
 | kurzory, kontextové menu, klávesové zkratky | ❌ |
 
@@ -144,6 +153,12 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **Kadence display linku není metrika kompozice.** `CADisplayLink` je vázaný na vsync displeje — ten proběhne, i když WindowServer nestíhá skládat; ukáže se prostě starý snímek. Vypadlý tik znamená **zaseknuté hlavní vlákno naší aplikace**, ne přetížené GPU. Cenu skládání měř `powermetrics` puštěným vedle, nebo — až ve fázích 2–3, kde se stejně bude stavět — vlastní Metal cestou přes `addPresentedHandler` / `presentedTime` a `gpuStartTime` / `gpuEndTime`.
 - **`ProcessInfo.thermalState` na Apple silicon lže podobně jako `nominalFrameRate`.** Zůstává `.nominal` dlouho poté, co se stroj už taktuje dolů. Jako důkaz nepřetíženosti ho neber; na bezventilátorovém Airu je 20 s chladnutí navíc řádově málo, proto se před srovnávacím měřením pouští zahazovaný zahřívací běh.
 
+- **⚠️ `CALayer.render(in:)` a `cacheDisplay(in:to:)` se nedají použít k ověření, jak vrstva doopravdy leží.** Zjištěno 27. 07. 2026 při kroku 2 fáze 2. Otázka zněla, jestli podvrstvy dědí `NSView.isFlipped`. `render(in:)` vrátil, že se převrácením nic nemění — a přitom `layer.isGeometryFlipped` bylo prokazatelně `true`. Ta metoda převrácení **ignoruje**. `cacheDisplay` byl ještě horší: jednou obsah vrstvy zachytil, podruhé při stejném kódu vůbec.
+
+  **Odpověď je ano, dědí** — AppKit `isGeometryFlipped` u převráceného layer-backed view sám nastaví a SDK k té vlastnosti říká *„geometry of the layer **and its sublayers** is flipped vertically"*. `TimelineGeometry.y(ofTrackAt:)` jde vrstvě předat rovnou.
+
+  **Poučení nad rámec téhle otázky:** vlastní měřicí metoda může vrátit hezký a úplně obrácený výsledek. Tady to odhalil až sebekalibrující se běh, kde se totéž změřilo na známém referenčním případu. Je to stejná třída chyby jako vadné okno u měření fps ve fázi 1.
+- **⚠️ Barva systémové `NSColor` uložená do `CALayer` v tmavém režimu zamrzne.** `NSColor.cgColor` se vyhodnotí pro appearance platnou v okamžiku volání, ne pro tu, ve které vrstva leží. Překládat se proto musí uvnitř `performAsCurrentDrawingAppearance` a znovu ve `viewDidChangeEffectiveAppearance()`. **Na `NSColor` předanou přímo AppKit view (`NSScrollView.backgroundColor`) to neplatí** — tu si view překládá při každém kreslení samo. Rozdíl je v tom, kdo barvu drží: vrstva si pamatuje `CGColor` (hodnotu), view drží `NSColor` (recept).
 - **⚠️ `NSCursor.resizeLeftRight` je od macOS 27.0 deprecated a náhrada `NSCursor.columnResize` je až od macOS 15.0.** Ověřeno 27. 07. 2026 v dokumentaci Apple. Na deployment targetu 14.0 tedy potřebuje kurzor pro dělič klipů `if #available(macOS 15.0, *)` s fallbackem na tu deprecated verzi. **Je to přesně stejný vzorec jako `AVMutableVideoComposition` vs `AVVideoComposition.Configuration`** — a je to jediné API z celého návrhu `TimelineView`, které runtime gate potřebuje. Zbytek (`isFlipped`, `boundsDidChangeNotification`, `magnify(with:)`, `NSTrackingArea`, `CALayer.contentsScale`, `CATiledLayer`) je dostupný od macOS 10.x. Tabulka s odkazy je v `FAZE_2_VIEW.md`, sekce 10.
   *Mimochodem: první odhad názvu náhrady (`NSCursor.columnResizeCursor(in:)`) neexistoval — správně je `columnResize` a `columnResize(directions:)`. Přesně ten druh chyby, kvůli které platí pravidlo o ověřování API.*
 - **⚠️ `NSViewBoundsDidChangeNotification` je starý ObjC název.** V Swiftu je to `NSView.boundsDidChangeNotification` a **posílá se jen tehdy, když je `postsBoundsChangedNotifications == true`** — na `NSScrollView.contentView` se to musí zapnout ručně. Při změně `frame` se neposílá vůbec. `IMPLEMENTACNI_PLAN.md` sekce fáze 2 nese starý název.
@@ -217,6 +232,8 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
   - `README.md` – API, dvě časové soustavy, co se snadno rozbije
 - `Krasa/Krasa/Timeline/` – **timeline v appce**
   - `TimelineController.swift` – vlastník stavu: projekt, undo, interakce (a v ní **jediná kopie geometrie**), playhead, výběr
+  - `TimelineDocumentView.swift` – plocha osy: `isFlipped`, pruhy stop, barvy přežívající přepnutí do tmavého režimu, Retina
+  - `TimelinePane.swift` – `NSScrollView`, velikost scrollovatelné plochy, most do SwiftUI
 - `MediaProbe/` – **balíček se třemi nástroji a sdílenou knihovnou**
   - `Sources/ProbeKit/` – sdílené jádro: klasifikace délek vzorků, verdikt CFR/VFR, edit list, `CFRRenderer`, `VideoResampler`
   - `Sources/MediaProbe/` – sonda: `swift run MediaProbe`

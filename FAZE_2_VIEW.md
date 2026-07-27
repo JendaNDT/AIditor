@@ -506,6 +506,36 @@ projektu je **macOS 14.0**.
 | [`CATiledLayer`](https://developer.apple.com/documentation/quartzcore/catiledlayer) | macOS 10.5+ | **nepoužijeme**, viz 2.7 |
 | [`NSView.wantsUpdateLayer`](https://developer.apple.com/documentation/appkit/nsview/wantsupdatelayer) | macOS 10.8+ | pro pruhy stop v pozadí |
 | [`NSView.displayLink(target:selector:)`](https://developer.apple.com/documentation/appkit/nsview/4200851-displaylink) | macOS 14.0+ | už používá `PlayerHostView` |
+| [`CALayer.isGeometryFlipped`](https://developer.apple.com/documentation/quartzcore/calayer/isgeometryflipped) | macOS 10.6+ | **nastavuje AppKit sám**, viz níže |
+| [`NSAppearance.performAsCurrentDrawingAppearance(_:)`](https://developer.apple.com/documentation/appkit/nsappearance/performascurrentdrawingappearance(_:)) | macOS 11.0+ | nutné pro barvy vrstev |
+| [`NSView.viewDidChangeEffectiveAppearance()`](https://developer.apple.com/documentation/appkit/nsview/viewdidchangeeffectiveappearance()) | macOS 10.14+ | tam se barvy překládají znovu |
+| [`NSScrollView.allowsMagnification`](https://developer.apple.com/documentation/appkit/nsscrollview/allowsmagnification) | macOS 10.8+ | výchozí `false`, **nechat** |
 
 **Nic z toho není nové API na hraně dostupnosti — kromě `NSCursor.columnResize`,
 a to je jediné, které potřebuje `if #available`.**
+
+### ✅ Doměřeno při kroku 2 (27. 07. 2026)
+
+**Podvrstvy `isFlipped` DĚDÍ.** Otázka, na které stojí celé svislé rozvržení:
+platí souřadnice vrstev, které si do `backgroundLayer` přidáme sami, taky
+odshora dolů? **Ano.** AppKit u převráceného layer-backed view sám nastaví
+`layer.isGeometryFlipped = true` (změřeno) a SDK k té vlastnosti říká
+*„geometry of the layer **and its sublayers** is flipped vertically"*.
+`TimelineGeometry.y(ofTrackAt:)` jde tedy vrstvě předat rovnou.
+
+⚠️ **Kdo si to bude ověřovat, ať nepoužije `CALayer.render(in:)` — ta metoda
+`isGeometryFlipped` ignoruje** a vrátí výsledek, ze kterého plyne pravý opak.
+Stejně nespolehlivý je `cacheDisplay(in:to:)` na obsah vrstev. Spolehlivé jsou
+dvě věci: přečíst `isGeometryFlipped` a podívat se okem.
+
+**Okem se to pozná podle výšek.** V1 má 64 bodů, A1 i A2 po 44 — při obráceném
+převrácení leží vysoký pruh dole. Kontrolu čísel dělá skript v poznámkách
+k session: `V1 y=0 h=64`, `A1 y=66 h=44`, `A2 y=112 h=44`.
+
+**Barvy vrstev se samy nepřebarví.** `NSColor.cgColor` se vyhodnotí pro
+appearance platnou v okamžiku volání, ne pro tu, ve které vrstva leží — barva
+uložená do `CALayer.backgroundColor` tedy v tmavém režimu zamrzne na staré
+hodnotě. Řeší se překladem uvnitř `performAsCurrentDrawingAppearance` a jeho
+zopakováním ve `viewDidChangeEffectiveAppearance()`. **`NSColor` předaná
+`NSScrollView.backgroundColor` tenhle problém nemá** — ta se překládá při
+každém kreslení.

@@ -21,6 +21,7 @@
 import AVFoundation
 import Combine
 import Foundation
+import TimelineModel
 
 @MainActor
 final class PlaybackController: ObservableObject {
@@ -74,6 +75,20 @@ final class PlaybackController: ObservableObject {
                 ? CMTime(seconds: 1.0 / Double(nominal), preferredTimescale: 90000)
                 : CMTime(value: 1, timescale: 30)
         }
+        currentTime = .zero
+    }
+
+    // MARK: - Načtení timeline (fáze 3)
+
+    /// Nahraje kompozici celé osy. Krok po snímku jde po snímcích ZÁKLADNY
+    /// projektu — kompozice žádnou vlastní frekvenci nemá.
+    func loadComposition(_ composition: AVComposition, frameRate: Int) {
+        pause()
+        let item = AVPlayerItem(asset: composition)
+        player.replaceCurrentItem(with: item)
+        duration = composition.duration
+        frameDuration = CMTime(value: CMTimeValue(Int64(SourceTime.projectTimescale) / Int64(frameRate)),
+                               timescale: SourceTime.projectTimescale)
         currentTime = .zero
     }
 

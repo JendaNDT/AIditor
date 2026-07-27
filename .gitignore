@@ -4,3 +4,10 @@ DerivedData/
 TestClips/
 *.xcuserdatad
 xcuserdata/
+
+# měřicí výstupy
+krasa_gpu*.txt
+gpu*.txt
+Krasa*.txt
+fullscreen*.txt
+build_log.txt

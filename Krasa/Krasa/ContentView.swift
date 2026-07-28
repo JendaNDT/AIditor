@@ -522,6 +522,11 @@ struct ContentView: View {
             // obchází celou; stav osy přežije v `AppModelu`.
             if !model.chromeHidden {
                 Divider()
+                // Editor rychlostní křivky vybraného klipu (fáze 3, modul 3).
+                // Pevná výška ze stejného důvodu jako osa pod ním.
+                RampEditorPaneView(controller: model.timeline)
+                    .frame(height: 132)
+                Divider()
                 // Pevná výška, ne `idealHeight`. Přehrávač i osa jsou oba
                 // pružné `NSViewRepresentable`, takže se o volné místo
                 // podělily napůl a pod třemi pruhy (156 bodů) zbylo přes

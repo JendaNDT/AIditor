@@ -119,11 +119,51 @@ final class TimelineController: ObservableObject {
         selection.remove(clipID)
     }
 
-    /// Testovací rampa (fáze 3, modul 2): klasické zpomalení 1× → 0,25× → 1×
-    /// přes klip, dokud nemá `SpeedRampEditor` vlastní UI (modul 3). Když už
-    /// klip křivku má, akce ji smaže. Dvojče řeší model (`setSpeedRamp` je
+    // MARK: - Editor rychlostní křivky (fáze 3, modul 3)
+
+    /// Přidá uzel na křivku klipu (dvojklik v editoru). Vrací index nového
+    /// uzlu, `nil` když operace neprošla — třeba uzel moc blízko souseda.
+    @discardableResult
+    func addRampNode(clipID: ClipID, atOutputFrame frame: Double) -> Int? {
+        var updated = project
+        guard let index = try? updated.addRampNode(clipID: clipID, atOutputFrame: frame)
+        else { return nil }
+        undo.record(project)
+        project = updated
+        return index
+    }
+
+    func removeRampNode(clipID: ClipID, nodeIndex: Int) {
+        var updated = project
+        guard (try? updated.removeRampNode(clipID: clipID, nodeIndex: nodeIndex)) != nil
+        else { return }
+        undo.record(project)
+        project = updated
+    }
+
+    /// Tažení uzlu editoru — stejný vzorec jako trim: mezistavy jsou legální,
+    /// zapisují se průběžně a `beginInteraction`/`endInteraction` z nich
+    /// složí jeden undo krok.
+    func rampDragBegan() { undo.beginInteraction(project) }
+
+    func rampDragChanged(_ ramp: SpeedRamp, clipID: ClipID) {
+        var updated = project
+        guard (try? updated.setSpeedRamp(clipID: clipID, ramp: ramp)) != nil else { return }
+        project = updated
+    }
+
+    func rampDragEnded() { undo.endInteraction(project) }
+
+    func rampDragCancelled() {
+        if let base = undo.cancelInteraction() { project = base }
+    }
+
+    /// Preset: klasické zpomalení 1× → 0,25× → 1× přes klip. Vznikl jako
+    /// testovací rampa modulu 2 a zůstává — nakreslit tenhle tvar ručně
+    /// znamená tři uzly a tři tahy, tohle je jeden klik. Když už klip
+    /// křivku má, akce ji smaže. Dvojče řeší model (`setSpeedRamp` je
     /// link-aware), undo jeden krok.
-    func toggleTestRamp(_ clipID: ClipID) {
+    func toggleClassicRamp(_ clipID: ClipID) {
         guard let clip = project.timeline.clip(clipID) else { return }
         var updated = project
         if clip.speedRamp != nil {

@@ -76,7 +76,15 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   ✅ **Koukanec potvrzen rukou (28. 07. 2026): projekt se ukládá i obnovuje.** Ukládání, střih, restart a návrat do stejného stavu fungují. *(Offline scénář s přejmenovanou složkou zůstává formálně neověřený okem — kód i testy na něj jsou.)*
 
-  **Zbývá z fáze 5:** autosave (+ obnova po pádu), export přes `AVAssetWriter` (s povinným `mediaTimeScale`), a drobnosti: dirty indikátor, dotaz při zavírání neuloženého projektu.
+✅ **Modul 2 — autosave a obnova po pádu (28. 07. 2026).** Záloha 5 s po poslední změně a při ukončení aplikace, jen když se projekt liší od **baseline** (poslední uložený/otevřený stav; u čerstvého skenu sken samotný — pouhé spuštění zálohu nevyrábí). Sloty v Application Support: otisk cesty projektu + jeden pro neuložený projekt. Obnova: při otevření projektu se nabídne záloha novější než soubor, při startu bez projektu záloha neuloženého; obnovená práce se dál hlásí jako „neuloženo" a autosave ji chrání dál. Indikátor „neuloženo" v sidebaru.
+
+  - **Nalezená a opravená chyba:** `nil` baseline při startu označila prázdný projekt za neuložený a debounce ho za 5 s zbytečně zazálohoval — příští start by nabízel „obnovu" prázdného projektu. Bez baseline teď špinavo není; obnovený neuložený projekt dostává baseline = prázdný projekt (porovnání s `Project.empty()` nejde použít napřímo — razí náhodná ID stop).
+  - **Ověřeno CLI `--autosave-check`:** čistý po skenu, špinavý po střihu, záloha se zapíše, sedí s projektem a jde zahodit.
+  - ⚠️ Metodická poznámka: headless CLI běhy aplikace se občas zaseknou před vytvořením okna (`.task` pak nevystartuje) — vypadá to jako visící kód, ale je to vrtoch prostředí; opakované spuštění projde. Stálo to hodinu vyšetřování, které ale odhalilo tu skutečnou chybu s baseline.
+
+  👀 **Koukanec modulu 2:** něco sestříhej (bez ⌘S), počkej ~6 s, tvrdě zabij appku (⌥⌘Esc → Vynutit ukončení) a spusť znovu — má se nabídnout obnova zálohy; „Obnovit zálohu" vrátí práci a hlásí „neuloženo". Druhá větev: u ULOŽENÉHO projektu sestříhej, zabij, otevři — dialog „záloha novější než soubor".
+
+  **Zbývá z fáze 5:** export přes `AVAssetWriter` (s povinným `mediaTimeScale`) a drobnost: dotaz při zavírání neuloženého projektu.
 
 ## ✅ FÁZE 4 — proxy a výkon (HOTOVÁ až na kritérium reálného materiálu, 28. 07. 2026)
 
@@ -223,7 +231,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 
 ## 🔄 Rozjeté (nedodělané)
 - **Fáze 4 — proxy.** Hotová a potvrzená rukou; otevřené zůstává jen kritérium plynulosti na reálném 200GB materiálu (přirozeně u Kill-gate 1).
-- **Fáze 5 — projekt a export.** Projektový soubor hotový; zbývá autosave a export.
+- **Fáze 5 — projekt a export.** Projektový soubor i autosave hotové; zbývá export.
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
@@ -233,7 +241,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu — ✅ **HOTOVO 28. 07. 2026** (228 testů modelu, interakce rukou, výkonový test 2000 klipů bez vypadlého tiku)
 - **F3** Speed ramping ostrý — ✅ **HOTOVO 28. 07. 2026** (tři moduly, potvrzeno rukou; reálný čas: dva dny místo tří týdnů)
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)* — 🔄 **ProxyStore + správa úložiště hotové a potvrzené rukou (externí disk funguje); zbývá kritérium plynulosti na reálném materiálu**
-- **F5** Projekt, autosave, undo, export *(3 týdny)* — 🔄 **projektový soubor hotový a potvrzený rukou; zbývá autosave a export**
+- **F5** Projekt, autosave, undo, export *(3 týdny)* — 🔄 **projektový soubor a autosave hotové; zbývá export**
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
 ### Cesta k v1.0 (+~4 měsíce)

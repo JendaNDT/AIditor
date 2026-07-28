@@ -90,7 +90,9 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
 
   **Naměřené klipy jsou většinou 60 fps.** Při 24 fps by tedy trhaly běžné záběry — a to kvůli výhodě, která se projeví jen ve zpomalených úsecích. Zpomalené záběry jsou menšina stopáže, panorámování ne.
 - **Seek se zero tolerance + coalescing** podle Apple QA1820.
-- **WhisperKit** (`argmaxinc/argmax-oss-swift`), model `large-v3-turbo`. Ne whisper-small — pro češtinu má 34–38 % chybovost.
+- **WhisperKit** (`argmaxinc/argmax-oss-swift` v1.0.0, produkt `WhisperKit`) — zapojený od fáze 8. ⚠️ **Past v názvosloví modelů:** OpenAI „large-v3-turbo" se v repozitáři `whisperkit-coreml` jmenuje **`openai_whisper-large-v3-v20240930`** (podle data vydání); přípona `_turbo` tam značí komprimované varianty WhisperKitu — jinou věc. Ne whisper-small — pro češtinu má 34–38 % chybovost. Model (~1,5 GB) se stahuje při prvním použití do kontejneru (jediné síťové použití aplikace, entitlement `network.client`).
+- **`AVAudioMix.volume` má dokumentovaný rozsah jen 0,0–1,0** — zesilovat přes něj se NESMÍ (nedokumentované chování). Normalizační gain se násobí přímo do vzorků (float32, `vDSP_vsmul` v `CFRRendereru`), se stropem špiček −1 dBFS, který se při zásahu poctivě hlásí.
+- **Dekodéry AAC se neshodnou na rozjezdu:** afconvert vs. čtení přes `AVComposition` se liší přesně o 528 vzorků (11,00 ms). Interní cesty appky (sync, přehrávač, export, měření) čtou VŠECHNY přes kompozici, takže jsou vzájemně konzistentní — další důvod pravidla „zvuk jen přes AVComposition".
 - Minimální macOS 14.0 pro běh, novější API runtime gatovaná.
 
 ## Naměřeno na reálných klipech (`MediaProbe`, 25. 07. 2026)

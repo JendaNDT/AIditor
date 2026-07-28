@@ -2,9 +2,18 @@
 *Naposled aktualizováno: 28. 07. 2026*
 
 ## 🎯 Co to je
-Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor: svatební asistent škrtnut 28. 07. 2026 na pokyn autora** (AI analýza scén a obličejů zůstává podmíněná za v1.0).
-Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. FÁZE 8 (titulky) HOTOVÁ: přepis WhisperKitem, titulky v náhledu, export SRT. FÁZE 9 uzavřená v rozsahu OSOBNÍ appky (28. 07. 2026): distribuce, podpis i licence odloženy — appka je free a jen pro autora. **MVP KOMPLETNÍ; kill-gate 1 přesunut na konec vývoje (materiál ~konec srpna). Běží vylepšovací fáze 10–16: přechody, texty, fotky, barvy, hudební sync, analýzy, vymazlení. Příští krok: FÁZE 10 — přechody.**
+Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
+Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (vlastní DSP), WhisperKit.
+
+## 📍 STAV (28. 07. 2026 večer)
+
+**Fáze 0–9 HOTOVÉ — MVP kompletní a všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a LUFS normalizací → export SRT.
+
+Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `AudioEngine` (32), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. Závislost: WhisperKit v1.0.0.
+
+**Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): přechody → texty/T1 → fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
+
+**➡️ PŘÍŠTÍ KROK: FÁZE 10 — přechody, modul 1 (model `Transition` + testy).** Detail v `IMPLEMENTACNI_PLAN.md`.
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 

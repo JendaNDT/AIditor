@@ -27,6 +27,10 @@ final class VideoResampler {
     private weak var writer: AVAssetWriter?
     private let frameDuration: CMTime
     private let slotCount: Int
+    /// Úprava snímku před zápisem (fáze 11: titulky). Dostává slot, ne PTS —
+    /// tentýž zdrojový snímek podržený přes víc slotů může v každém slotu
+    /// potřebovat jinou dekoraci (titulek začíná/končí uprostřed držení).
+    private let frameDecorator: ((CVPixelBuffer, Int) -> CVPixelBuffer)?
 
     /// Snímek, který právě platí pro aktuální slot.
     private var current: (pts: CMTime, sample: CMSampleBuffer, pixel: CVPixelBuffer)?
@@ -51,13 +55,15 @@ final class VideoResampler {
          input: AVAssetWriterInput,
          writer: AVAssetWriter,
          frameDuration: CMTime,
-         slotCount: Int) {
+         slotCount: Int,
+         frameDecorator: ((CVPixelBuffer, Int) -> CVPixelBuffer)? = nil) {
         self.output = output
         self.adaptor = adaptor
         self.input = input
         self.writer = writer
         self.frameDuration = frameDuration
         self.slotCount = slotCount
+        self.frameDecorator = frameDecorator
     }
 
     /// Naplní zapisovač, dokud přijímá data. Vrací `true`, když je hotovo.
@@ -79,7 +85,8 @@ final class VideoResampler {
             }
             if current == nil { current = consume() }
 
-            if !adaptor.append(frame.pixel, withPresentationTime: slotTime) {
+            let pixel = frameDecorator?(frame.pixel, slot) ?? frame.pixel
+            if !adaptor.append(pixel, withPresentationTime: slotTime) {
                 failure = writer?.error
                     ?? ProbeError.message("Snímek \(slot) se nepodařilo zapsat.")
                 return finish()

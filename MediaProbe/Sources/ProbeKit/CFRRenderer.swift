@@ -70,6 +70,13 @@ public enum CFRRenderer {
     ///     i zesilovat. S gainem se zvuk dekóduje ve float32, aby zesílení
     ///     nemělo strop v celočíselném mezikroku; strop proti clippingu
     ///     (špička ≤ −1 dBFS) hlídá VOLAJÍCÍ, renderer násobí.
+    ///   - frameDecorator: volitelná úprava snímku PŘED zápisem (fáze 11:
+    ///     vypálení titulků do exportu). Dostane pixel buffer a index
+    ///     výstupního slotu (= číslo snímku na mřížce), vrátí buffer
+    ///     K ZÁPISU — buď tentýž (nic k dekoraci; snímek projde bajt po
+    ///     bajtu nedotčený), nebo NOVÝ se stejným formátem a rozměry.
+    ///     Do bufferu čtečky se zapisovat nesmí, je to sdílená paměť.
+    ///     Volá se sériově z fronty zapisovače.
     ///   - onProgress: zlomek hotových snímků; chodí z fronty zapisovače.
     public static func render(asset: AVAsset,
                               videoTrack: AVAssetTrack,
@@ -82,6 +89,7 @@ public enum CFRRenderer {
                               audioMix: AVAudioMix? = nil,
                               audioGainLinear: Double = 1.0,
                               videoComposition: AVVideoComposition? = nil,
+                              frameDecorator: (@Sendable (CVPixelBuffer, Int) -> CVPixelBuffer)? = nil,
                               onProgress: (@Sendable (Double) -> Void)? = nil,
                               to outputURL: URL) async throws -> CFRRenderResult {
         let started = Date()
@@ -316,7 +324,8 @@ public enum CFRRenderer {
                                        input: videoInput,
                                        writer: writer,
                                        frameDuration: frameDuration,
-                                       slotCount: slotCount)
+                                       slotCount: slotCount,
+                                       frameDecorator: frameDecorator)
         resampler.onProgress = onProgress
 
         let group = DispatchGroup()

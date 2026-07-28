@@ -461,6 +461,13 @@ final class AppModel: ObservableObject {
                 status = "Exportuju… (HEVC z originálů)"
             }
 
+            // Titulky (fáze 11): vypálení přes dekorátor snímků — snímky bez
+            // titulku projdou nedotčené. Bez titulků je dekorátor nil a celá
+            // cesta je ta ověřená z fáze 5.
+            let titleRenderer = TitleExportRenderer(
+                cues: project.titleCues(),
+                canvas: CGSize(width: canvas.width, height: canvas.height))
+
             let result = try await CFRRenderer.render(
                 asset: composition,
                 videoTrack: video,
@@ -476,6 +483,7 @@ final class AppModel: ObservableObject {
                 audioGainLinear: audioGain,
                 // Přechody (fáze 10): tatáž video kompozice jako v náhledu.
                 videoComposition: built.videoComposition,
+                frameDecorator: titleRenderer?.decorator(),
                 onProgress: { fraction in
                     Task { @MainActor [weak self] in
                         guard let self, self.exportProgress != nil else { return }
@@ -791,6 +799,93 @@ final class AppModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 200_000_000)
         }
         controller.pause()
+    }
+
+    /// CLI ověření vypálení titulků (fáze 11, modul 4): dvojí export téže
+    /// osy — s titulkem přes snímky 30–90 a bez něj. Uvnitř titulku se
+    /// exporty musí lišit (bílý text zvedá jas ve středu obrazu), mimo
+    /// titulek musí být prakticky shodné (dekorátor se snímku nedotkl;
+    /// drobnou odchylku smí přidat jen historie HEVC kodéru).
+    func verifyTitleExport() async {
+        let savedProfile = loudnessProfile
+        defer { loudnessProfile = savedProfile }
+        loudnessProfile = nil
+
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        var bare = Project.empty()
+        bare.addAsset(source)
+        guard bare.timeline.availableFrames(from: source.duration).count >= 180 else {
+            print("❌ asset je krátký"); return
+        }
+        do {
+            let clip = try bare.makeClip(assetID: source.id)
+            var trimmed = clip
+            trimmed.duration = Frames(180)
+            try bare.insert(trimmed, onTrack: bare.timeline.tracks[0].id)
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+
+        var titled = bare
+        do {
+            let t1 = titled.ensureTitleTrack()
+            let title = try titled.makeTitle(text: "Anna a Petr", template: .names,
+                                             at: Frames(30), duration: Frames(60))
+            try titled.addTitle(title, onTrack: t1)
+        } catch {
+            print("❌ přidání titulku selhalo: \(error)"); return
+        }
+
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaTitleCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        let titledURL = directory.appendingPathComponent("title_on.mp4")
+        let bareURL = directory.appendingPathComponent("title_off.mp4")
+
+        timeline.project = titled
+        await export(to: titledURL)
+        print(status)
+        timeline.project = bare
+        await export(to: bareURL)
+        print(status)
+
+        // Snímek 60 (t = 2 s) je uprostřed titulku, snímek 135 (t = 4,5 s)
+        // za ním. Časy míří o půl snímku DOVNITŘ intervalu (vzorec
+        // `lumaGrid`), aby se netrefovala hrana.
+        guard let onIn = await lumaGrid(url: titledURL, seconds: 60.5 / 30),
+              let offIn = await lumaGrid(url: bareURL, seconds: 60.5 / 30),
+              let onOut = await lumaGrid(url: titledURL, seconds: 135.5 / 30),
+              let offOut = await lumaGrid(url: bareURL, seconds: 135.5 / 30) else {
+            print("❌ nepodařilo se přečíst kontrolní snímky"); return
+        }
+        func mae(_ a: [Double], _ b: [Double]) -> Double {
+            zip(a, b).map { abs($0 - $1) }.reduce(0, +) / Double(a.count)
+        }
+        // Jména sedí přes střed obrazu — řádky 3–4 mřížky 8×8.
+        func centerBand(_ grid: [Double]) -> Double {
+            let rows = [3, 4]
+            let cells = rows.flatMap { row in (1...6).map { grid[row * 8 + $0] } }
+            return cells.reduce(0, +) / Double(cells.count)
+        }
+
+        let insideDiff = mae(onIn, offIn)
+        let outsideDiff = mae(onOut, offOut)
+        let bandLift = centerBand(onIn) - centerBand(offIn)
+        print(String(format: "uvnitř titulku: odchylka %.2f | střední pás +%.1f jasu",
+                     insideDiff, bandLift))
+        print(String(format: "mimo titulek: odchylka %.2f", outsideDiff))
+        print(insideDiff > 2 && bandLift > 5
+              ? "✓ titulek je v exportu vypálený (bílý text zvedá jas středu)"
+              : "❌ titulek v exportu NENÍ vidět")
+        print(outsideDiff < 2
+              ? "✓ snímky mimo titulek jsou nedotčené"
+              : "❌ export se liší i mimo titulek — dekorátor sahá, kam nemá")
+        print("TITLE_CHECK_PATH=\(directory.path)")
     }
 
     /// CLI ukázka fáze 11 (`--title-demo`): postaví osu s grafickými
@@ -1582,6 +1677,8 @@ struct ContentView: View {
                     await model.runTransitionGPUPlayback(enabled: !explicit.contains("off"))
                 } else if arguments.contains("--title-demo") {
                     await model.runTitleDemo()
+                } else if arguments.contains("--title-check") {
+                    await model.verifyTitleExport()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

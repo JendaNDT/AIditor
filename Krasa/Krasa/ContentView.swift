@@ -395,6 +395,40 @@ final class AppModel: ObservableObject {
         return LoudnessProfile(rawValue: raw)   // „none" → nil
     }
 
+    /// Přidá fotky na konec V1 (fáze 12). Na rozdíl od importu klipů
+    /// NEPŘEPISUJE osu — fotky jsou přírůstek do rozdělané práce.
+    func addPhotos() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.heic, .jpeg, .png]
+        panel.allowsMultipleSelection = true
+        panel.message = "Vyber fotky (HEIC, JPEG, PNG) — přidají se na konec obrazové stopy."
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+
+        var project = timeline.project
+        guard let v1 = project.timeline.tracks.first(where: { $0.kind == .video })?.id else {
+            return
+        }
+        var cursor = project.duration
+        var added = 0
+        for url in panel.urls {
+            // Bookmark hned — po restartu by sandbox fotku bez něj nepustil.
+            let bookmark = try? url.bookmarkData(options: .withSecurityScope,
+                                                includingResourceValuesForKeys: nil,
+                                                relativeTo: nil)
+            let photo = Asset.still(url: url, bookmark: bookmark)
+            project.addAsset(photo)
+            guard let clip = try? project.makeClip(assetID: photo.id, at: cursor),
+                  (try? project.insert(clip, onTrack: v1)) != nil else { continue }
+            cursor = clip.timelineEnd
+            added += 1
+        }
+        guard added > 0 else { return }
+        timeline.undo.record(timeline.project)
+        timeline.project = project
+        status = added == 1 ? "Přidána 1 fotka (5 s, délka jde natáhnout)."
+                            : "Přidáno fotek: \(added) (po 5 s, délky jdou natáhnout)."
+    }
+
     func exportMovie() {
         guard exportProgress == nil else { return }
         let panel = NSSavePanel()
@@ -886,6 +920,94 @@ final class AppModel: ObservableObject {
               ? "✓ snímky mimo titulek jsou nedotčené"
               : "❌ export se liší i mimo titulek — dekorátor sahá, kam nemá")
         print("TITLE_CHECK_PATH=\(directory.path)")
+    }
+
+    /// CLI ověření fotek (fáze 12, modul 2): syntetická bílá čtvercová
+    /// fotka → osa video (0–60) + fotka (60–150) → export. Kontroly:
+    /// snímek fotky má jasný střed a černé boční pruhy (aspect-fit čtverce
+    /// do 16:9), snímek videa fotkou dotčený není a délka sedí.
+    func verifyPhotoExport() async {
+        let savedProfile = loudnessProfile
+        defer { loudnessProfile = savedProfile }
+        loudnessProfile = nil
+
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+
+        // Syntetická fotka: bílý čtverec 1000×1000 (PNG do temp).
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaPhotoCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        let photoURL = directory.appendingPathComponent("ctverec.png")
+        guard writeWhiteSquarePNG(to: photoURL, side: 1000) else {
+            print("❌ syntetickou fotku se nepodařilo zapsat"); return
+        }
+
+        var project = Project.empty()
+        project.addAsset(source)
+        let photo = Asset.still(url: photoURL)
+        project.addAsset(photo)
+        do {
+            var video = try project.makeClip(assetID: source.id)
+            video.duration = Frames(60)
+            try project.insert(video, onTrack: project.timeline.tracks[0].id)
+            var still = try project.makeClip(assetID: photo.id, at: Frames(60))
+            still.duration = Frames(90)
+            try project.insert(still, onTrack: project.timeline.tracks[0].id)
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        timeline.project = project
+
+        let url = directory.appendingPathComponent("photo_check.mp4")
+        await export(to: url)
+        print(status)
+
+        guard let videoFrame = await lumaGrid(url: url, seconds: 30.5 / 30),
+              let photoFrame = await lumaGrid(url: url, seconds: 100.5 / 30),
+              let lastFrame = await lumaGrid(url: url, seconds: 149.5 / 30) else {
+            print("❌ nepodařilo se přečíst kontrolní snímky"); return
+        }
+
+        // Čtverec v 16:9: střední sloupce 2–5 bílé, krajní 0 a 7 černé.
+        func columns(_ grid: [Double], _ cols: [Int]) -> Double {
+            let cells = (0..<8).flatMap { row in cols.map { grid[row * 8 + $0] } }
+            return cells.reduce(0, +) / Double(cells.count)
+        }
+        let center = columns(photoFrame, [2, 3, 4, 5])
+        let bars = columns(photoFrame, [0, 7])
+        print(String(format: "fotka: střed %.0f | pruhy %.0f", center, bars))
+        print(center > 180 && bars < 25
+              ? "✓ fotka je v exportu — bílý střed a černé pruhy aspect-fitu"
+              : "❌ fotka v exportu nevypadá podle očekávání")
+        print(columns(lastFrame, [2, 3, 4, 5]) > 180
+              ? "✓ fotka drží až do posledního snímku (zero-order hold)"
+              : "❌ konec klipu fotky není fotka")
+        let videoMean = videoFrame.reduce(0, +) / Double(videoFrame.count)
+        print(videoMean > 5 && columns(videoFrame, [0, 7]) < 200
+              ? String(format: "✓ snímek videa vypadá jako video (průměr %.0f)", videoMean)
+              : "❌ snímek videa je podezřelý")
+        print("PHOTO_CHECK_PATH=\(directory.path)")
+    }
+
+    /// Bílý čtverec jako PNG — syntetická fotka pro `--photo-check`.
+    private func writeWhiteSquarePNG(to url: URL, side: Int) -> Bool {
+        guard let context = CGContext(
+            data: nil, width: side, height: side, bitsPerComponent: 8,
+            bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                | CGBitmapInfo.byteOrder32Little.rawValue) else { return false }
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+        guard let image = context.makeImage(),
+              let destination = CGImageDestinationCreateWithURL(
+                  url as CFURL, UTType.png.identifier as CFString, 1, nil) else { return false }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination)
     }
 
     /// CLI ukázka fáze 11 (`--title-demo`): postaví osu s grafickými
@@ -1679,6 +1801,8 @@ struct ContentView: View {
                     await model.runTitleDemo()
                 } else if arguments.contains("--title-check") {
                     await model.verifyTitleExport()
+                } else if arguments.contains("--photo-check") {
+                    await model.verifyPhotoExport()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

@@ -162,6 +162,45 @@ enum CompositionBuilder {
             for placement in plan.placements {
                 guard let clip = track.clip(id: placement.clipID),
                       let source = project.asset(clip.assetID) else { continue }
+
+                // Fotka (fáze 12): nemá video stopu, vkládá se JEDEN snímek
+                // mezisouboru (`StillMovieStore` — plátno s vpáleným
+                // aspect-fitem) roztažený přes délku klipu. Zdrojový výřez
+                // z plánu je u fotky nulový a nepoužije se.
+                if source.isStill {
+                    guard track.kind == .video,
+                          let movieURL = try? await StillMovieStore.shared.movieURL(
+                              forPhoto: source.originalURL,
+                              canvas: CGSize(width: timeline.canvasSize.width,
+                                             height: timeline.canvasSize.height)),
+                          let stillTrack = try await asset(for: movieURL)
+                              .loadTracks(withMediaType: .video).first
+                    else { continue }   // nečitelná fotka = mezera, ne pád
+
+                    let at = CMTime(value: Int64(placement.start.count) * ticksPerFrame,
+                                    timescale: SourceTime.projectTimescale)
+                    let frameDuration = CMTime(value: ticksPerFrame,
+                                               timescale: SourceTime.projectTimescale)
+                    let laneTrack = laneTracks[placement.lane]
+                    try laneTrack.insertTimeRange(
+                        CMTimeRange(start: .zero, duration: frameDuration),
+                        of: stillTrack, at: at)
+                    laneTrack.scaleTimeRange(
+                        CMTimeRange(start: at, duration: frameDuration),
+                        toDuration: CMTime(
+                            value: Int64(placement.duration.count) * ticksPerFrame,
+                            timescale: SourceTime.projectTimescale))
+                    // Mezisoubor má rozměr plátna a žádné otočení — kdyby
+                    // kvůli přechodům vznikla video kompozice, aspect-fit
+                    // vyjde jako identita.
+                    if clipGeometry[clip.id] == nil {
+                        clipGeometry[clip.id] = (
+                            CGSize(width: timeline.canvasSize.width,
+                                   height: timeline.canvasSize.height), .identity)
+                    }
+                    continue
+                }
+
                 let sourceAsset = asset(for: source.url(usingProxies: usingProxies))
                 guard let sourceTrack = try await sourceAsset.loadTracks(withMediaType: mediaType).first
                 else { continue }   // klip bez odpovídající stopy se přeskočí, nespadne

@@ -38,16 +38,27 @@ public enum CFRRenderer {
     ///   - audioTimePitchAlgorithm: korekce výšky hlasu při změně rychlosti.
     ///     Má smysl jen tam, kde kompozice obsahuje škálované úseky. Bez
     ///     změny rychlosti nechat `nil`.
+    ///   - outputScale: měřítko výstupního obrazu. `0.5` = proxy v polovičním
+    ///     rozlišení (rozhodnutí fáze 4 — plné 4K proxy není žádná úspora).
+    ///     Škáluje se při dekódování přes `AVAssetReaderVideoCompositionOutput`
+    ///     s `renderSize`, ne po snímcích na CPU. Kompozice zároveň aplikuje
+    ///     `preferredTransform`, takže výstup je vzpřímený a zapisuje se
+    ///     s identitou.
+    ///     <https://developer.apple.com/documentation/avfoundation/avassetreadervideocompositionoutput>
     public static func render(asset: AVAsset,
                               videoTrack: AVAssetTrack,
                               audioTrack: AVAssetTrack?,
                               frameDuration: CMTime,
                               audioTimePitchAlgorithm: AVAudioTimePitchAlgorithm? = nil,
+                              outputScale: Double = 1.0,
                               to outputURL: URL) async throws -> CFRRenderResult {
         let started = Date()
 
         guard frameDuration.isValid, frameDuration.value > 0 else {
             throw ProbeError.message("Neplatná délka snímku.")
+        }
+        guard outputScale > 0, outputScale <= 1 else {
+            throw ProbeError.message("Neplatné měřítko výstupu \(outputScale).")
         }
 
         let (naturalSize, transform, formats) =
@@ -60,10 +71,38 @@ public enum CFRRenderer {
         // MARK: Čtečka
 
         let reader = try AVAssetReader(asset: asset)
-        let videoOutput = AVAssetReaderTrackOutput(
-            track: videoTrack,
-            outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: pixelFormat])
-        videoOutput.alwaysCopiesSampleData = false
+        let readerSettings = [kCVPixelBufferPixelFormatTypeKey as String: pixelFormat]
+        let videoOutput: AVAssetReaderOutput
+        /// Vyplněné jen při škálování: rozměr, který jde do zapisovače.
+        var scaledSize: CGSize?
+
+        if outputScale != 1.0 {
+            // Cadence kompozice = cílová mřížka: výstup čtečky je pak už CFR
+            // a zero-order hold resampleru jím projde 1:1. Výběr snímku pro
+            // daný čas dělá kompozitor stejně — poslední platný snímek.
+            let scaling = try await AVMutableVideoComposition
+                .videoComposition(withPropertiesOf: asset)
+            let transformed = CGRect(origin: .zero, size: naturalSize)
+                .applying(transform).size
+            // Sudé rozměry — 4:2:2 podvzorkování chce sudou šířku.
+            let target = CGSize(
+                width: (abs(transformed.width) * outputScale / 2).rounded() * 2,
+                height: (abs(transformed.height) * outputScale / 2).rounded() * 2)
+            scaling.renderSize = target
+            scaling.frameDuration = frameDuration
+            scaledSize = target
+
+            let output = AVAssetReaderVideoCompositionOutput(videoTracks: [videoTrack],
+                                                             videoSettings: readerSettings)
+            output.videoComposition = scaling
+            output.alwaysCopiesSampleData = false
+            videoOutput = output
+        } else {
+            let output = AVAssetReaderTrackOutput(track: videoTrack,
+                                                  outputSettings: readerSettings)
+            output.alwaysCopiesSampleData = false
+            videoOutput = output
+        }
         guard reader.canAdd(videoOutput) else {
             throw ProbeError.message("Čtečka nepřijala video výstup s formátem \(fourCC(pixelFormat)).")
         }
@@ -101,10 +140,11 @@ public enum CFRRenderer {
                                                 withIntermediateDirectories: true)
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
 
+        let writerSize = scaledSize ?? naturalSize
         var videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.proRes422Proxy,
-            AVVideoWidthKey: Int(naturalSize.width),
-            AVVideoHeightKey: Int(naturalSize.height),
+            AVVideoWidthKey: Int(writerSize.width),
+            AVVideoHeightKey: Int(writerSize.height),
         ]
         if let colorProperties = colorProperties(from: formats.first) {
             videoSettings[AVVideoColorPropertiesKey] = colorProperties
@@ -112,7 +152,9 @@ public enum CFRRenderer {
 
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = false
-        videoInput.transform = transform
+        // Škálovaná cesta dostává pixely už vzpřímené (transform aplikovala
+        // kompozice) — druhé otočení by obraz položilo na bok.
+        videoInput.transform = scaledSize == nil ? transform : .identity
 
         // Timescale stopy musí být ta, ve které vychází délka snímku celočíselně.
         // Bez tohohle si zapisovač zvolí 600 a kvantizuje do ní — u 60p to vyjde

@@ -20,7 +20,7 @@ import Foundation
 
 final class VideoResampler {
 
-    private let output: AVAssetReaderTrackOutput
+    private let output: AVAssetReaderOutput
     private let adaptor: AVAssetWriterInputPixelBufferAdaptor
     private let input: AVAssetWriterInput
     /// Kvůli chybové hlášce — `AVAssetWriterInput` na svůj zapisovač neukazuje.
@@ -42,7 +42,7 @@ final class VideoResampler {
     /// PTS snímku použitého v předchozím slotu — kvůli počítání podržených.
     private var lastUsedPTS: CMTime?
 
-    init(output: AVAssetReaderTrackOutput,
+    init(output: AVAssetReaderOutput,
          adaptor: AVAssetWriterInputPixelBufferAdaptor,
          input: AVAssetWriterInput,
          writer: AVAssetWriter,

@@ -218,7 +218,7 @@ final class ProxyStore: ObservableObject {
         let partial = cache.appendingPathExtension("partial")
         _ = try await CFRRenderer.render(asset: composition,
                                          videoTrack: compVideo,
-                                         audioTrack: compAudio,
+                                         audioTracks: compAudio.map { [$0] } ?? [],
                                          frameDuration: stats.frameDuration,
                                          outputScale: 0.5,
                                          to: partial)

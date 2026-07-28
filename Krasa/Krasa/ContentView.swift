@@ -9,8 +9,10 @@
 import AVFoundation
 import AppKit
 import Combine
+import ProbeKit
 import SwiftUI
 import TimelineModel
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -300,6 +302,88 @@ final class AppModel: ObservableObject {
             return
         }
         print("✅ autosave: čistý po skenu, špinavý po střihu, záloha sedí a jde zahodit")
+    }
+
+    // MARK: Export (fáze 5)
+
+    /// Zlomek hotových snímků; `nil` = žádný export neběží.
+    @Published var exportProgress: Double?
+
+    func exportMovie() {
+        guard exportProgress == nil else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mpeg4Movie]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue =
+            (projectStore.fileURL?.deletingPathExtension().lastPathComponent ?? "Svatba") + ".mp4"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await export(to: url) }
+    }
+
+    /// Export VŽDY z originálů — proxy je poloviční a je jen pro střih.
+    /// HEVC 4K/30 CFR + AAC, `.timeDomain` kvůli škálovaným úsekům ramp.
+    func export(to url: URL) async {
+        guard exportProgress == nil else { return }
+        exportProgress = 0
+        defer { exportProgress = nil }
+        status = "Exportuju… (HEVC z originálů)"
+
+        do {
+            let project = timeline.project
+            guard let composition = try await CompositionBuilder.build(project: project,
+                                                                       usingProxies: false),
+                  let video = composition.tracks(withMediaType: .video).first else {
+                status = "Není co exportovat — na ose nejsou žádné klipy."
+                return
+            }
+            let canvas = project.timeline.canvasSize
+            let ticksPerFrame = Int64(SourceTime.projectTimescale)
+                / Int64(project.timeline.frameRate)
+
+            let result = try await CFRRenderer.render(
+                asset: composition,
+                videoTrack: video,
+                audioTracks: composition.tracks(withMediaType: .audio),
+                frameDuration: CMTime(value: ticksPerFrame,
+                                      timescale: SourceTime.projectTimescale),
+                audioTimePitchAlgorithm: .timeDomain,
+                outputSize: CGSize(width: canvas.width, height: canvas.height),
+                format: .hevcAAC(videoBitRate: 50_000_000, audioBitRate: 256_000),
+                onProgress: { fraction in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.exportProgress != nil else { return }
+                        self.exportProgress = fraction
+                    }
+                },
+                to: url)
+
+            status = "Export hotový: \(url.lastPathComponent) — "
+                + "\(result.writtenFrameCount) snímků za "
+                + String(format: "%.1f s.", result.elapsedSeconds)
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } catch {
+            status = "Export selhal: \(error.localizedDescription)"
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    /// CLI ověření exportu: rampa na první klip, export do temp složky —
+    /// výsledek pak přeměří MediaProbe (CFR, kodek, délka).
+    func verifyExport() async {
+        if let first = timeline.project.timeline.tracks.first?.clips.first {
+            timeline.toggleClassicRamp(first.id)
+        }
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaExportCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("export_check.mp4")
+        await export(to: url)
+        let expected = Double(timeline.project.duration.count)
+            / Double(timeline.project.timeline.frameRate)
+        print(status)
+        print(String(format: "očekávaná délka osy: %.3f s", expected))
+        print("EXPORT_PATH=\(directory.path)")
     }
 
     // MARK: Správa proxy úložiště (fáze 4)
@@ -767,6 +851,8 @@ struct ContentView: View {
                     model.verifyProjectRoundtrip()
                 } else if arguments.contains("--autosave-check") {
                     model.verifyAutosave()
+                } else if arguments.contains("--export-check") {
+                    await model.verifyExport()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
@@ -833,6 +919,18 @@ struct ContentView: View {
             ProxyControls(timeline: model.timeline, proxies: model.proxies,
                           onChangeLocation: { model.changeProxyDirectory() },
                           onDelete: { model.deleteProxies() })
+
+            if let progress = model.exportProgress {
+                VStack(alignment: .leading, spacing: 2) {
+                    ProgressView(value: progress)
+                    Text("Exportuju… \(Int(progress * 100)) %")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Button("Exportovat film…") { model.exportMovie() }
+                    .disabled(model.clips.isEmpty || model.isMeasuring)
+            }
 
             Button(model.isMeasuring ? "Měřím…" : "Změřit náhled v okně") {
                 Task { await model.runBenchmark() }

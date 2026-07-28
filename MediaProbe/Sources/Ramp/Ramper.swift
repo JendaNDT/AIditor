@@ -139,7 +139,7 @@ enum Ramper {
         //    kompozice obsahuje škálované zvukové úseky.
         let render = try await CFRRenderer.render(asset: composition,
                                                   videoTrack: compVideo,
-                                                  audioTrack: compAudio,
+                                                  audioTracks: compAudio.map { [$0] } ?? [],
                                                   frameDuration: frameDuration,
                                                   audioTimePitchAlgorithm: pitchAlgorithm,
                                                   to: outputURL)

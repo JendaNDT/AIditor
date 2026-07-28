@@ -39,6 +39,10 @@ final class VideoResampler {
     private(set) var held = 0
     private(set) var failure: Error?
 
+    /// Zlomek hotových slotů — pro ukazatel průběhu exportu. Volá se na
+    /// frontě zapisovače, volající si musí přeskočit na main sám.
+    var onProgress: ((Double) -> Void)?
+
     /// PTS snímku použitého v předchozím slotu — kvůli počítání podržených.
     private var lastUsedPTS: CMTime?
 
@@ -85,6 +89,11 @@ final class VideoResampler {
             lastUsedPTS = frame.pts
             written += 1
             slot += 1
+
+            // Jednou za sekundu obrazu — častěji nemá na ukazateli co ukázat.
+            if written % 30 == 0, slotCount > 0 {
+                onProgress?(Double(written) / Double(slotCount))
+            }
         }
         return false
     }

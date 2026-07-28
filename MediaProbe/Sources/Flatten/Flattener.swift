@@ -73,7 +73,7 @@ enum Flattener {
         // 3) Render. Rychlost se nemění, takže korekce výšky hlasu nemá co řešit.
         let render = try await CFRRenderer.render(asset: composition,
                                                   videoTrack: compVideo,
-                                                  audioTrack: compAudio,
+                                                  audioTracks: compAudio.map { [$0] } ?? [],
                                                   frameDuration: frameDuration,
                                                   audioTimePitchAlgorithm: nil,
                                                   to: outputURL)

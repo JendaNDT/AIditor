@@ -32,6 +32,16 @@ public struct CFRRenderResult {
 
 public enum CFRRenderer {
 
+    /// Výstupní formát renderu.
+    public enum OutputFormat {
+        /// ProRes 422 Proxy + LPCM v .mov — mezisoubory (proxy, zploštění).
+        /// Dosavadní chování.
+        case proResProxyLPCM
+        /// HEVC + AAC v .mp4 — finální export (fáze 5). AAC tady nevadí:
+        /// dodávka se už nikam nereimportuje, priming řeší přehrávače.
+        case hevcAAC(videoBitRate: Int, audioBitRate: Int)
+    }
+
     /// Vyrenderuje `asset` na mřížku `frameDuration`.
     ///
     /// - Parameters:
@@ -45,12 +55,20 @@ public enum CFRRenderer {
     ///     `preferredTransform`, takže výstup je vzpřímený a zapisuje se
     ///     s identitou.
     ///     <https://developer.apple.com/documentation/avfoundation/avassetreadervideocompositionoutput>
+    /// - Parameters:
+    ///   - outputSize: pevný cílový rozměr (plátno projektu při exportu) —
+    ///     sjednotí mix rozlišení a rotací přes video kompozici.
+    ///   - format: mezisoubor (ProRes+LPCM), nebo dodávka (HEVC+AAC).
+    ///   - onProgress: zlomek hotových snímků; chodí z fronty zapisovače.
     public static func render(asset: AVAsset,
                               videoTrack: AVAssetTrack,
-                              audioTrack: AVAssetTrack?,
+                              audioTracks: [AVAssetTrack],
                               frameDuration: CMTime,
                               audioTimePitchAlgorithm: AVAudioTimePitchAlgorithm? = nil,
                               outputScale: Double = 1.0,
+                              outputSize: CGSize? = nil,
+                              format: OutputFormat = .proResProxyLPCM,
+                              onProgress: (@Sendable (Double) -> Void)? = nil,
                               to outputURL: URL) async throws -> CFRRenderResult {
         let started = Date()
 
@@ -64,33 +82,43 @@ public enum CFRRenderer {
         let (naturalSize, transform, formats) =
             try await videoTrack.load(.naturalSize, .preferredTransform, .formatDescriptions)
         let depth = bitDepth(from: formats.first)
-        let pixelFormat = depth.value >= 10
-            ? kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange
-            : kCVPixelFormatType_422YpCbCr8
+
+        let pixelFormat: OSType
+        switch format {
+        case .proResProxyLPCM:
+            pixelFormat = depth.value >= 10
+                ? kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange
+                : kCVPixelFormatType_422YpCbCr8
+        case .hevcAAC:
+            // Dodávka je 8bit 4:2:0 — standard distribuce. HDR/10bit je F12.
+            pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        }
+
+        // Cílový rozměr: pevný (export na plátno), nebo z měřítka (proxy).
+        var targetSize: CGSize? = outputSize
+        if targetSize == nil, outputScale != 1.0 {
+            let transformed = CGRect(origin: .zero, size: naturalSize)
+                .applying(transform).size
+            // Sudé rozměry — chroma podvzorkování chce sudou šířku i výšku.
+            targetSize = CGSize(
+                width: (abs(transformed.width) * outputScale / 2).rounded() * 2,
+                height: (abs(transformed.height) * outputScale / 2).rounded() * 2)
+        }
 
         // MARK: Čtečka
 
         let reader = try AVAssetReader(asset: asset)
         let readerSettings = [kCVPixelBufferPixelFormatTypeKey as String: pixelFormat]
         let videoOutput: AVAssetReaderOutput
-        /// Vyplněné jen při škálování: rozměr, který jde do zapisovače.
-        var scaledSize: CGSize?
 
-        if outputScale != 1.0 {
+        if let targetSize {
             // Cadence kompozice = cílová mřížka: výstup čtečky je pak už CFR
             // a zero-order hold resampleru jím projde 1:1. Výběr snímku pro
             // daný čas dělá kompozitor stejně — poslední platný snímek.
             let scaling = try await AVMutableVideoComposition
                 .videoComposition(withPropertiesOf: asset)
-            let transformed = CGRect(origin: .zero, size: naturalSize)
-                .applying(transform).size
-            // Sudé rozměry — 4:2:2 podvzorkování chce sudou šířku.
-            let target = CGSize(
-                width: (abs(transformed.width) * outputScale / 2).rounded() * 2,
-                height: (abs(transformed.height) * outputScale / 2).rounded() * 2)
-            scaling.renderSize = target
+            scaling.renderSize = targetSize
             scaling.frameDuration = frameDuration
-            scaledSize = target
 
             let output = AVAssetReaderVideoCompositionOutput(videoTracks: [videoTrack],
                                                              videoSettings: readerSettings)
@@ -108,28 +136,45 @@ public enum CFRRenderer {
         }
         reader.add(videoOutput)
 
-        var audioOutput: AVAssetReaderTrackOutput?
+        var audioOutput: AVAssetReaderOutput?
         var audioChannels: UInt32 = 0
         var audioSampleRate: Double = 0
-        if let audioTrack {
-            let audioFormats = try await audioTrack.load(.formatDescriptions)
+        if let firstAudio = audioTracks.first {
+            let audioFormats = try await firstAudio.load(.formatDescriptions)
             if let asbd = audioFormats.first.flatMap({ CMAudioFormatDescriptionGetStreamBasicDescription($0) }) {
                 audioChannels = asbd.pointee.mChannelsPerFrame
                 audioSampleRate = asbd.pointee.mSampleRate
             }
-            let output = AVAssetReaderTrackOutput(
-                track: audioTrack,
-                outputSettings: pcmSettings(channels: audioChannels, sampleRate: audioSampleRate))
-            output.alwaysCopiesSampleData = false
-            // Korekce výšky hlasu se nastavuje TADY. AVAssetExportSession má
-            // vlastní `audioTimePitchAlgorithm`, ale tu cestu nepoužíváme —
-            // u AVAssetReaderu to sedí přímo na výstupu stopy.
-            if let audioTimePitchAlgorithm {
-                output.audioTimePitchAlgorithm = audioTimePitchAlgorithm
-            }
-            if reader.canAdd(output) {
-                reader.add(output)
-                audioOutput = output
+            let settings = pcmSettings(channels: audioChannels, sampleRate: audioSampleRate)
+
+            if audioTracks.count == 1 {
+                let output = AVAssetReaderTrackOutput(track: firstAudio, outputSettings: settings)
+                output.alwaysCopiesSampleData = false
+                // Korekce výšky hlasu se nastavuje TADY. AVAssetExportSession má
+                // vlastní `audioTimePitchAlgorithm`, ale tu cestu nepoužíváme —
+                // u AVAssetReaderu to sedí přímo na výstupu stopy.
+                if let audioTimePitchAlgorithm {
+                    output.audioTimePitchAlgorithm = audioTimePitchAlgorithm
+                }
+                if reader.canAdd(output) {
+                    reader.add(output)
+                    audioOutput = output
+                }
+            } else {
+                // Víc zvukových stop (A1 + A2 při exportu) → smíchat do jedné.
+                // Bez `audioMix` míchá plnou hlasitostí — per-track hlasitost
+                // je věc audio enginu (fáze 7).
+                // <https://developer.apple.com/documentation/avfoundation/avassetreaderaudiomixoutput>
+                let output = AVAssetReaderAudioMixOutput(audioTracks: audioTracks,
+                                                         audioSettings: settings)
+                output.alwaysCopiesSampleData = false
+                if let audioTimePitchAlgorithm {
+                    output.audioTimePitchAlgorithm = audioTimePitchAlgorithm
+                }
+                if reader.canAdd(output) {
+                    reader.add(output)
+                    audioOutput = output
+                }
             }
         }
 
@@ -138,23 +183,42 @@ public enum CFRRenderer {
         try? FileManager.default.removeItem(at: outputURL)
         try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
-        let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mov)
 
-        let writerSize = scaledSize ?? naturalSize
-        var videoSettings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.proRes422Proxy,
-            AVVideoWidthKey: Int(writerSize.width),
-            AVVideoHeightKey: Int(writerSize.height),
-        ]
+        let writerSize = targetSize ?? naturalSize
+        let fileType: AVFileType
+        var videoSettings: [String: Any]
+        switch format {
+        case .proResProxyLPCM:
+            fileType = .mov
+            videoSettings = [
+                AVVideoCodecKey: AVVideoCodecType.proRes422Proxy,
+                AVVideoWidthKey: Int(writerSize.width),
+                AVVideoHeightKey: Int(writerSize.height),
+            ]
+        case .hevcAAC(let videoBitRate, _):
+            fileType = .mp4
+            let framesPerSecond =
+                (Double(frameDuration.timescale) / Double(frameDuration.value)).rounded()
+            videoSettings = [
+                AVVideoCodecKey: AVVideoCodecType.hevc,
+                AVVideoWidthKey: Int(writerSize.width),
+                AVVideoHeightKey: Int(writerSize.height),
+                AVVideoCompressionPropertiesKey: [
+                    AVVideoAverageBitRateKey: videoBitRate,
+                    AVVideoExpectedSourceFrameRateKey: Int(framesPerSecond),
+                ],
+            ]
+        }
         if let colorProperties = colorProperties(from: formats.first) {
             videoSettings[AVVideoColorPropertiesKey] = colorProperties
         }
+        let writer = try AVAssetWriter(outputURL: outputURL, fileType: fileType)
 
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = false
-        // Škálovaná cesta dostává pixely už vzpřímené (transform aplikovala
-        // kompozice) — druhé otočení by obraz položilo na bok.
-        videoInput.transform = scaledSize == nil ? transform : .identity
+        // Škálovaná/kompoziční cesta dostává pixely už vzpřímené (transform
+        // aplikovala kompozice) — druhé otočení by obraz položilo na bok.
+        videoInput.transform = targetSize == nil ? transform : .identity
 
         // Timescale stopy musí být ta, ve které vychází délka snímku celočíselně.
         // Bez tohohle si zapisovač zvolí 600 a kvantizuje do ní — u 60p to vyjde
@@ -173,10 +237,24 @@ public enum CFRRenderer {
 
         var audioInput: AVAssetWriterInput?
         if audioOutput != nil {
-            // LPCM schválně. AAC by výstupu přidal vlastní priming delay.
-            let input = AVAssetWriterInput(
-                mediaType: .audio,
-                outputSettings: pcmSettings(channels: audioChannels, sampleRate: audioSampleRate))
+            let audioSettings: [String: Any]
+            switch format {
+            case .proResProxyLPCM:
+                // LPCM schválně. AAC by mezisouborům přidal priming delay
+                // a rozbil přesně to, kvůli čemu vznikají.
+                audioSettings = pcmSettings(channels: audioChannels,
+                                            sampleRate: audioSampleRate)
+            case .hevcAAC(_, let audioBitRate):
+                // Dodávka: AAC stereo. Priming tady nevadí — soubor se už
+                // nikam nereimportuje.
+                audioSettings = [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVSampleRateKey: audioSampleRate > 0 ? audioSampleRate : 48_000,
+                    AVNumberOfChannelsKey: Int(max(1, min(2, audioChannels))),
+                    AVEncoderBitRateKey: audioBitRate,
+                ]
+            }
+            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
             input.expectsMediaDataInRealTime = false
             if writer.canAdd(input) {
                 writer.add(input)
@@ -203,6 +281,7 @@ public enum CFRRenderer {
                                        writer: writer,
                                        frameDuration: frameDuration,
                                        slotCount: slotCount)
+        resampler.onProgress = onProgress
 
         let group = DispatchGroup()
         group.enter()

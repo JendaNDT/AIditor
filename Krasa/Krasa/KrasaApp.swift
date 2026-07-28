@@ -36,6 +36,9 @@ struct KrasaApp: App {
                     .keyboardShortcut("s")
                 Button("Uložit projekt jako…") { model.saveProjectAs() }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
+                Divider()
+                Button("Exportovat film…") { model.exportMovie() }
+                    .keyboardShortcut("e")
             }
         }
     }

@@ -208,7 +208,16 @@ final class TimelineController: ObservableObject {
     ///
     /// Délka assetu = počet vzorků / naměřená frekvence. `ClipTiming` nenese
     /// délku v sekundách a `nominalFrameRate` lže — počet vzorků je měření.
-    func loadScannedClips(_ timings: [ClipTiming]) {
+    /// Nahraje projekt ze souboru (fáze 5). Čistý stav: žádný výběr,
+    /// hlava na nule, prázdná historie — undo nesmí umět „odotevřít" soubor.
+    func loadProject(_ project: Project) {
+        self.project = project
+        selection = []
+        playhead = .zero
+        undo = UndoStack()
+    }
+
+    func loadScannedClips(_ timings: [ClipTiming], bookmarks: [URL: Data] = [:]) {
         var built = Project.empty()
 
         guard let videoTrack = built.timeline.tracks.first(where: { $0.kind == .video })?.id,
@@ -220,6 +229,9 @@ final class TimelineController: ObservableObject {
             let seconds = Double(timing.sampleCount) / timing.measuredFrameRate
 
             let asset = Asset(originalURL: timing.url,
+                              // Bookmark do projektového souboru — po restartu
+                              // oprávnění sandboxu z tohohle běhu neplatí.
+                              bookmark: bookmarks[timing.url],
                               duration: SourceTime(seconds: seconds),
                               measuredFrameRate: timing.measuredFrameRate,
                               hasVideo: true,

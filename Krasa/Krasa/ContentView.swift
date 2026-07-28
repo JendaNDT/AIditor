@@ -27,6 +27,8 @@ final class AppModel: ObservableObject {
     let controller = PlaybackController()
     /// Generátor a evidence proxy (fáze 4).
     let proxies = ProxyStore()
+    /// Soubor projektu (fáze 5).
+    let projectStore = ProjectStore()
     /// Stav časové osy. Žije v modelu, ne ve view — `TimelinePaneView` se
     /// smí kdykoli přetvořit, `TimelineController` to nesmí pocítit.
     let timeline = TimelineController()
@@ -84,6 +86,111 @@ final class AppModel: ObservableObject {
     private func reapplyKnownProxies() {
         for (original, proxy) in proxies.finished {
             timeline.setProxy(proxy, forAssetWithOriginal: original)
+        }
+    }
+
+    // MARK: Projektový soubor (fáze 5)
+
+    func saveProject() {
+        if let url = projectStore.fileURL {
+            performSave(to: url)
+        } else {
+            saveProjectAs()
+        }
+    }
+
+    func saveProjectAs() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [ProjectStore.fileType]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = projectStore.fileURL?.lastPathComponent
+            ?? "Svatba.projektkrasa"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        performSave(to: url)
+    }
+
+    private func performSave(to url: URL) {
+        do {
+            try projectStore.save(project: timeline.project, to: url)
+            status = "Projekt uložen: \(url.lastPathComponent)"
+        } catch {
+            status = "Uložení selhalo: \(error.localizedDescription)"
+        }
+    }
+
+    func openProjectViaPanel() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [ProjectStore.fileType]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await openProject(at: url) }
+    }
+
+    func openProject(at url: URL) async {
+        do {
+            let raw = try projectStore.load(from: url)
+            let project = projectStore.resolveAssets(in: raw)
+            timeline.loadProject(project)
+            let offline = project.assets.filter(\.isOffline).count
+            status = offline == 0
+                ? "Otevřen projekt \(projectStore.displayName)."
+                : "Otevřen projekt \(projectStore.displayName) — \(offline) assetů offline."
+            await refreshSidebar(for: project)
+        } catch {
+            status = "Projekt se nepodařilo otevřít: "
+                + ((error as? ProjectFileError)?.description ?? error.localizedDescription)
+        }
+    }
+
+    /// Start aplikace: otevřít poslední projekt. `false` = není co otevřít
+    /// a jede se postaru (sken zapamatovaných složek).
+    func reopenLastProject() async -> Bool {
+        guard let url = projectStore.restoreLastProjectURL() else { return false }
+        await openProject(at: url)
+        return projectStore.fileURL != nil
+    }
+
+    /// Po otevření projektu: sidebar se přeměří z assetů projektu (badge
+    /// CFR/VFR jsou měření, ne uložená data) a rozjede se generování proxy —
+    /// hotové se najdou otiskem v cache.
+    private func refreshSidebar(for project: Project) async {
+        var found: [ClipTiming] = []
+        for asset in project.assets where !asset.isOffline {
+            if case .success(let timing) = await VFRDetector.inspect(url: asset.originalURL) {
+                found.append(timing)
+            }
+        }
+        clips = found.sorted { $0.name < $1.name }
+        startProxyGeneration()
+    }
+
+    /// CLI ověření: uložit → načíst → porovnat. Timeline musí sedět do
+    /// posledního ticku včetně rychlostních křivek.
+    func verifyProjectRoundtrip() {
+        if let firstClip = timeline.project.timeline.tracks.first?.clips.first {
+            timeline.toggleClassicRamp(firstClip.id)   // ať se ověřuje i rampa
+        }
+        // Soubor se NECHÁVÁ v Application Support a pamatuje se jako
+        // poslední projekt — další start bez parametrů tím ověří i obnovu
+        // napříč procesy (bookmarky, security scope), kterou in-process
+        // roundtrip pokrýt nemůže.
+        guard let url = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("RoundtripTest.projektkrasa") else { return }
+        do {
+            try projectStore.save(project: timeline.project, to: url)
+            let loaded = projectStore.resolveAssets(in: try projectStore.load(from: url))
+            let clipCount = timeline.project.timeline.tracks.reduce(0) { $0 + $1.clips.count }
+            if loaded.timeline == timeline.project.timeline,
+               loaded.usesProxies == timeline.project.usesProxies,
+               loaded.assets.map(\.id) == timeline.project.assets.map(\.id) {
+                print("✅ roundtrip projektu sedí: \(timeline.project.assets.count) assetů,"
+                      + " \(clipCount) klipů, rampa přežila")
+            } else {
+                print("❌ roundtrip projektu NESEDÍ")
+            }
+        } catch {
+            print("❌ roundtrip selhal: \(error)")
         }
     }
 
@@ -159,17 +266,30 @@ final class AppModel: ObservableObject {
             }
         }
         clips = found.sorted { $0.name < $1.name }
-        timeline.loadScannedClips(clips)
+
+        // Import = NOVÝ neuložený projekt z naskenovaných klipů. Bookmark
+        // per asset — bez něj by uložený projekt po restartu nesměl na
+        // vlastní soubory sáhnout.
+        var bookmarks: [URL: Data] = [:]
+        for timing in clips {
+            bookmarks[timing.url] = ProjectStore.assetBookmark(for: timing.url)
+        }
+        timeline.loadScannedClips(clips, bookmarks: bookmarks)
+        projectStore.detachFromFile()
+
         status = "\(clips.count) klipů. Vyber jeden a přehraj, nebo spusť měření."
         if selected == nil, let first = clips.first { await select(first) }
+        startProxyGeneration()
+    }
 
-        // Proxy na pozadí — ale ne pod CLI měřeními, soupeřily by o stroj.
-        if !CommandLine.arguments.dropFirst().contains(where: { $0.hasPrefix("--") }) {
-            let scanned = clips
-            Task { [weak self] in
-                await self?.proxies.ensureProxies(for: scanned) { original, proxy in
-                    self?.timeline.setProxy(proxy, forAssetWithOriginal: original)
-                }
+    /// Proxy na pozadí — ale ne pod CLI měřeními, soupeřily by o stroj.
+    private func startProxyGeneration() {
+        guard !CommandLine.arguments.dropFirst().contains(where: { $0.hasPrefix("--") }) else { return }
+        let scanned = clips
+        guard !scanned.isEmpty else { return }
+        Task { [weak self] in
+            await self?.proxies.ensureProxies(for: scanned) { original, proxy in
+                self?.timeline.setProxy(proxy, forAssetWithOriginal: original)
             }
         }
     }
@@ -500,7 +620,8 @@ final class AppModel: ObservableObject {
 }
 
 struct ContentView: View {
-    @StateObject private var model = AppModel()
+    /// Model vlastní `KrasaApp` — menu (⌘S, ⌘O) potřebuje tentýž objekt.
+    @ObservedObject var model: AppModel
 
     var body: some View {
         fullLayout
@@ -518,21 +639,29 @@ struct ContentView: View {
         }
         .frame(minWidth: model.chromeHidden ? 0 : 1000, minHeight: 640)
         .task {
-            await model.restoreAndScan()
             // Bez GUI: `--benchmark [cesty…]` změří v okně,
-            // `--fullscreen [cesty…]` porovná okno s celou obrazovkou.
+            // `--fullscreen [cesty…]` porovná okno s celou obrazovkou,
+            // `--timeline-bench` výkon osy, `--roundtrip-project` formát.
             // Sandbox drží, přístup se obnovuje z uloženého bookmarku.
             let arguments = CommandLine.arguments.dropFirst()
             let explicit = arguments.filter { !$0.hasPrefix("--") }
-            if arguments.contains("--fullscreen") {
-                await model.runFullScreenComparison(only: Array(explicit))
+
+            if arguments.contains(where: { $0.hasPrefix("--") }) {
+                await model.restoreAndScan()
+                if arguments.contains("--fullscreen") {
+                    await model.runFullScreenComparison(only: Array(explicit))
+                } else if arguments.contains("--benchmark") {
+                    await model.runBenchmark(only: Array(explicit))
+                } else if arguments.contains("--timeline-bench") {
+                    await model.runTimelineStressBench()
+                } else if arguments.contains("--roundtrip-project") {
+                    model.verifyProjectRoundtrip()
+                }
                 NSApplication.shared.terminate(nil)
-            } else if arguments.contains("--benchmark") {
-                await model.runBenchmark(only: Array(explicit))
-                NSApplication.shared.terminate(nil)
-            } else if arguments.contains("--timeline-bench") {
-                await model.runTimelineStressBench()
-                NSApplication.shared.terminate(nil)
+            } else if await model.reopenLastProject() {
+                // Projekt z minula — sken se nespouští, timeline je ze souboru.
+            } else {
+                await model.restoreAndScan()
             }
         }
     }
@@ -555,6 +684,8 @@ struct ContentView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
+            ProjectStatusRow(store: model.projectStore)
+
             HStack {
                 Button("Otevřít soubor") { Task { await model.openFiles(directories: false) } }
                 Button("Otevřít složku") { Task { await model.openFiles(directories: true) } }
@@ -668,6 +799,24 @@ struct ContentView: View {
 
             TransportBar(controller: model.controller, hidden: model.chromeHidden)
         }
+    }
+}
+
+/// Jméno projektu a stav uložení (fáze 5). Vlastní malé view — vnořený
+/// `ObservableObject` by se v těle `ContentView` nepřekresloval.
+private struct ProjectStatusRow: View {
+    @ObservedObject var store: ProjectStore
+
+    var body: some View {
+        Text(store.displayName + suffix)
+            .font(.headline)
+            .lineLimit(1)
+            .help(store.fileURL?.path ?? "Projekt zatím není uložený — ⌘S ho uloží.")
+    }
+
+    private var suffix: String {
+        guard let saved = store.lastSavedAt else { return " · ⌘S uloží" }
+        return " · uloženo " + saved.formatted(date: .omitted, time: .shortened)
     }
 }
 

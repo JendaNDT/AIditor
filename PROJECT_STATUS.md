@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (228 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. Interakce kroků 6–10 potvrzené rukou 28. 07. 2026; zbývá jen výkonový test s 1000 klipy.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (228 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. FÁZE 2 HOTOVÁ: interakce potvrzené rukou a výkonový test 2000 klipů bez vypadlého tiku (obojí 28. 07. 2026).**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -55,7 +55,14 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   ✅ Koukanec kroku 10 potvrzen rukou (28. 07. 2026): vlna se při pinchi jen lehce rozmaže a po ustálení je ostrá, nic neseká; scroll přes osu plynulý. Výkonový test s 1000 klipy zůstává otevřený.
 
-**Fáze 2 má všech deset kroků napsaných a interakce potvrzené rukou (28. 07. 2026).** Zbývá jediné kritérium: výkonový rozpočet — 1000 klipů, scroll přes celou osu, žádný vypadlý tik.
+✅ **FÁZE 2 JE HOTOVÁ (28. 07. 2026): deset kroků, interakce potvrzené rukou a výkonový test splněný.** Režim `--timeline-bench` postaví syntetickou osu s 1000 dvojicemi obraz+zvuk (2000 klipů) a projede ji celou tam a zpět scrollem řízeným ČASEM (krokování po ticích by vypadlý tik schovalo — zpomalil by jízdu). Tiky přes `CADisplayLink` z `NSView.displayLink(target:selector:)`; vypadlý tik = zaseknuté hlavní vlákno.
+
+**Výsledek: 0 vypadlých tiků na 1202 ticích, medián práce na tik 1,99 ms, maximum 2,55 ms** (dokument 40 129 bodů, ujeto 79 170 bodů, 60 Hz). Nebyla to formalita — **první běh měl 65 vypadlých tiků a medián 14,15 ms** a našel tři skutečné chyby, všechny opravené:
+  1. **Lineární hledání pro každý viditelný klip každý tik.** `timeline.clip()`, hledání assetu a jména jsou O(všechny klipy); na 2000 klipech to dělalo ~240 000 porovnání za tik (~5 ms). → slovník `ClipDrawInfo` přestavovaný jen při změně projektu.
+  2. **`CATextLayer.string` přepisovaný stejnou hodnotou.** Vrstva po každém zápisu rastruje text znova — desítky rastrů za tik. → zápis jen při změně (`ClipLayer.titleText`).
+  3. **Zpětná smyčka dlaždic vln.** Každá na pozadí dokončená dlaždice bumpla `version` a spustila CELÝ `refreshClips` navíc k tomu scrollovacímu. → throttle odběru na 100 ms.
+
+  ⚠️ K tomu past do sbírky: **zakryté okno pozastaví display link z `NSView.displayLink`** — benchmark pak visí na prvním tiku a nikdy nezačne. Proto si okno před měřením říká o popředí (`makeKeyAndOrderFront`) a čas se počítá až od prvního tiku. Stejná třída pasti jako „měření náhledu je platné, jen když bylo na co koukat".
 
 ## ✅ FÁZE 3 — speed ramping ostrý (HOTOVÁ 28. 07. 2026)
 
@@ -84,7 +91,7 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   ✅ **Koukanec modulu 3 potvrzen rukou (28. 07. 2026):** kreslení křivky myší, náhled i zvuk podle ní, žlutá zóna podle zdroje, undo tažení jedním krokem, mazání uzlů i varování o nedosažitelné mezi — všechno sedí.
 
-  **FÁZE 3 JE HOTOVÁ** — kritérium „nakreslíš křivku myší, náhled ji ukáže, zvuk drží" splněno a potvrzeno rukou. Dál zbývá výkonový test fáze 2 (1000 klipů) a pak fáze 4 (proxy + zploštění VFR→CFR).
+  **FÁZE 3 JE HOTOVÁ** — kritérium „nakreslíš křivku myší, náhled ji ukáže, zvuk drží" splněno a potvrzeno rukou. Výkonový test fáze 2 prošel týž den — příští krok je fáze 4 (proxy + zploštění VFR→CFR).
 
 ✅ **Kroky 2 a 3 potvrzené.** Krok 2 rukou 27. 07. 2026 (21:08); krok 3 v rámci ručního průchodu 28. 07. 2026 — checklist zahrnoval scrubování v pravítku a scroll přes celou osu, rozjetý timecode nebo ujíždějící hlavičky by nešly přehlédnout.
 
@@ -180,14 +187,14 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 2 — timeline.** `TimelineModel` hotový (228 testů), view napsané a interakce potvrzené rukou. Zbývá výkonový test (1000 klipů, scroll bez vypadlého tiku).
+- *(nic — fáze 0–3 jsou hotové, fáze 4 ještě nezačala)*
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
 ### Cesta k v0.5 „MVP nula" (~6 měsíců při 30 h/týdně)
 - **F0** Spike 0 — ověření speed rampingu — ✅ **HOTOVO 26. 07. 2026**, hlavní riziko zavřené
 - **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
-- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (208 testů), view napsané, interakce potvrzené rukou; zbývá výkonový test s 1000 klipy**
+- **F2** Timeline v AppKitu — nejtěžší UI v projektu — ✅ **HOTOVO 28. 07. 2026** (228 testů modelu, interakce rukou, výkonový test 2000 klipů bez vypadlého tiku)
 - **F3** Speed ramping ostrý — ✅ **HOTOVO 28. 07. 2026** (tři moduly, potvrzeno rukou; reálný čas: dva dny místo tří týdnů)
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)*
 - **F5** Projekt, autosave, undo, export *(3 týdny)*

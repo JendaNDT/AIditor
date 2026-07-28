@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. FÁZE 4 v praxi HOTOVÁ (proxy + externí disk, potvrzeno rukou), FÁZE 5 ROZJETÁ: projekt se ukládá do .projektkrasa a po startu se sám obnoví.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. FÁZE 5 TÉMĚŘ HOTOVÁ: projekt se ukládá a obnovuje (i po pádu) a export píše HEVC 4K/30 CFR — MVP nula je na dohled.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -82,9 +82,17 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
   - **Ověřeno CLI `--autosave-check`:** čistý po skenu, špinavý po střihu, záloha se zapíše, sedí s projektem a jde zahodit.
   - ⚠️ Metodická poznámka: headless CLI běhy aplikace se občas zaseknou před vytvořením okna (`.task` pak nevystartuje) — vypadá to jako visící kód, ale je to vrtoch prostředí; opakované spuštění projde. Stálo to hodinu vyšetřování, které ale odhalilo tu skutečnou chybu s baseline.
 
-  👀 **Koukanec modulu 2:** něco sestříhej (bez ⌘S), počkej ~6 s, tvrdě zabij appku (⌥⌘Esc → Vynutit ukončení) a spusť znovu — má se nabídnout obnova zálohy; „Obnovit zálohu" vrátí práci a hlásí „neuloženo". Druhá větev: u ULOŽENÉHO projektu sestříhej, zabij, otevři — dialog „záloha novější než soubor".
+  ✅ **Koukanec modulu 2 potvrzen rukou (28. 07. 2026): obnova po pádu funguje.**
 
-  **Zbývá z fáze 5:** export přes `AVAssetWriter` (s povinným `mediaTimeScale`) a drobnost: dotaz při zavírání neuloženého projektu.
+✅ **Modul 3 — export přes `AVAssetWriter`: HEVC 4K/30 CFR z originálů (28. 07. 2026).**
+
+  - **`CFRRenderer` zobecněn:** `OutputFormat` (ProRes+LPCM pro mezisoubory / **HEVC+AAC pro dodávku** — AAC u dodávky nevadí, soubor se už nereimportuje a priming ctí přehrávače), pevný `outputSize` (plátno projektu — video kompozice sjednotí mix rozlišení a rotací), **více zvukových stop přes `AVAssetReaderAudioMixOutput`** (A1+A2; per-track hlasitost je věc audio enginu fáze 7) a hlášení průběhu z resampleru. Ověřená časová logika — mřížka, `mediaTimeScale` na video vstupu, zero-order hold — NEDOTČENÁ.
+  - **Export v appce:** vždy Z ORIGINÁLŮ (proxy je poloviční a jen na střih), kompozici staví tentýž `CompositionBuilder` jako náhled (včetně ramp), `.timeDomain` na zvuku, HEVC 50 Mbit + AAC 256k do `.mp4`, ukazatel průběhu v sidebaru, ⌘E v menu.
+  - **Ověřeno CLI exportem s rampou a sondou MediaProbe:** 3840×2160 HEVC, přesně 30,00 fps, **CFR s kolísáním 0,0 %** (past s timescale 600 nezafungovala — `mediaTimeScale` je nastavená), **4739 snímků = přesně 157,967 s osy**, AAC 2ch 48 kHz, ~48 Mbit; kódování 2× rychleji než reálný čas. Pozn.: cesta mixu více stop (A2 s hudbou) zatím reálně necvičená — A2 je v testovacím projektu prázdná a kompozice ji vynechává.
+
+  👀 **Koukanec modulu 3:** ⌘E, exportuj osu s rampou, pusť si výsledný .mp4 v QuickTimeru — zpomalení má být plynulé, zvuk v synchronu a bez mickey-mouse výšky, obraz 4K/30.
+
+  **Zbývá z fáze 5:** drobnost — dotaz při zavírání neuloženého projektu (autosave ale práci chrání i bez něj). Pak je **v0.5 „MVP nula" KOMPLETNÍ** a před námi KILL-GATE 1: sestříhat touhle appkou celou reálnou svatbu.
 
 ## ✅ FÁZE 4 — proxy a výkon (HOTOVÁ až na kritérium reálného materiálu, 28. 07. 2026)
 
@@ -231,7 +239,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 
 ## 🔄 Rozjeté (nedodělané)
 - **Fáze 4 — proxy.** Hotová a potvrzená rukou; otevřené zůstává jen kritérium plynulosti na reálném 200GB materiálu (přirozeně u Kill-gate 1).
-- **Fáze 5 — projekt a export.** Projektový soubor i autosave hotové; zbývá export.
+- **Fáze 5 — projekt a export.** Projektový soubor, autosave i export hotové; zbývá jen dotaz při zavírání neuloženého projektu a koukanec exportu.
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
@@ -241,7 +249,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu — ✅ **HOTOVO 28. 07. 2026** (228 testů modelu, interakce rukou, výkonový test 2000 klipů bez vypadlého tiku)
 - **F3** Speed ramping ostrý — ✅ **HOTOVO 28. 07. 2026** (tři moduly, potvrzeno rukou; reálný čas: dva dny místo tří týdnů)
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)* — 🔄 **ProxyStore + správa úložiště hotové a potvrzené rukou (externí disk funguje); zbývá kritérium plynulosti na reálném materiálu**
-- **F5** Projekt, autosave, undo, export *(3 týdny)* — 🔄 **projektový soubor a autosave hotové; zbývá export**
+- **F5** Projekt, autosave, undo, export *(3 týdny)* — 🔄 **projektový soubor, autosave i export hotové (export potvrzen sondou; čeká koukanec)**
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
 ### Cesta k v1.0 (+~4 měsíce)

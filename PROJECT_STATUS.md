@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 28. 07. 2026 (pozdě večer — fáze 10, modul 1)*
+*Naposled aktualizováno: 28. 07. 2026 (v noci — fáze 11, modul 1)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,7 +13,19 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): přechody → texty/T1 → fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 11 — texty, titulky a stopa T1, modul 1 (model: druh stopy `.title` a titulkový klip + testy).** Fáze 10 je hotová celá, viz níže. Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 11, modul 2 — titulky v náhledu (overlay vzorcem `SubtitleOverlay`) a kreslení pruhu T1 na ose.** Modul 1 (model) je hotový, viz níže. Pak: export přes `AVVideoCompositionCoreAnimationTool`, inspektor s editací textu (splácí i editaci titulků z přepisu). Detail v `IMPLEMENTACNI_PLAN.md`.
+
+## 🔄 FÁZE 11 — texty, titulky a stopa T1 (rozjetá 28. 07. 2026)
+
+✅ **Modul 1 — model: druh stopy `.title`, titulkový klip, T1 (28. 07. 2026).** Čistý Swift v `TimelineModelu`, **+25 testů, celkem 326, 0 selhání**; aplikace se s novým modelem překládá beze změn.
+
+  - **`TitleClip` NENÍ `Clip`** — nemá asset, zdrojový čas, rampu ani vazbu; nacpat ho do `Clip` by znamenalo volitelné `assetID` a věčné řešení `nil` všude. Vlastní typ s úložištěm `Track.titles` — týž vzorec jako `Transition`. Nese text, šablonu (`plain`/`names`/`dateAndPlace`/`chapter`/`thanks` — vzhled si přeloží až vykreslení), zarovnání a pozici+délku ve snímcích osy. Chování na ose sdílí s klipy: dotyk není překryv, stopa seřazená.
+  - **T1 je v `Project.empty()` ZÁMĚRNĚ poslední** — aplikace si na šesti místech domýšlí `tracks[0]` = V1 a `tracks[1]` = A1 (ContentView, CLI ověření). Pořadí v poli je datové; kde T1 leží na obrazovce, rozhodne UI modul. Test tuhle smlouvu hlídá.
+  - **Operace:** `makeTitle` (model razí ID i výchozí délku 4 s), `addTitle`, `removeTitle`, `moveTitle` (i mezi titulkovými stopami), `trimTitleStart/End` (bez zdrojových mezí — titulek žádný zdroj nemá), `setTitleText/Template/Alignment` (pro budoucí inspektor), `ensureTitleTrack` (projekty z doby před fází 11 si T1 doplní tudy, ne dekodérem). Překryv vrací `titleWouldOverlap(nearestLegal:)` — vzorec `wouldOverlap`, UI na něm zarazí tažení.
+  - **Invarianty 18–23:** titulek jen na titulkové stopě (obrácený směr — asset klip na T1 — hlásí stávající č. 8), seřazenost, překryvy, kladná délka, nezáporný začátek, jedinečnost ID. Asset klip na T1 odmítá i `checkPlacement` (ternár `video/audio` nahrazen switchem).
+  - **Formát souboru v2.** Nový PŘÍPAD enumu `TrackKind.title` není volitelné pole — starší aplikace by na něm spadla dekódovací chybou místo srozumitelného „soubor je z novější verze", a výchozí projekt teď T1 obsahuje vždy. Soubory verze 1 se dál načtou (test na doslovném JSON z doby před fází 11); pole `Track.titles` se u nich čte jako prázdné (vzorec `transitions`).
+  - **Drobnosti kolem:** `project.duration` počítá i titulky (závěrečné poděkování za posledním záběrem film prodlužuje — přes černou); geometrie zná výšku titulkové stopy (28 b); hrany titulků jsou kandidáti přichytávání.
+  - *Koukanec rukou: zatím není na co — stopa je v modelu, kreslit ji začne modul 2.*
 
 ## ✅ FÁZE 10 — přechody (HOTOVÁ 28. 07. 2026)
 

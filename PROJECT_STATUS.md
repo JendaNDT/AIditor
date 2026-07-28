@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 13: modul 1 hotový + rozhodnutí o technice)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 13: moduly 1–2 hotové — presety hrají v náhledu i exportu)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,22 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (365, 28
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 13 — barevné presety, modul 2** — vlastní `AVVideoCompositing` compositor (rozhodnutí padlo v modulu 1, viz níže): převzít vykreslení stávajících instrukcí (aspect-fit, opacity rampy, transform rampy) a přidat CIFilter per klip podle `Clip.colorGrade`. Ověřit kvantitativně (`--color-check` — dvojí export s presetem a bez, vzorec `--title-check`) a změřit GPU skok (`--color-gpu`, vzorec `--transition-gpu`). Modul 3 pak UI (výběr presetu + posuvník intenzity v inspektoru).
+**➡️ PŘÍŠTÍ KROK: FÁZE 13 — barevné presety, modul 3 (UI)** — výběr presetu + posuvník intenzity v inspektoru vybraného klipu (vzorec inspektoru fotky z F12: posuvník = jeden undo krok), případně položky v kontextovém menu klipu. Kompoziční vrstva je hotová a ověřená (modul 2 níže) — UI jen volá `setColorGrade`.
 
-## 🚧 FÁZE 13 — barevné presety (modul 1 HOTOVÝ 29. 07. 2026)
+## 🚧 FÁZE 13 — barevné presety (moduly 1–2 HOTOVÉ 29. 07. 2026)
+
+✅ **Modul 2 — presety hrají v kompozici, náhledu i exportu (29. 07. 2026).**
+
+  - **Jedno místo sémantiky, dvojí emise.** `CompositionBuilder.computeSpans` počítá úseky obrazové kompozice (hranice = okraje VŠECH vkladů + oblasti přechodů; každá vrstva úseku má jednu dvojici krajních hodnot transformace a průhlednosti + případný preset). Z týchž úseků se **bez presetů** emitují standardní instrukce (vestavěný kompozitor — dosavadní cesta) a **s presety** vlastní `ColorCompositionInstruction` + `customVideoCompositorClass = ColorVideoCompositor` — geometrie obou cest se nemůže rozjet. Regrese ověřena: `--transition-check` i `--photo-check` po přestavbě dávají ČÍSLO PO ČÍSLE stejné výsledky jako ve fázích 10/12 (79/0, 0,7/12,9/13,1; 244/0, 0→254).
+  - **⚠️ Odchylka od zápisu rozhodnutí z modulu 1, zdůvodněná:** instrukce NEjsou podtřída `AVMutableVideoCompositionInstruction` čtená gettery — player item si video kompozici KOPÍRUJE a kopie podtřídy by šla přes NSCopying rodiče, který o přidaných polích neví. Vlastní objekt `AVVideoCompositionInstructionProtocol` se drží referencí (dokumentovaný vzorec pro vlastní compository). Data instrukcí dodává `computeSpans`, gettery nejsou potřeba.
+  - **`ColorVideoCompositor`** (CoreImage): pozadí → vrstvy odzadu dopředu (preset → transformace → alfa → source-over). Presety v `ColorPresetFilter` — jediné místo, kde se z volby modelu stávají CIFiltry (`CIPhotoEffectFade`+`CIColorControls`, `CIPhotoEffectTransfer`, `CIColorControls`, `CIPhotoEffectMono`); intenzita = `CIDissolveTransition` originál→filtrovaný.
+  - **⚠️ Dvě pasti CoreImage, obě chycené kvantitativní kontrolou (první běhy `--color-check` selhaly, oprava měřením potvrzená):**
+    1. **Symetrie barevného prostoru.** Pracovní prostor CI i cíl renderu MUSÍ být prostor odvozený z atributů zdrojového bufferu (`CVImageBufferCreateColorSpaceFromAttachments`) — s výchozím (lineárním) pracovním prostorem a natvrdo daným 709 se středy tónů posouvaly o ~15 jasu a směsi vycházely lineárně, zatímco vestavěný kompozitor míchá KÓDOVANÉ hodnoty (F10 to změřila). Po opravě je round trip nefiltrovaného snímku identita (odchylka 0,10 jasu).
+    2. **`CIColorMatrix` počítá na NEpremultiplikovaných hodnotách.** Škálovat průhlednost přes RGB i alfu = po zpětné premultiplikaci násobit barvu DVAKRÁT — směs prolínačky vyšla o² (poměr 0,26 místo 0,5). Správně se škáluje JEN alfa; pak poměr 0,49.
+  - **Ověřeno `--color-check` kvantitativně** (dvojí export: video + tři červené fotky, ČB naplno / ČB 50 % / prolínačka barevná↔ČB): pas-through video **0,10** jasu, fotka 0,01 (compositor nemění, co barvit nemá); ČB saturace **243 → 0**; intenzita 50 % → poměr saturace **0,49**; směs na střihu prolínačky **0,49**. Sonda exportu: 3840×2160 HEVC, **240×3000 ticků, kolísání 0,0 %, CFR** — mřížka drží i přes vlastní compositor.
+  - **⚠️ GPU skok ZMĚŘEN (`--color-gpu on|off`, vzorec F10 — `ioreg` 1 Hz, markerový soubor):** bez presetů medián **0 %** (přímá cesta, baseline drží), s presety **medián 24 %, rozsah 8–36 %** při 4K/30 přehrávání. Je to ~dvojnásobek skoku přechodů (F10: ~12 %) — CoreImage dělá YUV→RGB→filtr→YUV na každém snímku. Přehrávání plynulé; poklesy v řadě jsou restarty 6s smyčky.
+  - Preset s intenzitou 0 nebo vadný se v kompozici ignoruje (klip hraje natvrdo, vadu hlásí `validate()` — vzorec vadné rampy) a drahá cesta se nezapíná.
+  - *Koukanec rukou (v seznamu): preset na klipu v náhledu, plynulost přehrávání s presety.*
 
 ✅ **Modul 1 — model: `ColorGrade` na klipu + ROZHODNUTÍ o technice renderování (29. 07. 2026).** Čistý Swift, **+14 testů, celkem 365, 0 selhání**; aplikace se s novým modelem překládá beze změn.
 
@@ -142,7 +155,7 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 1. ✅ **F10 — přechody** (HOTOVÁ 28. 07.; GPU skok změřen — medián ~12 % s kompozicí)
 2. ✅ **F11 — texty a titulky + stopa T1** (HOTOVÁ 29. 07.; obě splátky fáze 8 splacené, export přes `frameDecorator` místo CoreAnimationTool — viz oprava v plánu)
 3. ✅ **F12 — fotky a Ken Burns** (HOTOVÁ 29. 07.; fotka přes „still movie" mezisoubor, freeze frame jako fotka)
-4. 🚧 **F13 — barevné presety** (Core Image per klip, intenzita) **← PRÁVĚ TADY** (modul 1 hotový, rozhodnuto: vlastní `AVVideoCompositing`; zbývá modul 2 kompozice+export a modul 3 UI)
+4. 🚧 **F13 — barevné presety** (Core Image per klip, intenzita) **← PRÁVĚ TADY** (moduly 1–2 hotové: model + vlastní `ColorVideoCompositor` ověřený `--color-check`, GPU skok změřen ~24 %; zbývá modul 3 UI)
 5. **F14 — hudební synchronizace** (beat-grid na vlastní FFT, magnet na doby, dopasování tempa 90–115 % s respektem k limitu zpomalení — VLAJKOVÁ)
 6. **F15 — analýzy kvality** (neostrost, ticho/prázdno; jen návrhy, nikdy automatický střih)
 7. **F16 — vymazlení** (zvukové fade úchyty, dBTP strop, správa Whisper modelu)
@@ -154,6 +167,7 @@ Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou p�
 - [ ] **Přechody (F10):** pravý klik poblíž střihu → prolínačka/zatmívačka (na zvukové stopě prolnutí zvuku); lichoběžník na ose jde roztáhnout tažením okraje se zarážkou; „Odebrat přechod" funguje; nedosažitelná prolínačka je v menu vypnutá s vysvětlením; prolínačka v náhledu měkce prolne, zatmívačka projde černou/bílou, crossfade je slyšet; export vypadá i zní jako náhled.
 - [ ] **Fotky a Ken Burns (F12):** Soubor → Přidat fotky… položí fotky na konec V1 (5 s); fotka hraje v náhledu při přehrávání i scrubování (aspect-fit s pruhy); délka fotky jde natáhnout tažením okraje bez omezení; inspektor fotky (výběr klipu fotky) přepíná Bez pohybu / Nájezd / Odjezd a zoom mění pohyb v náhledu; pravý klik na video klip → Zmrazit snímek udělá fotku na konci osy shodnou se snímkem pod hlavou; na fotce jsou rampa/sync/přepis vypnuté s vysvětlením; export vypadá jako náhled (fotka, pohyb i pruhy).
 - [ ] **Texty a T1 (F11):** pravý klik na volné místo T1 → Přidat titulek (obsazené místo vypnuté s vysvětlením); nový titulek se vybere a v inspektoru jde hned psát — text se mění v náhledu při psaní; šablony mění vzhled (jména velká patková přes střed), zarovnání funguje; tažení těla přesouvá se zarážkou o sousedy, okraje trimují, Shift vypíná přichytávání, Escape ruší, Delete maže, ⌘Z vrací; klik na zelený pásek řeči → inspektor přepisu, úprava textu se propíše do titulku v náhledu, prázdný text úsek smaže; titulek za posledním klipem prodlouží film (přes černou); exportovaný film má titulky na stejných místech a se stejným vzhledem jako náhled.
+- [ ] **Barevné presety (F13, po modulu 3):** preset na klipu se projeví v náhledu při přehrávání i scrubování; intenzita mění sílu plynule; přehrávání s presety na 4K ose je plynulé; export vypadá jako náhled; preset + prolínačka + Ken Burns dohromady fungují.
 - [ ] **Dotaz při zavírání (F5):** změna v projektu → ⌘Q ukáže Uložit/Neukládat/Zrušit (Escape ruší); týž dotaz po výběru souboru při ⌘O a importu; „Uložit" u neuloženého projektu přes „Uložit jako" — zrušení panelu ruší i zavírání.
 - [ ] **Hlasitost stop (F7):** posuvník v hlavičce A1/A2 mění hlasitost ZA BĚHU přehrávání bez zastavení; M ztlumí a vrátí; ⌘Z vrací tažení jedním krokem; hodnoty přežijí uložení a otevření projektu.
 - [ ] **Normalizace exportu (F7):** volba profilu u tlačítka exportu; po exportu status hlásí „Hlasitost X → cíl (gain ±Y dB)", případně poctivé omezení špičkami.

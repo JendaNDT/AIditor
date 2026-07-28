@@ -780,7 +780,19 @@ final class TimelineDocumentView: NSView {
         sync.isEnabled = !hasRamp
         menu.addItem(sync)
 
+        // Titulky z řeči (fáze 8) — přepis patří assetu, takže stačí
+        // jednou na kterémkoli klipu téhož zdroje.
+        let transcribe = NSMenuItem(title: "Vytvořit titulky z řeči",
+                                    action: #selector(menuTranscribe(_:)), keyEquivalent: "")
+        transcribe.target = self
+        menu.addItem(transcribe)
+
         return menu
+    }
+
+    @objc private func menuTranscribe(_ sender: Any?) {
+        guard let clipID = menuClipID else { return }
+        controller.onTranscribeRequest?(clipID)
     }
 
     @objc private func menuSyncAudio(_ sender: Any?) {

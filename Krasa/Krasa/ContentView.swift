@@ -28,6 +28,8 @@ final class AppModel: ObservableObject {
 
     let importer = MediaImporter()
     let controller = PlaybackController()
+    /// Přepis řeči (fáze 8).
+    let transcription = TranscriptionService()
     /// Generátor a evidence proxy (fáze 4).
     let proxies = ProxyStore()
     /// Soubor projektu (fáze 5).
@@ -70,6 +72,10 @@ final class AppModel: ObservableObject {
         // Kontextové menu klipu → synchronizace externího zvuku (fáze 7).
         timeline.onSyncAudioRequest = { [weak self] clipID in
             self?.syncExternalAudio(clipID: clipID)
+        }
+        // Kontextové menu klipu → titulky z řeči (fáze 8).
+        timeline.onTranscribeRequest = { [weak self] clipID in
+            Task { await self?.performTranscription(clipID: clipID) }
         }
         subscriptions = [
             // Přehrávač → osa: při přehrávání jede hlava za časem přehrávače.
@@ -529,6 +535,52 @@ final class AppModel: ObservableObject {
         await export(to: directory.appendingPathComponent("mix_quarter.mp4"))
         print("A1 na 0,25×: \(status)")
         print("MIX_CHECK_PATH=\(directory.path)")
+    }
+
+    // MARK: Titulky z řeči (fáze 8, modul 2)
+
+    /// Přepíše zvuk ZDROJOVÉHO souboru klipu a uloží přepis k assetu —
+    /// titulky se pak promítají na osu přes všechny klipy téhož zdroje
+    /// (`subtitleCues`, modul 1). Model se poprvé stahuje (~1,5 GB).
+    @discardableResult
+    func performTranscription(clipID: ClipID) async -> Bool {
+        let project = timeline.project
+        guard let clip = project.timeline.clip(clipID),
+              let asset = project.asset(clip.assetID) else { return false }
+        guard asset.hasAudio else {
+            status = "Klip nemá zvukovou stopu — není co přepisovat."
+            return false
+        }
+        status = "Přepisuju řeč z \(asset.originalURL.lastPathComponent)…"
+        do {
+            let segments = try await transcription.transcribe(url: asset.originalURL)
+            guard !segments.isEmpty else {
+                status = "V nahrávce se nenašla žádná řeč."
+                return false
+            }
+            timeline.setTranscript(assetID: asset.id, segments: segments)
+            status = "Přepsáno: \(segments.count) úseků řeči."
+            return true
+        } catch {
+            status = "Přepis selhal: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    /// CLI ověření přepisu: soubor se známou českou větou (say/nahrávka),
+    /// vytiskne úseky s časy — správnost textu se posoudí proti předloze.
+    func verifyTranscription(path: String?) async {
+        guard let path else { print("❌ --transcribe-check potřebuje cestu ke zvuku"); return }
+        do {
+            let segments = try await transcription.transcribe(url: URL(fileURLWithPath: path))
+            print("úseků: \(segments.count)")
+            for segment in segments {
+                print(String(format: "%7.2f–%-7.2f %@", segment.start.seconds,
+                             segment.end.seconds, segment.text))
+            }
+        } catch {
+            print("❌ přepis selhal: \(error)")
+        }
     }
 
     // MARK: Synchronizace externího zvuku (fáze 7, modul 5)
@@ -1168,6 +1220,8 @@ struct ContentView: View {
                     await model.verifyNormalizedExport()
                 } else if arguments.contains("--sync-check") {
                     await model.verifySyncedAudio(path: explicit.first)
+                } else if arguments.contains("--transcribe-check") {
+                    await model.verifyTranscription(path: explicit.first)
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

@@ -209,6 +209,20 @@ final class TimelineController: ObservableObject {
         return true
     }
 
+    // MARK: - Titulky (fáze 8)
+
+    /// Kontextové menu žádá přepis klipu — obslouží `AppModel` (Whisper
+    /// není práce osy).
+    var onTranscribeRequest: ((ClipID) -> Void)?
+
+    func setTranscript(assetID: AssetID, segments: [TranscriptSegment]) {
+        var updated = project
+        guard (try? updated.setTranscript(assetID: assetID, segments: segments)) != nil
+        else { return }
+        undo.record(project)
+        project = updated
+    }
+
     // MARK: - Hlasitost stop (fáze 7, modul 2)
 
     func setTrackMuted(_ trackID: TrackID, muted: Bool) {

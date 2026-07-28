@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor: svatební asistent škrtnut 28. 07. 2026 na pokyn autora** (AI analýza scén a obličejů zůstává podmíněná za v1.0).
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. FÁZE 8 (titulky) ROZJETÁ: model přepisu a SRT hotové, na řadě WhisperKit.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. FÁZE 8 (titulky) ROZJETÁ: model přepisu, SRT i WhisperKit přepis hotové — zbývá zobrazení a export v UI.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -74,6 +74,15 @@ Rozvrh: **1)** model přepisu + promítnutí na osu + SRT (hotový, níže), **2
   - **`subtitleCues()` promítá přepisy na osu** přes kliky JEN zvukových stop (svázaný pár sdílí asset — jinak by byl každý titulek dvakrát). Mapování zdroj→osa inverzí `sourceOffset` binárním půlením, takže **funguje i pod rychlostní křivkou** — titulek na zpomaleném úseku se natáhne s řečí (test: hranice sedí s vlastním mapováním střihu na snímek přesně).
   - **`SRT.serialize`** — SubRip s čárkou v časech, číslování bez děr, prázdné texty se přeskakují, LF konce. Formát času otestovaný na hodinových hodnotách.
   - Kdo přepis vyrobí, je téhle vrstvě jedno — WhisperKit je modul 2; model je hotový a otestovaný dřív, než se stáhl jediný bajt závislosti.
+
+✅ **Modul 2 — WhisperKit: přepis řeči funguje (28. 07. 2026).** První externí závislost projektu: balíček `argmaxinc/argmax-oss-swift` **v1.0.0** (produkt `WhisperKit`; repo i tag ověřeny `git ls-remote` před přidáním, API proti zdrojákům tagu — pravidlo 6).
+
+  - **`TranscriptionService`:** model se načítá jednou za běh aplikace; zvuk připravuje `MonoAudioReader` (mono 16 kHz — formát Whisperu, a přes `AVComposition` kvůli edit listu). Čeština natvrdo (`language: "cs"`) — detekce jazyka s hudbou v pozadí umí uletět; VAD chunking dělí dlouhé nahrávky podle pauz v řeči, ne slepě po 30 s.
+  - **Vstup do UI:** kontextové menu klipu → „Vytvořit titulky z řeči". Přepisuje se ZDROJOVÝ soubor a výsledek se ukládá k assetu (`setTranscript` s undo) — na osu ho promítá modul 1 přes všechny klipy téhož zdroje.
+  - **Model:** ~1,5 GB v `Documents/huggingface` uvnitř kontejneru aplikace; stahuje se při prvním použití (nový entitlement `network.client` — jediné síťové použití v aplikaci, přepis běží lokálně). Správa místa (smazání/přemístění modelu) může přijít s fází 9.
+  - ⚠️ **Past v názvosloví modelů:** OpenAI „large-v3-turbo" se v repozitáři `whisperkit-coreml` jmenuje **`openai_whisper-large-v3-v20240930`** (podle data vydání). Přípona `_turbo` tam značí komprimované varianty WhisperKitu — jiná věc. S "large-v3-turbo" stažení spadne na `modelsUnavailable`; zapsáno i v kódu.
+  - **Ověřeno CLI `--transcribe-check`** na české větě syntetizované hlasem Zuzana (10,4 s): tři úseky se správnými časy a přesným textem („svadbě" místo „svatbě" je artefakt syntetického hlasu, ne přepisu). Ověření na reálné řeči přirozeně přijde s Kill-gate 1.
+  - *Koukanec rukou zatím neproběhl (odloženo autorem): menu na klipu, průběh ve statusu, přepis reálného klipu.*
 
 ## ✅ FÁZE 7 — audio engine (HOTOVÁ 28. 07. 2026)
 
@@ -325,7 +334,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 
 ### Cesta k v1.0 (+~3 měsíce)
 - **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — ✅ **HOTOVO 28. 07. 2026, pět modulů za jeden den: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm), per-track hlasitost/mute (`--mix-check`), LUFS normalizace exportu se stropem špiček (`--normalize-check`), jádro cross-korelačního syncu a sync v UI (`--sync-check`: položení na vzorek přesně). Koukance rukou odložené autorem — seznam u modulů.**
-- **F8** Titulky přes WhisperKit *(2 týdny)* — 🔄 **modul 1 hotový 28. 07. 2026: model přepisu kotvený ve zdroji, promítnutí na osu (i pod rampou) a SRT, +14 testů; zbývá WhisperKit samotný a UI**
+- **F8** Titulky přes WhisperKit *(2 týdny)* — 🔄 **moduly 1+2 hotové 28. 07. 2026: model přepisu + SRT (14 testů) a WhisperKit přepis ověřený na české větě; zbývá modul 3 — zobrazení titulků a export SRT v UI**
 - **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — **+ migrace na `AVVideoComposition.Configuration`** jako druhá větev pod `if #available(macOS 26.0, *)`. Ne dřív.
 - 🚧 **KILL-GATE 2:** prodat deseti lidem, kteří tě neznají
 

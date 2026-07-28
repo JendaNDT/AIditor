@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 11 HOTOVÁ)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 12, modul 1)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,7 +13,17 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): přechody → texty/T1 → fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 12 — fotky a Ken Burns, modul 1** (import HEIC/JPEG jako asset bez zvuku, klip s volnou délkou na V1; pak Ken Burns přes `TransformRamp` a freeze frame jako fotka — NE přes SpeedRampEngine). Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 12, modul 2 — fotka v kompozici a náhledu.** Fotka nemá video stopu, do `AVComposition` se vkládat nedá — bude potřeba „still movie" mezisoubor (vzorec proxy cache: jeden snímek/krátký úsek ProRes z fotky, vložený se `scaleTimeRange`), plus import HEIC/JPEG v UI a kreslení na ose. Pak modul 3: Ken Burns v kompozici (`TransformRamp`/`setTransformRamp` u staré cesty) a freeze frame. Detail v `IMPLEMENTACNI_PLAN.md`.
+
+## 🔄 FÁZE 12 — fotky a Ken Burns (rozjetá 29. 07. 2026)
+
+✅ **Modul 1 — model: fotka jako asset, klip s volnou délkou, Ken Burns (29. 07. 2026).** Čistý Swift, **+15 testů, celkem 351, 0 selhání**; aplikace i balíčky se překládají beze změn.
+
+  - **`Asset.isStill`** (vyrábět přes `Asset.still(url:bookmark:)` — nastavuje `hasAudio: false`, aby fotka nešla na zvukovou stopu). `duration` a `measuredFrameRate` jsou u fotky nula a validace je nevymáhá; starší soubory pole nemají a čtou se jako `false` (custom dekodér, vzorec `Track.transitions`), verze formátu se nezvedá.
+  - **Klip fotky zdroj NEspotřebovává** — chování titulku na obrazové stopě. Větve jsou VÝHRADNĚ ve čtyřech schválených místech zdrojové matematiky (`sourceConsumption` → nula, `sourceOffset` → stojí, `remainingSourceFrames`/`availableSourceFramesBefore` → `Int.max/2`) a v `makeClip` (výchozích 5 s) — trim, split, přesun, přechody i interakce z nich meze dostávají zadarmo. Test: natažení fotky na minutu projde, split drží `sourceStart` 0, prolínačka vedle fotky má „nekonečný" přesah a nepřeteče.
+  - **`KenBurns`** = počáteční a koncový výřez v normalizovaných souřadnicích (`NormalizedRect` — vlastní typ, ne `CGRect`, model se překládá bez CoreGraphics). `setKenBurns` vymáhá: jen na fotce (`kenBurnsNeedsStill`), výřezy v obraze a ≥ 5 % (`invalidKenBurns` — menší výřez je rozmazaná kaše). Split/duplicate/overwrite Ken Burns dědí (je vztažený k délce klipu). Kompozice z něj udělá lineární `TransformRamp` — modul 3.
+  - **Rychlostní křivka na fotce ZAKÁZANÁ** (`rampOnStillClip` + invariant 24) — fotka stojí z definice; freeze frame se dělá fotkou, ne nulovou rychlostí (invertibilita `SpeedRampEngine` nedotčená, přesně podle plánu).
+  - Invarianty 24–26 (rampa na fotce, Ken Burns na videu, vadný výřez); fotkový asset nesmí předstírat zvuk ani zapírat obraz (rozšířený invariant `invalidAsset`).
 
 ## ✅ FÁZE 11 — texty, titulky a stopa T1 (HOTOVÁ 29. 07. 2026)
 

@@ -175,6 +175,19 @@ souseda by byl překryv, tedy chyba, a to šedesátkrát za sekundu. `beginInter
 
 Testy pustíš přes `cd TimelineModel && swift test`. Návrh a zdůvodnění v `FAZE_2_TIMELINE.md`.
 
+### `AudioEngine/`
+Měření hlasitosti podle ITU-R BS.1770-4 (na něm stojí EBU R128). Čistý Swift, žádné závislosti. **20 testů; nezávisle ověřeno proti `pyloudnorm` — shoda < 0,05 LU** (tolerance EBU je ±0,5 LU).
+
+```swift
+var meter = LoudnessMeter(sampleRate: 48_000, channelCount: 2)
+meter.addInterleaved(buffer)      // nebo add([[Float]]) po kanálech, streamovaně
+let lufs = meter.integrated       // nil = ticho nebo míň než 400 ms
+let gainDB = LoudnessNormalization.gainDecibels(
+    measured: lufs!, target: LoudnessProfile.web.targetLUFS)   // web −14, broadcast −23
+```
+
+Vstup se NEOŘEZÁVÁ — 32-bit float zdroje (DJI Mic, Zoom F3) nesou hodnoty přes ±1 a metr je měří správně; ořez je věc až finálního zápisu. Koeficienty K-váhování se přepočítávají pro libovolnou vzorkovací frekvenci; tabulka ze standardu pro 48 kHz je drží testem. Testy: `cd AudioEngine && swift test`.
+
 ## Co do projektu nepatří
 
 - **Svatební asistent (checklist, záběrový plán, BPM plánovač) — škrtnut 28. 07. 2026 na pokyn autora.** Produkt je čistě videoeditor; specifikace (sekce 4.4) ho sice obsahuje, ale platí plán. Pravidlo „záběry na zpomalení toč na 120 fps" tím nezaniká — říká ho žlutá zóna v editoru křivek a duplikace snímků musí zůstat v UI přiznaná.

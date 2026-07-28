@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor: svatební asistent škrtnut 28. 07. 2026 na pokyn autora** (AI analýza scén a obličejů zůstává podmíněná za v1.0).
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) ROZJETÁ: modul 1 `LoudnessMeter` hotový.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -63,6 +63,19 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
   3. **Zpětná smyčka dlaždic vln.** Každá na pozadí dokončená dlaždice bumpla `version` a spustila CELÝ `refreshClips` navíc k tomu scrollovacímu. → throttle odběru na 100 ms.
 
   ⚠️ K tomu past do sbírky: **zakryté okno pozastaví display link z `NSView.displayLink`** — benchmark pak visí na prvním tiku a nikdy nezačne. Proto si okno před měřením říká o popředí (`makeKeyAndOrderFront`) a čas se počítá až od prvního tiku. Stejná třída pasti jako „měření náhledu je platné, jen když bylo na co koukat".
+
+## 🔄 FÁZE 7 — audio engine (rozjetá 28. 07. 2026)
+
+Rozvrh fáze: **1)** `LoudnessMeter` (hotový, níže), **2)** per-track hlasitost a mute do přehrávání i exportu přes `AVAudioMix` (model už `AudioSettings` na stopě má), **3)** LUFS normalizace exportu — změřit mix kompozice offline průchodem, aplikovat gain podle profilu, volba profilu v UI, **4)** cross-korelační sync klopáku (FFT). Pozn.: `AVAudioEngine` ze jména fáze zatím potřeba nebyl — mix a normalizace jdou přes `AVAudioMix` + gain; nasadí se, až půjde o víc než hlasitost.
+
+✅ **Modul 1 — balíček `AudioEngine`: `LoudnessMeter` podle ITU-R BS.1770-4 (28. 07. 2026).** Čistý Swift bez AVFoundation (vzor `SpeedRampEngine`), **20 testů, 0 selhání.**
+
+  - **K-váhování s přepočtem koeficientů pro libovolnou vzorkovací frekvenci** (bilineární transformace analogového prototypu, tytéž konstanty jako referenční libebur128). Test drží přepočet proti tabulce koeficientů ze standardu pro 48 kHz s přesností 1e-10 — koeficienty nejsou opsané, ale odvozené, a tabulka je hlídá.
+  - Bloky 400 ms s krokem 100 ms, absolutní gate −70 LKFS, relativní −10 LU pod průměrem přeživších. Kotvy ze standardu: full-scale sinus 997 Hz → −3,01 LKFS; dva kanály → +3,01 LU. Streamování po nepravidelných kusech dává výsledek shodný na 1e-9 s jednorázovým měřením (na tom stojí budoucí použití nad `AVAssetReaderem`).
+  - **32-bit float headroom:** vzorky přes ±1 se měří, neořezávají (+6 dB nad FS čte +3,01 LKFS) — „nulové riziko přepalu" ze spec 7.1 začíná už u metru.
+  - Profily `web` (−14 LUFS, výchozí) a `broadcast` (−23 LUFS, EBU R128) + výpočet normalizačního gainu; kruhový test měř→gain→přeměř končí na cíli.
+  - **Nezávisle ověřeno proti `pyloudnorm`** (zavedená python implementace téhož standardu) na čtyřech signálech: sinus, „program" se segmenty úrovní −18 až −70 a tichem, stereo s různým obsahem kanálů, šum na 44,1 kHz. **Shoda do 0,05 LU** — hluboko pod tolerancí EBU ±0,5 LU. Na analytické kotvě (sinus −20 dBFS → −23,0103) sedí náš metr přesně; pyloudnorm je o 0,04 vedle.
+  - Poučný detail z testů: bloky na rozhraní signál→ticho (75/50/25 % tónu) gate právem přežijí a integrovanou hlasitost o ~0,13 LU zředí — chování podle standardu, test to dokumentuje tolerancí, ne obcházením.
 
 ## 🔄 FÁZE 5 — projekt a export (rozjetá 28. 07. 2026)
 
@@ -259,7 +272,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
 ### Cesta k v1.0 (+~3 měsíce)
-- **F7** Audio engine, 32-bit float, LUFS *(3 týdny)*
+- **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — 🔄 **modul 1 hotový 28. 07. 2026: `LoudnessMeter` (BS.1770-4), 20 testů, ověřeno proti pyloudnorm; zbývá mix per stopu, normalizace exportu a sync klopáku**
 - **F8** Titulky přes WhisperKit *(2 týdny)*
 - **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — **+ migrace na `AVVideoComposition.Configuration`** jako druhá větev pod `if #available(macOS 26.0, *)`. Ne dřív.
 - 🚧 **KILL-GATE 2:** prodat deseti lidem, kteří tě neznají

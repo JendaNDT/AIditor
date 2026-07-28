@@ -1,6 +1,6 @@
 # MediaProbe — naměřené vlastnosti testovacích klipů
 
-*Vygenerováno 2026-07-28T10:22:52Z nástrojem `MediaProbe`.*
+*Vygenerováno 2026-07-28T16:56:45Z nástrojem `MediaProbe`.*
 
 Klipy samotné jsou v `.gitignore` (jsou to gigabajty videa), takže tenhle
 soubor je jediný záznam o tom, na čem se měřilo. Negeneruj ho ručně —
@@ -94,6 +94,6 @@ dostane zvuk posunutý o tenhle offset — a bude ho hledat jinde.
   Verdikt    CFR — všechny vzorky mají identickou délku.
   Zvuk       AAC (aac ), 2 kanál(ů), 48000 Hz
   Edit list z ⚠ 1 segment(ů), mapování NENÍ triviální:
-             [0] source 0:00,044 + 2:37,900  →  target 0:00,000 + 2:37,900  rate 1,0000×
+             [0] source 0:00,044 + 2:37,899  →  target 0:00,000 + 2:37,899  rate 1,0000×
   Délka      2:37,967 (asset)
 ```

@@ -128,10 +128,11 @@ public enum CFRRenderer {
             // Cadence kompozice = cílová mřížka: výstup čtečky je pak už CFR
             // a zero-order hold resampleru jím projde 1:1. Výběr snímku pro
             // daný čas dělá kompozitor stejně — poslední platný snímek.
-            let scaling = try await AVMutableVideoComposition
-                .videoComposition(withPropertiesOf: asset)
-            scaling.renderSize = targetSize
-            scaling.frameDuration = frameDuration
+            // Kompozici staví `ScalingVideoComposition` — od fáze 9 dvojí
+            // implementace (Configuration na macOS 26+, jinak deprecated
+            // AVMutableVideoComposition).
+            let scaling = try await ScalingVideoComposition.make(
+                for: asset, renderSize: targetSize, frameDuration: frameDuration)
 
             let output = AVAssetReaderVideoCompositionOutput(videoTracks: [videoTrack],
                                                              videoSettings: readerSettings)

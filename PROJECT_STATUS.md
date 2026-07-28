@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor: svatební asistent škrtnut 28. 07. 2026 na pokyn autora** (AI analýza scén a obličejů zůstává podmíněná za v1.0).
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. FÁZE 8 (titulky) HOTOVÁ: přepis WhisperKitem, titulky v náhledu, export SRT. Příští krok: FÁZE 9 — distribuce (notarizace, Sparkle, licence, migrace na Configuration).**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. FÁZE 8 (titulky) HOTOVÁ: přepis WhisperKitem, titulky v náhledu, export SRT. FÁZE 9 (distribuce) ROZJETÁ: migrace na Configuration hotová; podpis a notarizace ČEKAJÍ NA APPLE DEVELOPER ÚČET AUTORA.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -63,6 +63,17 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
   3. **Zpětná smyčka dlaždic vln.** Každá na pozadí dokončená dlaždice bumpla `version` a spustila CELÝ `refreshClips` navíc k tomu scrollovacímu. → throttle odběru na 100 ms.
 
   ⚠️ K tomu past do sbírky: **zakryté okno pozastaví display link z `NSView.displayLink`** — benchmark pak visí na prvním tiku a nikdy nezačne. Proto si okno před měřením říká o popředí (`makeKeyAndOrderFront`) a čas se počítá až od prvního tiku. Stejná třída pasti jako „měření náhledu je platné, jen když bylo na co koukat".
+
+## 🔄 FÁZE 9 — distribuce (rozjetá 28. 07. 2026)
+
+Rozvrh: **1)** migrace na `AVVideoComposition.Configuration` (hotová, níže), **2)** licencování + freemium limit 3 minuty, **3)** Sparkle aktualizace, **4)** Developer ID podpis + notarizace — **BLOKOVÁNO na autorovi:** vyžaduje Apple Developer Program účet (99 USD/rok); založení a přihlášení jsou jeho kroky, zapojení certifikátů do buildu pak moje.
+
+✅ **Modul 1 — migrace škálovací kompozice na `AVVideoComposition.Configuration` (28. 07. 2026).** Přesně podle plánu fáze 9: dvojí implementace za jedním rozhraním (`ScalingVideoComposition.make` v ProbeKitu) — na macOS 26+ nové API přes `Configuration` (má `frameDuration` i `renderSize`; **API ověřeno proti swiftinterface SDK 26.5**, ne odhadem), na macOS 14–25 dosavadní `AVMutableVideoComposition`. Stará větev NESMÍ zmizet, dokud je deployment target 14.
+
+  - Jediné místo použití byla škálovací kompozice v `CFRRendereru` (proxy + export); `CompositionBuilder` video kompozici nepoužívá vůbec, takže migrace je menší, než plán čekal.
+  - **Ověřeno exportem přes novou větev** (na tomhle stroji běží ona) a sondou MediaProbe: 3840×2160 HEVC, měřených **30,0000 fps, kolísání 0,0 %, všech 4739 vzorků přesně 3000 ticků** — shodné s ověřením staré větve do posledního čísla.
+  - Deprecation warning se při targetu 14 nehlásí (deprecace platí až od macOS 26) — „odklizení warningů" z plánu se tedy týká budoucího zvednutí targetu; větvení je připravené už teď.
+  - Vedlejší oprava: CLI ověření (`--mix-check`, `--normalize-check`) už trvale nepřepisují uživatelské nastavení profilu hlasitosti (uloží a vrátí).
 
 ## ✅ FÁZE 8 — titulky (HOTOVÁ 28. 07. 2026)
 
@@ -343,7 +354,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 ### Cesta k v1.0 (+~3 měsíce)
 - **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — ✅ **HOTOVO 28. 07. 2026, pět modulů za jeden den: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm), per-track hlasitost/mute (`--mix-check`), LUFS normalizace exportu se stropem špiček (`--normalize-check`), jádro cross-korelačního syncu a sync v UI (`--sync-check`: položení na vzorek přesně). Koukance rukou odložené autorem — seznam u modulů.**
 - **F8** Titulky přes WhisperKit *(2 týdny)* — ✅ **HOTOVO 28. 07. 2026: model přepisu kotvený ve zdroji (+14 testů), WhisperKit přepis ověřený na české větě, overlay v náhledu a export SRT. Odloženo: editace textu, pruh T1 na ose.**
-- **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — **+ migrace na `AVVideoComposition.Configuration`** jako druhá větev pod `if #available(macOS 26.0, *)`. Ne dřív.
+- **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — 🔄 **modul 1 hotový 28. 07. 2026: migrace na `AVVideoComposition.Configuration` (dvojí větev, ověřeno exportem na 0,0 % kolísání); zbývá licence+freemium, Sparkle a podpis (blokováno na Developer účtu autora)**
 - 🚧 **KILL-GATE 2:** prodat deseti lidem, kteří tě neznají
 
 ### Za v1.0 — podmíněné

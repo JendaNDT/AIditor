@@ -517,6 +517,9 @@ final class AppModel: ObservableObject {
     /// přeměří externí skript; musí vyjít ~12 LU. Druhý export zároveň
     /// cvičí cestu `AVAssetReaderAudioMixOutput` s mixem.
     func verifyAudioMixExport() async {
+        // CLI běh nesmí trvale přepsat uživatelské nastavení profilu.
+        let savedProfile = loudnessProfile
+        defer { loudnessProfile = savedProfile }
         loudnessProfile = nil   // normalizace by rozdíl hlasitostí dorovnala
         let directory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("KrasaMixCheck", isDirectory: true)
@@ -750,6 +753,9 @@ final class AppModel: ObservableObject {
     /// a s A1 ztišenou na 0,5× — normalizace musí ztišení dorovnat a
     /// výsledný soubor musí měřit −14 LUFS. Přeměří externí skript.
     func verifyNormalizedExport() async {
+        // CLI běh nesmí trvale přepsat uživatelské nastavení profilu.
+        let savedProfile = loudnessProfile
+        defer { loudnessProfile = savedProfile }
         // `--broadcast` přepne cíl na −23: s testovacím materiálem je gain
         // +5,9 dB těsně POD stropem špiček, takže se ověří i cesta, kdy se
         // cíle skutečně dosáhne (web −14 na tomhle materiálu strop utne).

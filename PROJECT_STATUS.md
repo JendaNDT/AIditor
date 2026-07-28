@@ -74,7 +74,7 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
   - Import klipů = **nový neuložený projekt** (sken dál přepisuje celou osu — přírůstkový import je samostatná kapitola). Sidebar ukazuje jméno projektu a čas uložení. **`usesProxies` tím konečně přežívá restart** — dluh z fáze 4 splacen.
   - **Ověřeno:** CLI `--roundtrip-project` (uložit → načíst → porovnat: 5 assetů, 10 klipů, rampa přežila do posledního ticku) a **obnova napříč procesy** screenshotem — po restartu se projekt otevřel sám, bookmarky assetů se vyřešily, sidebar se přeměřil, osa i přehrávač naložené.
 
-  👀 **Koukanec modulu:** ulož projekt přes ⌘S (vlastní jméno a místo), něco sestříhej, ⌘S, zavři appku, otevři — všechno včetně ramp a přepínače proxy má být tam, kde bylo. Bonus: přejmenuj složku s klipy a otevři projekt — assety mají být offline, ale klipy na ose nesmí zmizet; po vrácení jména se zase chytí.
+  ✅ **Koukanec potvrzen rukou (28. 07. 2026): projekt se ukládá i obnovuje.** Ukládání, střih, restart a návrat do stejného stavu fungují. *(Offline scénář s přejmenovanou složkou zůstává formálně neověřený okem — kód i testy na něj jsou.)*
 
   **Zbývá z fáze 5:** autosave (+ obnova po pádu), export přes `AVAssetWriter` (s povinným `mediaTimeScale`), a drobnosti: dirty indikátor, dotaz při zavírání neuloženého projektu.
 
@@ -233,7 +233,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu — ✅ **HOTOVO 28. 07. 2026** (228 testů modelu, interakce rukou, výkonový test 2000 klipů bez vypadlého tiku)
 - **F3** Speed ramping ostrý — ✅ **HOTOVO 28. 07. 2026** (tři moduly, potvrzeno rukou; reálný čas: dva dny místo tří týdnů)
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)* — 🔄 **ProxyStore + správa úložiště hotové a potvrzené rukou (externí disk funguje); zbývá kritérium plynulosti na reálném materiálu**
-- **F5** Projekt, autosave, undo, export *(3 týdny)* — 🔄 **projektový soubor hotový (232 testů modelu, roundtrip i obnova ověřené); zbývá autosave a export**
+- **F5** Projekt, autosave, undo, export *(3 týdny)* — 🔄 **projektový soubor hotový a potvrzený rukou; zbývá autosave a export**
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
 ### Cesta k v1.0 (+~4 měsíce)

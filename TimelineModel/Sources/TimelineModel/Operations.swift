@@ -47,6 +47,13 @@ public enum TimelineError: Error, Hashable, Sendable {
     /// Titulek by se překryl s jiným — nese mez, na které UI zarazí tažení
     /// (vzorec `wouldOverlap.nearestLegal`).
     case titleWouldOverlap(with: TitleClipID, nearestLegal: Frames)
+    /// Rychlostní křivka na fotce nemá smysl a je zakázaná (fáze 12) —
+    /// freeze frame se dělá fotkou, ne nulovou rychlostí.
+    case rampOnStillClip
+    /// Ken Burns patří jen na klip fotky.
+    case kenBurnsNeedsStill
+    /// Výřez Ken Burns mimo obraz nebo degenerovaně malý.
+    case invalidKenBurns
 }
 
 // MARK: - Assety
@@ -85,6 +92,14 @@ extension Project {
     /// nejběžnější operace vůbec.
     public func makeClip(assetID: AssetID, at start: Frames = .zero) throws -> Clip {
         guard let asset = asset(assetID) else { throw TimelineError.assetNotFound(assetID) }
+        // Fotka nemá „celou délku" — dostane výchozích 5 s (fáze 12);
+        // natáhnout ji jde pak libovolně, zdroj ji neomezuje.
+        if asset.isStill {
+            return Clip(assetID: assetID,
+                        timelineStart: start,
+                        duration: defaultStillDuration,
+                        sourceStart: .zero)
+        }
         let full = timeline.availableFrames(from: asset.duration)
         guard full.count > 0 else { throw TimelineError.zeroLength }
         return Clip(assetID: assetID,
@@ -92,6 +107,9 @@ extension Project {
                     duration: full,
                     sourceStart: .zero)
     }
+
+    /// Výchozí délka klipu fotky: 5 sekund osy.
+    public var defaultStillDuration: Frames { Frames(5 * timeline.frameRate) }
 
     /// Dvojice obraz + zvuk se sdílenou vazbou.
     public func makeLinkedClips(assetID: AssetID, at start: Frames = .zero) throws -> (video: Clip, audio: Clip) {
@@ -115,7 +133,8 @@ extension Project {
                         timelineStart: start,
                         duration: original.duration,
                         sourceStart: original.sourceStart,
-                        speedRamp: original.speedRamp)
+                        speedRamp: original.speedRamp,
+                        kenBurns: original.kenBurns)
         copy.linkID = nil
         try insert(copy, onTrack: trackID)
         return copy.id
@@ -306,7 +325,8 @@ extension Project {
                 // Ocásek je nový klip, potřebuje vlastní identitu.
                 tail = Clip(assetID: tail.assetID, linkID: nil,
                             timelineStart: tail.timelineStart, duration: tail.duration,
-                            sourceStart: tail.sourceStart, speedRamp: tail.speedRamp)
+                            sourceStart: tail.sourceStart, speedRamp: tail.speedRamp,
+                            kenBurns: tail.kenBurns)
                 survivors.append(tail)
             }
         }
@@ -455,12 +475,15 @@ extension Project {
 
         // Druhá polovina musí navázat ve zdroji. Kdo sem dá clip.sourceStart,
         // dostane opakující se záběr a nevšimne si toho, dokud to nepustí.
+        // Ken Burns dědí obě poloviny — je vztažený k délce klipu, každá
+        // polovina pak hraje celý pohyb ve svém trvání.
         let right = Clip(assetID: clip.assetID,
                          linkID: clip.linkID,
                          timelineStart: frame,
                          duration: clip.duration - offset,
                          sourceStart: sourceOffset(in: clip, atFrame: offset),
-                         speedRamp: clip.speedRamp)
+                         speedRamp: clip.speedRamp,
+                         kenBurns: clip.kenBurns)
 
         var tracks = timeline.tracks
         tracks[at.trackIndex].clips[at.clipIndex] = left

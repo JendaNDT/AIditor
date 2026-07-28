@@ -94,6 +94,11 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
     /// nemají a formát kvůli němu verzi nezvedá. Zapisuj přes
     /// `Project.setTranscript`, ta data zvaliduje a seřadí.
     public var transcript: [TranscriptSegment]?
+    /// Fotka (fáze 12). Nemá časování ani zvuk; klip z ní zdroj
+    /// NEspotřebovává a jeho délka není ničím omezená — jako titulek.
+    /// `duration` a `measuredFrameRate` jsou u fotky nula a validace je
+    /// nevymáhá. Vyrábět přes `Asset.still(url:bookmark:)`.
+    public var isStill: Bool
 
     public init(id: AssetID = AssetID(),
                 originalURL: URL,
@@ -104,7 +109,8 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
                 hasVideo: Bool = true,
                 hasAudio: Bool = true,
                 isOffline: Bool = false,
-                transcript: [TranscriptSegment]? = nil) {
+                transcript: [TranscriptSegment]? = nil,
+                isStill: Bool = false) {
         self.id = id
         self.originalURL = originalURL
         self.proxyURL = proxyURL
@@ -115,6 +121,37 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
         self.hasAudio = hasAudio
         self.isOffline = isOffline
         self.transcript = transcript
+        self.isStill = isStill
+    }
+
+    /// Fotka jako asset. Jediná správná cesta — nastavuje příznaky tak,
+    /// aby fotku nešlo omylem položit na zvukovou stopu.
+    public static func still(url: URL, bookmark: Data? = nil) -> Asset {
+        Asset(originalURL: url, bookmark: bookmark,
+              duration: .zero, measuredFrameRate: 0,
+              hasVideo: true, hasAudio: false, isStill: true)
+    }
+
+    /// Starší projektové soubory pole `isStill` nemají — čte se jako
+    /// `false` a verze formátu se nezvedá (vzorec `Track.transitions`).
+    private enum CodingKeys: String, CodingKey {
+        case id, originalURL, proxyURL, bookmark, duration, measuredFrameRate
+        case hasVideo, hasAudio, isOffline, transcript, isStill
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(AssetID.self, forKey: .id)
+        originalURL = try c.decode(URL.self, forKey: .originalURL)
+        proxyURL = try c.decodeIfPresent(URL.self, forKey: .proxyURL)
+        bookmark = try c.decodeIfPresent(Data.self, forKey: .bookmark)
+        duration = try c.decode(SourceTime.self, forKey: .duration)
+        measuredFrameRate = try c.decode(Double.self, forKey: .measuredFrameRate)
+        hasVideo = try c.decode(Bool.self, forKey: .hasVideo)
+        hasAudio = try c.decode(Bool.self, forKey: .hasAudio)
+        isOffline = try c.decode(Bool.self, forKey: .isOffline)
+        transcript = try c.decodeIfPresent([TranscriptSegment].self, forKey: .transcript)
+        isStill = try c.decodeIfPresent(Bool.self, forKey: .isStill) ?? false
     }
 
     /// Jediné místo v celém projektu, kde se rozhoduje, se kterým souborem
@@ -152,13 +189,18 @@ public struct Clip: Identifiable, Hashable, Codable, Sendable {
     /// Fáze 3.
     public var speedRamp: SpeedRamp?
 
+    /// Ken Burns u fotky (fáze 12): počáteční a koncový výřez. Jen na
+    /// klipu fotky — zapisuj přes `Project.setKenBurns`, operace to hlídá.
+    public var kenBurns: KenBurns?
+
     public init(id: ClipID = ClipID(),
                 assetID: AssetID,
                 linkID: LinkID? = nil,
                 timelineStart: Frames,
                 duration: Frames,
                 sourceStart: SourceTime,
-                speedRamp: SpeedRamp? = nil) {
+                speedRamp: SpeedRamp? = nil,
+                kenBurns: KenBurns? = nil) {
         self.id = id
         self.assetID = assetID
         self.linkID = linkID
@@ -166,6 +208,7 @@ public struct Clip: Identifiable, Hashable, Codable, Sendable {
         self.duration = duration
         self.sourceStart = sourceStart
         self.speedRamp = speedRamp
+        self.kenBurns = kenBurns
     }
 
     /// Exkluzivní konec.
@@ -415,6 +458,8 @@ public struct Project: Hashable, Codable, Sendable {
     /// znamená každá změna výpočtu přepsat šest operací a jednu validaci
     /// místo vnitřku jedné funkce.
     public func sourceConsumption(of clip: Clip) -> SourceTime {
+        // Fotka zdroj nespotřebovává — jeden obraz na libovolně dlouho.
+        if asset(clip.assetID)?.isStill == true { return .zero }
         guard let window = rampWindow(for: clip) else {
             return timeline.sourceTime(clip.duration)
         }
@@ -430,6 +475,8 @@ public struct Project: Hashable, Codable, Sendable {
     /// == clip.sourceStart + sourceConsumption(of: clip)` — obě strany jdou
     /// přes týž výpočet, na tom stojí `join`.
     public func sourceOffset(in clip: Clip, atFrame offset: Frames) -> SourceTime {
+        // Fotka stojí — každý snímek klipu ukazuje totéž místo zdroje.
+        if asset(clip.assetID)?.isStill == true { return clip.sourceStart }
         guard let window = rampWindow(for: clip) else {
             return clip.sourceStart + timeline.sourceTime(offset)
         }
@@ -441,6 +488,9 @@ public struct Project: Hashable, Codable, Sendable {
     /// s rampou se zbytek zdroje přepočítává rychlostí konce křivky.
     public func remainingSourceFrames(after clip: Clip) -> Frames {
         guard let asset = asset(clip.assetID) else { return .zero }
+        // Fotku nic neomezuje — prodloužení zaráží jen sousedi na ose.
+        // Půlka `Int.max`, ne celý: s pozicí klipu se to ještě sčítá.
+        if asset.isStill { return Frames(Int.max / 2) }
         guard let window = rampWindow(for: clip) else {
             let used = clip.sourceStart + sourceConsumption(of: clip)
             guard used < asset.duration else { return .zero }
@@ -451,6 +501,7 @@ public struct Project: Hashable, Codable, Sendable {
 
     /// Kolik snímků OSY je k dispozici před začátkem klipu.
     public func availableSourceFramesBefore(_ clip: Clip) -> Frames {
+        if asset(clip.assetID)?.isStill == true { return Frames(Int.max / 2) }
         guard let window = rampWindow(for: clip) else {
             return timeline.availableFrames(from: clip.sourceStart)
         }

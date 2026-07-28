@@ -2,7 +2,7 @@
 //  Validation.swift
 //  TimelineModel — Projekt Krása
 //
-//  Invarianty (23), které musí platit po KAŽDÉ operaci. Testy je kontrolují
+//  Invarianty (26), které musí platit po KAŽDÉ operaci. Testy je kontrolují
 //  po každém volání, takže chytí i chyby, na které test přímo necílil.
 //
 
@@ -59,6 +59,12 @@ public enum Violation: Hashable, Sendable {
     case negativeTitleStart(TitleClipID)
     /// 23. Dva titulky sdílejí ID.
     case duplicateTitleID(TitleClipID)
+    /// 24. Rychlostní křivka na klipu fotky — zakázaná kombinace (fáze 12).
+    case rampOnStill(ClipID)
+    /// 25. Ken Burns na klipu, který není fotka.
+    case kenBurnsOnNonStill(ClipID)
+    /// 26. Výřez Ken Burns mimo obraz nebo degenerovaně malý.
+    case invalidKenBurns(ClipID)
 }
 
 extension Project {
@@ -71,7 +77,13 @@ extension Project {
         var linkGroups: [LinkID: [(ClipID, TrackKind)]] = [:]
 
         for asset in assets {
-            if asset.duration.value <= 0 || asset.measuredFrameRate <= 0 {
+            if asset.isStill {
+                // Fotka časování nemá a nevymáhá se; nesmí ale předstírat
+                // zvuk (pustila by se na zvukovou stopu) ani zapírat obraz.
+                if asset.hasAudio || !asset.hasVideo {
+                    out.append(.invalidAsset(asset.id))
+                }
+            } else if asset.duration.value <= 0 || asset.measuredFrameRate <= 0 {
                 out.append(.invalidAsset(asset.id))
             }
         }
@@ -109,6 +121,8 @@ extension Project {
                 }
                 // 6. + 5. + 8. vztah k assetu
                 if let asset = asset(clip.assetID) {
+                    // U fotky spotřeba nula → hlásí se jen nesmyslný
+                    // `sourceStart` > 0 (fotka žádný zdrojový čas nemá).
                     let end = clip.sourceStart + sourceConsumption(of: clip)
                     if end > asset.duration {
                         out.append(.exceedsSource(clip.id))
@@ -121,6 +135,17 @@ extension Project {
                     }
                     if !ok {
                         out.append(.wrongTrackKind(clip.id, track.kind))
+                    }
+                    // 24.–26. fotky (fáze 12)
+                    if asset.isStill, clip.speedRamp != nil {
+                        out.append(.rampOnStill(clip.id))
+                    }
+                    if let kenBurns = clip.kenBurns {
+                        if !asset.isStill {
+                            out.append(.kenBurnsOnNonStill(clip.id))
+                        } else if !kenBurns.isUsable {
+                            out.append(.invalidKenBurns(clip.id))
+                        }
                     }
                 } else {
                     out.append(.unknownAsset(clip.id, clip.assetID))

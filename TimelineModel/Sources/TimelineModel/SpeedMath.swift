@@ -149,8 +149,14 @@ extension Project {
     /// křivka chtěla víc zdroje, než za `sourceStart` zbývá (zrychlení na
     /// konci souboru), operace selže a projekt zůstane nedotčený.
     public mutating func setSpeedRamp(clipID: ClipID, ramp: SpeedRamp?) throws {
-        guard timeline.locate(clipID) != nil else { throw TimelineError.clipNotFound(clipID) }
-        if let ramp { guard ramp.isUsable else { throw TimelineError.invalidSpeedRamp } }
+        guard let clip = timeline.clip(clipID) else { throw TimelineError.clipNotFound(clipID) }
+        if let ramp {
+            guard ramp.isUsable else { throw TimelineError.invalidSpeedRamp }
+            // Fotka se nezpomaluje — stojí z definice (fáze 12).
+            guard asset(clip.assetID)?.isStill != true else {
+                throw TimelineError.rampOnStillClip
+            }
+        }
 
         var copy = self
         var affected: [ClipID] = [clipID]

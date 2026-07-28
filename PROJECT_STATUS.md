@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), fáze 3 celá napsaná — přehrávač hraje rychlostní křivky a editor je umí kreslit myší (čeká koukanec).** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (228 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. Interakce kroků 6–10 potvrzené rukou 28. 07. 2026; zbývá jen výkonový test s 1000 klipy.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (228 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. Interakce kroků 6–10 potvrzené rukou 28. 07. 2026; zbývá jen výkonový test s 1000 klipy.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -57,7 +57,7 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
 **Fáze 2 má všech deset kroků napsaných a interakce potvrzené rukou (28. 07. 2026).** Zbývá jediné kritérium: výkonový rozpočet — 1000 klipů, scroll přes celou osu, žádný vypadlý tik.
 
-## 🔄 FÁZE 3 — speed ramping ostrý (rozjetá 28. 07. 2026)
+## ✅ FÁZE 3 — speed ramping ostrý (HOTOVÁ 28. 07. 2026)
 
 ✅ **Modul 1 — `CompositionBuilder`: přehrávač hraje CELOU OSU.** `AVMutableComposition` z timeline projektu: stopa kompozice na stopu osy, výřez zdroje každého klipu počítá model (`sourceStart` + `sourceConsumption`), časy výhradně v timescale 90 000 (nikdy sekundy s plovoucí čárkou), soubor vybírá `Asset.url(usingProxies:)`. Kompozice se přestavuje při každé změně projektu (import, střih, undo) s debounce 250 ms. **Ověřeno průjezdem hranice klipů:** přehrávání běželo v čase 0:34 na kompozici, kde sólo první klip končí ve 26 s — hraje sekvence, ne soubor.
 
@@ -74,7 +74,7 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   ✅ **Koukanec modulu 2 potvrzen rukou a uchem (28. 07. 2026):** plynulé zpomalení do 0,25× a zpět, klip stejně dlouhý, zvuk bez lupanců i bez „mickey-mouse" výšky, hlava v synchronu, ⌘Z/menu rampu ruší, split rampovaného klipu navazuje. Trvá: 60fps zdroj na 0,25× duplikuje ~13,5 % snímků — žlutá zóna v UI je až modul 3.
 
-🔄 **Modul 3 — `SpeedRampEditor`: NAPSANÝ, čeká na koukanec (28. 07. 2026).** Pruh editoru mezi přehrávačem a osou; křivku ukazuje pro právě jeden vybraný klip. Rozložení práce podle pravidla „logika do modelu":
+✅ **Modul 3 — `SpeedRampEditor`: HOTOVÝ, potvrzeno rukou (28. 07. 2026).** Pruh editoru mezi přehrávačem a osou; křivku ukazuje pro právě jeden vybraný klip. Rozložení práce podle pravidla „logika do modelu":
 
   - **`TimelineModel` (+20 testů, celkem 228):** `RampEditorScale` — svislá osa rychlosti v log₂ škále [0,125×; 8×] (0,5× a 2× stejně daleko od 1×), `rampEditorNodes`/`rampSpeedProfile` — pozice uzlů a vzorek křivky pro kreslení (vodorovná osa = výstupní snímky klipu, ta je při editaci stabilní), `addRampNode`/`removeRampNode` — uzel se pokládá NA křivku (rychlost i zdrojová kotva z aktuálního mapování; poslední smazaný uzel vrací klip na 1×), `RampNodeDrag` — tažení mapované přes základnu zachycenou při stisku (přes průběžně měněnou křivku by se chyba skládala a uzel by kurzoru ujížděl), `pureSlowdownLimit` — mez `výstupFps / zdrojFps` z NAMĚŘENÉ frekvence.
   - **Poznatek zapsaný v testech:** vložení uzlu doprostřed easeInOut přechodu mírně přerozdělí časování okolí (výsek Bézierovy křivky není Bézierova křivka téže rodiny) — rychlost a zdrojová kotva sedí přesně, výstupní pozice uzlu se smí lišit o pár snímků.
@@ -82,9 +82,9 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
   - Menu položka povýšená z „testovací rampy" na trvalý preset: „Zpomalit 0,25× (klasický ramp)" / „Zrušit rychlostní křivku" — tři uzly a tři tahy jedním klikem.
   - Ověřeno screenshotem běžící aplikace: pruh editoru sedí v layoutu, náhled hraje (žádná regrese černého obrazu), bez výběru ukazuje nápovědu.
 
-  👀 **Koukanec modulu 3 („nakreslíš křivku myší, náhled ji ukáže, zvuk drží"):** vyber klip na ose → editor ukáže křivku (preset z menu, nebo dvojklikem přidej uzly); táhni prostřední uzel dolů a pusť přehrávání — náhled zpomalí podle křivky a zvuk drží výšku; žlutá zóna odpovídá zdroji (60fps klip → pod 0,5×; 120fps slow-mo → pod 0,25×); přetáhni uzel pod žlutou mez a sleduj, že je to vidět dopředu; ⌘Z vrací celé tažení jako jeden krok; Delete uzel maže; u strmé křivky se objeví varování o nedosažitelné mezi.
+  ✅ **Koukanec modulu 3 potvrzen rukou (28. 07. 2026):** kreslení křivky myší, náhled i zvuk podle ní, žlutá zóna podle zdroje, undo tažení jedním krokem, mazání uzlů i varování o nedosažitelné mezi — všechno sedí.
 
-  Fáze 3 je tím KOMPLETNĚ NAPSANÁ — po koukanci zbývá jen výkonový test fáze 2 (1000 klipů) a pak fáze 4 (proxy + zploštění VFR→CFR).
+  **FÁZE 3 JE HOTOVÁ** — kritérium „nakreslíš křivku myší, náhled ji ukáže, zvuk drží" splněno a potvrzeno rukou. Dál zbývá výkonový test fáze 2 (1000 klipů) a pak fáze 4 (proxy + zploštění VFR→CFR).
 
 ✅ **Kroky 2 a 3 potvrzené.** Krok 2 rukou 27. 07. 2026 (21:08); krok 3 v rámci ručního průchodu 28. 07. 2026 — checklist zahrnoval scrubování v pravítku a scroll přes celou osu, rozjetý timecode nebo ujíždějící hlavičky by nešly přehlédnout.
 
@@ -188,7 +188,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F0** Spike 0 — ověření speed rampingu — ✅ **HOTOVO 26. 07. 2026**, hlavní riziko zavřené
 - **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (208 testů), view napsané, interakce potvrzené rukou; zbývá výkonový test s 1000 klipy**
-- **F3** Speed ramping ostrý *(3 týdny)* — 🔄 **všechny tři moduly napsané; modul 3 čeká na koukanec**
+- **F3** Speed ramping ostrý — ✅ **HOTOVO 28. 07. 2026** (tři moduly, potvrzeno rukou; reálný čas: dva dny místo tří týdnů)
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)*
 - **F5** Projekt, autosave, undo, export *(3 týdny)*
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu

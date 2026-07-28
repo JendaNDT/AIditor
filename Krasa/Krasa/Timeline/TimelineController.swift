@@ -14,7 +14,7 @@
 //  do vlastnosti — vždycky si o ni řekne v okamžiku použití.
 //
 //  Do controlleru nepatří střihové operace, meze tažení ani přichytávání.
-//  To všechno umí `TimelineModel` a je to otestované (143 testů).
+//  To všechno umí `TimelineModel` a je to otestované (351 testů balíčku).
 //
 
 import Foundation

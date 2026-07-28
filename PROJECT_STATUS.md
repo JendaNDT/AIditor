@@ -5,13 +5,13 @@
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
 Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (vlastní DSP), WhisperKit.
 
-## 📍 STAV (28. 07. 2026 večer)
+## 📍 STAV (29. 07. 2026)
 
-**Fáze 0–9 HOTOVÉ — MVP kompletní a všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a LUFS normalizací → export SRT.
+**Fáze 0–9 HOTOVÉ (MVP) + vylepšovací fáze 10–12 HOTOVÉ; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a LUFS normalizací → export SRT.
 
-Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `AudioEngine` (32), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. Závislost: WhisperKit v1.0.0.
+Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (351, 26 invariantů), `AudioEngine` (32), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
 
-**Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): přechody → texty/T1 → fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
+**Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
 **➡️ PŘÍŠTÍ KROK: FÁZE 13 — barevné presety, modul 1** (Core Image per klip s intenzitou 0–100 %; rozhodnout mezi `AVVideoComposition(applyingCIFiltersWith:)` a vlastním compositorem — kritérium je shoda náhled/export a výkon; další kandidát na GPU skok, měřit). Detail v `IMPLEMENTACNI_PLAN.md`.
 
@@ -124,10 +124,10 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 
 **Změna kurzu 28. 07. 2026:** svatební materiál bude až ~koncem srpna, kill-gate 1 se přesouvá NA KONEC vývoje. Mezitím fáze 10–16 (nový plán v `IMPLEMENTACNI_PLAN.md`, sestavený výběrem z dokumentu `Projekt_Krasa_navrh_implementace.docx` + odložených drobností):
 
-1. **F10 — přechody** (prolínačka, zatmívačka, audio crossfade; první video kompozice v přehrávání — čeká se GPU skok, změřit)
-2. **F11 — texty a titulky + stopa T1** (české šablony; splácí editaci titulků z přepisu i pruh T1)
-3. **F12 — fotky a Ken Burns** (+ freeze frame jako fotka, NE přes SpeedRampEngine)
-4. **F13 — barevné presety** (Core Image per klip, intenzita)
+1. ✅ **F10 — přechody** (HOTOVÁ 28. 07.; GPU skok změřen — medián ~12 % s kompozicí)
+2. ✅ **F11 — texty a titulky + stopa T1** (HOTOVÁ 29. 07.; obě splátky fáze 8 splacené, export přes `frameDecorator` místo CoreAnimationTool — viz oprava v plánu)
+3. ✅ **F12 — fotky a Ken Burns** (HOTOVÁ 29. 07.; fotka přes „still movie" mezisoubor, freeze frame jako fotka)
+4. **F13 — barevné presety** (Core Image per klip, intenzita) **← PRÁVĚ TADY**
 5. **F14 — hudební synchronizace** (beat-grid na vlastní FFT, magnet na doby, dopasování tempa 90–115 % s respektem k limitu zpomalení — VLAJKOVÁ)
 6. **F15 — analýzy kvality** (neostrost, ticho/prázdno; jen návrhy, nikdy automatický střih)
 7. **F16 — vymazlení** (zvukové fade úchyty, dBTP strop, správa Whisper modelu)
@@ -291,7 +291,7 @@ Rozvrh fáze: **1)** `LoudnessMeter` (hotový, níže), **2)** per-track hlasito
 
   **K názvu fáze:** `AVAudioEngine` ani `AVAudioUnitTimePitch` z plánu nakonec potřeba nebyly — mix zvládl `AVAudioMix`, normalizace float32 gain v rendereru, korekci výšky dělá `.timeDomain` na itemu už od Spiku 0. 32-bit float pipeline je splněná měřením i gainem ve floatu (bez ořezu přes ±1). Nasadí se, až bude potřeba víc než hlasitost (EQ, odšumění) — to není v plánu v1.0.
 
-## 🔄 FÁZE 5 — projekt a export (rozjetá 28. 07. 2026)
+## ✅ FÁZE 5 — projekt a export (HOTOVÁ 28. 07. 2026)
 
 ✅ **Modul 1 — projektový soubor `.projektkrasa`: uložit, otevřít, obnovit po startu.**
 

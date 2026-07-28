@@ -70,6 +70,7 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
 
 
 - **Persony to nemají stejně.** [Filip](Projekt_Krasa_Specifikace_Aplikace_v2.html) (primární) točí sám a může se zařídit — jemu limit stačí říct dopředu a on natočí 120 fps. [Alena](Projekt_Krasa_Specifikace_Aplikace_v2.html) (sekundární) skládá film z cizích videí od hostů, typicky 30 fps, a zařídit se nemůže. **Pro ni je duplikace snímků s přiznaným varováním legitimní chování, ne nedodělek** — ale přiznané být musí. Nikdy jí netvrď, že výsledek je plynulý, když není.
+- **Fotka hraje přes „still movie" mezisoubor (`StillMovieStore`, fáze 12).** Fotka nemá video stopu a do `AVComposition` se vkládat nedá — vyrobí se z ní JEDNOU film o jednom ProRes snímku v rozměru plátna s VPÁLENÝM aspect-fitem (a narovnanou EXIF orientací), a kompozice ho roztáhne `scaleTimeRange`. Vpálený aspect-fit je záměr: mezisoubor se chová jako běžné video, bez přechodů/Ken Burns nevzniká video kompozice a GPU baseline platí i s fotkami. Cache s otiskem cesta|velikost|mtime|plátno, vzorec proxy.
 - **`AVVideoCompositionCoreAnimationTool` se nepoužívá — titulky do exportu vypaluje `frameDecorator` v `CFRRendereru` (rozhodnuto 29. 07. 2026, fáze 11).** Ten nástroj je dokumentovaný pro `AVAssetExportSession`, kterou projekt schválně nepoužívá (ignoruje `frameDuration`); jeho chování na cestě `AVAssetReader`+`AVAssetWriter` dokumentace nepopisuje — pravidlo 6. Dekorátor přimíchá předrenderovaný titulek (CoreImage, NV12) jen do snímků, kde titulek leží; ostatní projdou bajt po bajtu nedotčené (změřeno: odchylka mimo titulek 0,14). Typografii šablon drží `TitleExportRenderer.font(for:)` a `TitleOverlay.font(for:)` — měnit se musí SPOLU.
 - **Vlastní `AVVideoCompositing` speed ramping neřeší — segmentace je jediná cesta.** Compositor dostane přes `sourceFrame(byTrackID:)` snímek, který kompozice pro daný `compositionTime` **už vybrala**; požádat o jiný zdrojový čas nejde. Časování určuje `CMTimeMapping` stopy, a ten je dvojice `CMTimeRange` — afinní z definice. Compositor je na pixely (efekty, prolínačky, Metal), ne na čas.
 - **Proxy: ProRes 422 Proxy (`'apco'`) v polovičním rozlišení**, a při generování zploštit VFR na CFR.
@@ -132,13 +133,30 @@ Testy pustíš přes `cd SpeedRampEngine && swift test`.
 ### `TimelineModel/`
 Logika, geometrie a interakce časové osy. Čistý Swift, jediná závislost
 `SpeedRampEngine` (také čistý Swift), **žádné AVFoundation ani AppKit** —
-přeloží se a otestuje i na Linuxu. **254 testů, ověřeno.** Od fáze 3 umí
-`sourceConsumption`/`sourceOffset` rychlostní křivku (uzly kotvené ve
-zdrojovém čase) a `rampPlaybackPlan` vydává segmentaci v celých tickách
-pro `scaleTimeRange`.
+přeloží se a otestuje i na Linuxu. **351 testů, ověřeno; 26 invariantů ve
+`validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
+křivku (uzly kotvené ve zdrojovém čase) a `rampPlaybackPlan` vydává
+segmentaci v celých tickách pro `scaleTimeRange`. Od vylepšovacích fází
+navíc:
+
+- **Přechody (F10):** `Transition` patří STŘIHU (dvojici sousedů), žije jen
+  dokud střih žije; `TrackCompositionPlan` dělá A/B rozklad drah s rameny.
+  Dvě pravidla editací: střih zanikl → přechod umírá s ním; střih žije, ale
+  operace by přechod rozbila → operace se odmítá (`blockedByTransition`).
+- **Titulky (F11):** druh stopy `.title` (T1, ve výchozím projektu POSLEDNÍ
+  — appka si domýšlí `tracks[0]` = V1), `TitleClip` s vlastním typem po
+  vzoru `Transition` (text, šablona, zarovnání; žádný asset ani zdroj);
+  `titleCues()`/`titlePlacements` pro overlay a pruh, `speechCueRef`/
+  `setTranscriptText` pro editaci titulků z řeči. Kvůli novému případu
+  enumu `TrackKind` je **formát souboru na verzi 2**.
+- **Fotky (F12):** `Asset.isStill` (vyrábět přes `Asset.still(url:)`), klip
+  fotky zdroj NEspotřebovává a délku nic neomezuje — větve jsou VÝHRADNĚ
+  ve čtyřech schválených místech zdrojové matematiky a v `makeClip`.
+  `KenBurns` = dva výřezy normalizované vůči PLÁTNU. Rampa na fotce je
+  zakázaná (`rampOnStillClip`) — freeze frame se dělá fotkou.
 
 ```swift
-var project = Project.empty()                        // V1 + A1 + A2
+var project = Project.empty()                        // V1 + A1 + A2 + T1
 project.addAsset(asset)
 let clip = try project.makeClip(assetID: asset.id)   // model razí ID i délku
 try project.insert(clip, onTrack: project.timeline.tracks[0].id)
@@ -153,8 +171,9 @@ assert(project.validate().isEmpty)
 na sekundy záměrně neexistuje, aby nešlo osové snímky převést frekvencí assetu.
 
 **Spotřebu zdroje počítá jen `sourceConsumption(of:)`** a pozici ve zdroji jen
-`sourceOffset(in:atFrame:)`. Fáze 3 vymění vnitřek těch dvou funkcí; kdyby si to
-počítala každá operace po svém, přepisuje se jich šest.
+`sourceOffset(in:atFrame:)`. Rampa (fáze 3) i fotky (fáze 12) vyměnily jen
+vnitřek těch funkcí; kdyby si to počítala každá operace po svém, přepisuje
+se jich šest.
 
 **`CMTime` není `Codable`**, proto vlastní `SourceTime`. Ověřeno v dokumentaci.
 
@@ -204,5 +223,5 @@ Vstup se NEOŘEZÁVÁ — 32-bit float zdroje (DJI Mic, Zoom F3) nesou hodnoty p
 - **Licencování a freemium — odloženo 28. 07. 2026 na pokyn autora: aplikace bude zatím FREE.** Ceny a PRO verze ve specifikaci (1 490 Kč) neplatí. Kill-gate 2 přeformulován v plánu na „deset cizích lidí ji použije" místo „prodat".
 - **Svatební asistent (checklist, záběrový plán, BPM plánovač) — škrtnut 28. 07. 2026 na pokyn autora.** Produkt je čistě videoeditor; specifikace (sekce 4.4) ho sice obsahuje, ale platí plán. Pravidlo „záběry na zpomalení toč na 120 fps" tím nezaniká — říká ho žlutá zóna v editoru křivek a duplikace snímků musí zůstat v UI přiznaná.
 - Optical flow dopočet mezisnímků — škrtnuto, je to výzkumný problém.
-- Rozpoznávání obličejů — až za v1.0 a jen po projití právního a licenčního gate (viz plán, fáze 11).
+- Rozpoznávání obličejů — až za v1.0 a jen po projití právního a licenčního gate (viz plán, podmíněná fáze 19).
 - Freeze frame a zpětné přehrávání v `SpeedRampEngine` — rozbilo by invertibilitu mapování.

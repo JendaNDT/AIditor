@@ -114,7 +114,7 @@ Rozdělení je navržené tak, aby se každý modul dal napsat a otestovat **izo
 
 ## 4. Fáze
 
-### FÁZE 0 — Spike (1 týden)
+### FÁZE 0 — Spike (1 týden) ✅ UZAVŘEN 26. 07. 2026
 Zadání v `SPIKE_0.md`. Nezkracuj ho.
 
 **Hotovo když:** máš vyplněnou tabulku sedmi kritérií.
@@ -124,7 +124,7 @@ Zadání v `SPIKE_0.md`. Nezkracuj ho.
 
 ---
 
-### FÁZE 1 — Kostra a přehrávač (2 týdny) → v0.1
+### FÁZE 1 — Kostra a přehrávač (2 týdny) → v0.1 ✅ HOTOVÁ 27. 07. 2026
 
 Xcode projekt, sandbox entitlements, `MediaImporter`, `PlaybackController`, `VFRDetector`.
 
@@ -166,7 +166,7 @@ Otázka, kterou Spike 0 nemohl zodpovědět, protože přehrávač neexistoval.
 
 ---
 
-### FÁZE 2 — Timeline (4–5 týdnů) → v0.2
+### FÁZE 2 — Timeline (4–5 týdnů) → v0.2 ✅ HOTOVÁ 28. 07. 2026
 
 Nejtěžší UI v celém projektu. Nepodceňuj to.
 
@@ -196,7 +196,7 @@ Klíčové detaily:
 
 ---
 
-### FÁZE 3 — Speed ramping ostrý (3 týdny) → v0.3
+### FÁZE 3 — Speed ramping ostrý (3 týdny) → v0.3 ✅ HOTOVÁ 28. 07. 2026
 
 `SpeedRampEngine` (už máš ze spiku) + `CompositionBuilder` + `SpeedRampEditor` UI.
 
@@ -216,7 +216,7 @@ Klíčové detaily:
 
 ---
 
-### FÁZE 4 — Proxy a výkon (2 týdny) → v0.4
+### FÁZE 4 — Proxy a výkon (2 týdny) → v0.4 ✅ HOTOVÁ 28. 07. 2026 (kritérium 200GB reálného materiálu se ověří při kill-gate)
 
 `ProxyGenerator`. Tahle fáze řeší tři problémy jedním rozhodnutím.
 
@@ -246,7 +246,7 @@ Klíčové detaily:
 
 ---
 
-### FÁZE 5 — Projekt a export (3 týdny) → **v0.5 = MVP NULA**
+### FÁZE 5 — Projekt a export (3 týdny) → **v0.5 = MVP NULA** ✅ HOTOVÁ 28. 07. 2026
 
 `ProjectModel`, `.projektkrasa` bundle, autosave, `UndoStack`, `ExportEngine`.
 
@@ -277,7 +277,7 @@ Jako samostatný produkt mimo tuhle aplikaci zůstává myšlenka v sekci 8 (Pl�
 
 ---
 
-### FÁZE 7 — Audio engine (3 týdny) → v0.7
+### FÁZE 7 — Audio engine (3 týdny) → v0.7 ✅ HOTOVÁ 28. 07. 2026
 
 32-bit float přes `AVAudioEngine`, `AVAudioUnitTimePitch`, LUFS normalizace, cross-korelační sync.
 
@@ -285,7 +285,7 @@ Profily hlasitosti dle opravy ve specifikaci: **Web/sociální sítě −14 LUFS
 
 ---
 
-### FÁZE 8 — Titulky (2 týdny) → v0.8
+### FÁZE 8 — Titulky (2 týdny) → v0.8 ✅ HOTOVÁ 28. 07. 2026
 
 **Doporučení: WhisperKit, ne holý whisper.cpp.**
 
@@ -305,7 +305,7 @@ Nepoužívej `SwiftWhisper` — je zamrzlý na whisper.cpp z jara 2023 a nemá M
 
 ---
 
-### FÁZE 9 — Distribuce (3 týdny) → **v1.0**
+### FÁZE 9 — Distribuce (3 týdny) → **v1.0** ✅ UZAVŘENA 28. 07. 2026 v rozsahu osobní aplikace (podpis/notarizace/Sparkle odloženy, zůstala migrace na Configuration)
 
 ~~Developer ID, hardened runtime, `notarytool`, `stapler`, Sparkle.~~
 
@@ -347,9 +347,10 @@ Pořadí: nejdřív díry v základní výbavě filmu (přechody, texty, barvy �
 
 ---
 
-### FÁZE 10 — Přechody → v0.10
+### FÁZE 10 — Přechody → v0.10 ✅ HOTOVÁ 28. 07. 2026
 
 Prolínačka, zatmívačka (černá/bílá) a zvukový crossfade na střihu.
+*Dopadlo podle plánu; GPU skok video kompozice změřen (klid 0–3 %, bez kompozice 0–10 %, s kompozicí 8–16 %, medián ~12 % — `ioreg`, srovnatelné jen mezi sebou). Detaily v `PROJECT_STATUS.md`.*
 
 - **Model nejdřív:** `Transition` patří STŘIHU mezi sousedy (typ, délka v snímcích). Klíčová validace: prolínačka spotřebovává zdroj ZA hranou střihu na obou stranách — meze přes `remainingSourceFrames`/`availableSourceFramesBefore` (s rampou je už umí přepočítávat). První verze: přechod na rampovaném střihu zakázat (kombinace = zvláštní případy; povolit až bude důvod).
 - **Kompozice:** dvě obrazové stopy střídavě (A/B roll) + instrukce `AVVideoComposition` s opacity rampou přes překryv; zvuk crossfade přes `AVAudioMix` volume rampy (`setVolumeRamp`). Tady **poprvé vznikne video kompozice v přehrávání** — ⚠️ podle měření z fáze 1 to přepne náhled ze samostatné vrstvy do skládání přes GPU (0,25 % → skok). Změřit HNED v modulu kompozice a zapsat čísla; je to očekávaný, plánovaný skok, ne regrese.
@@ -357,21 +358,23 @@ Prolínačka, zatmívačka (černá/bílá) a zvukový crossfade na střihu.
 
 ---
 
-### FÁZE 11 — Texty, titulky a stopa T1 → v0.11
+### FÁZE 11 — Texty, titulky a stopa T1 → v0.11 ✅ HOTOVÁ 29. 07. 2026
 
 Jména, datum, kapitoly, závěrečné poděkování — grafické titulky s českými šablonami.
 
 - **Model:** nový druh stopy `.title` (T1) a titulkový klip (text, šablona, zarovnání). Stopa se přidá do výchozího projektu; starší projektové soubory bez ní se dál načtou.
-- **Náhled:** overlay vzorcem `SubtitleOverlay` (kreslí se jen když má co říct — chrání GPU baseline). **Export:** `AVVideoCompositionCoreAnimationTool` (jen pro export, do přehrávání nepatří — dokumentovaný limit API).
-- **Splácí dvě odložené drobnosti:** pruh T1 na ose kreslí i titulky z řeči (fáze 8) a přibude editace textu titulků (inspektor vybraného titulku).
+- **Náhled:** overlay vzorcem `SubtitleOverlay` (kreslí se jen když má co říct — chrání GPU baseline). ~~**Export:** `AVVideoCompositionCoreAnimationTool`~~
+  ⚠️ **Oprava proti původnímu znění (29. 07. 2026):** `AVVideoCompositionCoreAnimationTool` se NEPOUŽIL. Je dokumentovaný pro `AVAssetExportSession`, kterou projekt schválně nepoužívá (ignoruje `frameDuration` — celý důvod existence `CFRRendereru`); jeho chování na cestě `AVAssetReader`+`AVAssetWriter` dokumentace nepopisuje — pravidlo 6. Titulky vypaluje `frameDecorator` v `CFRRendereru` (CoreImage nad NV12, jen na snímcích s titulkem; ostatní projdou bajt po bajtu — změřeno, odchylka mimo titulek 0,14). Zapsáno i v `CLAUDE.md`.
+- **Splácí dvě odložené drobnosti:** pruh T1 na ose kreslí i titulky z řeči (fáze 8) a přibude editace textu titulků (inspektor vybraného titulku). *Obojí splaceno; navíc editace textu titulků z řeči přímo z pásku na T1.*
 
 ---
 
-### FÁZE 12 — Fotky a Ken Burns → v0.12
+### FÁZE 12 — Fotky a Ken Burns → v0.12 ✅ HOTOVÁ 29. 07. 2026
 
 - Import fotek (HEIC/JPEG) jako asset bez zvuku; klip s volnou délkou na V1.
 - **Ken Burns:** počáteční a koncový výřez → `TransformRamp` v instrukcích kompozice (lineární rampy stačí — pohyb je pomalý a krátký).
 - **Freeze frame jako fotka:** „zmrazit snímek" vytáhne aktuální snímek do fotky na ose. ⚠️ NE přes `SpeedRampEngine` — zákaz nulové rychlosti kvůli invertibilitě mapování platí dál; fotka na ose je čistší cesta.
+- *Doplněk z realizace: fotka hraje přes „still movie" mezisoubor (`StillMovieStore` — jeden ProRes snímek v rozměru plátna s vpáleným aspect-fitem, roztažený `scaleTimeRange`); bez Ken Burns a přechodů tak nevzniká video kompozice a GPU baseline platí i s fotkami. Výřezy KB jsou normalizované vůči plátnu.*
 
 ---
 

@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 12, modul 1)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 12, modul 2)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,7 +13,7 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): přechody → texty/T1 → fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 12, modul 2 — fotka v kompozici a náhledu.** Fotka nemá video stopu, do `AVComposition` se vkládat nedá — bude potřeba „still movie" mezisoubor (vzorec proxy cache: jeden snímek/krátký úsek ProRes z fotky, vložený se `scaleTimeRange`), plus import HEIC/JPEG v UI a kreslení na ose. Pak modul 3: Ken Burns v kompozici (`TransformRamp`/`setTransformRamp` u staré cesty) a freeze frame. Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 12, modul 3 — Ken Burns v kompozici a freeze frame.** Ken Burns = lineární transform rampy v instrukcích video kompozice (u fotky s KB kompozice vzniknout MUSÍ — pozor na GPU skok, vzorec přechodů) + UI (inspektor fotky s výřezy); freeze frame = „zmrazit snímek" vytáhne aktuální snímek do fotky na ose. Detail v `IMPLEMENTACNI_PLAN.md`.
 
 ## 🔄 FÁZE 12 — fotky a Ken Burns (rozjetá 29. 07. 2026)
 
@@ -24,6 +24,14 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
   - **`KenBurns`** = počáteční a koncový výřez v normalizovaných souřadnicích (`NormalizedRect` — vlastní typ, ne `CGRect`, model se překládá bez CoreGraphics). `setKenBurns` vymáhá: jen na fotce (`kenBurnsNeedsStill`), výřezy v obraze a ≥ 5 % (`invalidKenBurns` — menší výřez je rozmazaná kaše). Split/duplicate/overwrite Ken Burns dědí (je vztažený k délce klipu). Kompozice z něj udělá lineární `TransformRamp` — modul 3.
   - **Rychlostní křivka na fotce ZAKÁZANÁ** (`rampOnStillClip` + invariant 24) — fotka stojí z definice; freeze frame se dělá fotkou, ne nulovou rychlostí (invertibilita `SpeedRampEngine` nedotčená, přesně podle plánu).
   - Invarianty 24–26 (rampa na fotce, Ken Burns na videu, vadný výřez); fotkový asset nesmí předstírat zvuk ani zapírat obraz (rozšířený invariant `invalidAsset`).
+
+✅ **Modul 2 — fotka v kompozici, náhledu a exportu (29. 07. 2026).**
+
+  - **`StillMovieStore` (actor):** fotka nemá video stopu a do `AVComposition` se vkládat nedá — vyrobí se z ní JEDNOU film o JEDNOM ProRes snímku v rozměru plátna, s **vpáleným aspect-fitem** (černé pruhy) a EXIF orientací narovnanou při čtení (`CGImageSourceCreateThumbnailAtIndex` s `kCGImageSourceCreateThumbnailWithTransform` — jinak fotky na výšku leží na boku; velké fotky se rovnou podvzorkují mezí plátna). Cache `Application Support/StillMovies/<sha256(cesta|velikost|mtime|plátno)>.mov` — otisk jako vlny a proxy; zápis vedle a přejmenování po úspěchu. Vpálený aspect-fit je schválně: mezisoubor se chová jako každé jiné video, bez přechodů nevzniká video kompozice a **GPU baseline z fáze 1 platí i s fotkami**.
+  - **`CompositionBuilder`:** klip fotky = vložený jeden snímek mezisouboru roztažený `scaleTimeRange` přes délku klipu — zero-order hold pak v přehrávači i exportu drží tentýž obraz, což je u fotky přesně to, co má dělat. Nečitelná fotka = mezera, ne pád (vzorec offline assetů). Kdyby kvůli přechodům vznikla video kompozice, geometrie fotky je plátno + identita.
+  - **Import: menu Soubor → „Přidat fotky…"** (HEIC/JPEG/PNG, security-scoped bookmark hned) — fotky se PŘIDÁVAJÍ na konec V1 do rozdělané práce, nepřepisují osu jako import klipů. Jeden undo krok. Na ose se fotka kreslí jako obrazový klip (je to `Clip` na V1 — kreslení zadarmo).
+  - **Ověřeno CLI `--photo-check` kvantitativně:** syntetický bílý čtverec 1000×1000 → osa video (0–60) + fotka (60–150) → export 150 snímků. Snímek fotky: **střed 244 jasu, pruhy 0** (aspect-fit čtverce do 16:9 přesně); fotka drží do posledního snímku (zero-order hold); snímek videa nedotčený. Vytažený snímek okem: bílý čtverec uprostřed, černé pruhy po stranách.
+  - *Koukanec rukou (odloženo autorem, v seznamu): Přidat fotky…, fotka v náhledu při přehrávání a scrubování, natažení délky fotky tažením okraje.*
 
 ## ✅ FÁZE 11 — texty, titulky a stopa T1 (HOTOVÁ 29. 07. 2026)
 

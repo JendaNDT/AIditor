@@ -87,6 +87,39 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: Správa proxy úložiště (fáze 4)
+
+    /// Kritérium plánu: „proxy jde vygenerovat na externí disk."
+    func changeProxyDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Ukládat proxy sem"
+        panel.message = "Vyber složku pro proxy — klidně na externím disku. "
+            + "Stávající proxy se vygenerují znovu do nového umístění."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        timeline.clearAssetProxies()      // nejdřív odšít, pak měnit úložiště
+        proxies.chooseDirectory(url)
+        regenerateProxies()
+    }
+
+    func deleteProxies() {
+        timeline.clearAssetProxies()      // kompozice nesmí ukazovat na mazané soubory
+        proxies.deleteAll()
+    }
+
+    private func regenerateProxies() {
+        let scanned = clips
+        guard !scanned.isEmpty else { return }
+        Task { [weak self] in
+            await self?.proxies.ensureProxies(for: scanned) { original, proxy in
+                self?.timeline.setProxy(proxy, forAssetWithOriginal: original)
+            }
+        }
+    }
+
     func attach(_ view: PlayerHostView) { hostView = view }
     func attachTimeline(_ pane: TimelinePane) { timelinePane = pane }
 
@@ -553,7 +586,9 @@ struct ContentView: View {
                 }
             }
 
-            ProxyControls(timeline: model.timeline, proxies: model.proxies)
+            ProxyControls(timeline: model.timeline, proxies: model.proxies,
+                          onChangeLocation: { model.changeProxyDirectory() },
+                          onDelete: { model.deleteProxies() })
 
             Button(model.isMeasuring ? "Měřím…" : "Změřit náhled v okně") {
                 Task { await model.runBenchmark() }
@@ -643,6 +678,8 @@ struct ContentView: View {
 private struct ProxyControls: View {
     @ObservedObject var timeline: TimelineController
     @ObservedObject var proxies: ProxyStore
+    let onChangeLocation: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -658,6 +695,21 @@ private struct ProxyControls: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            HStack(spacing: 8) {
+                Button("Změnit umístění…") { onChangeLocation() }
+                Button("Smazat proxy") { onDelete() }
+                    .disabled(proxies.cacheSizeBytes == 0)
+            }
+            .controlSize(.small)
+            .disabled(proxies.progressText != nil)
+
+            Text("Úložiště: \(proxies.directoryDisplayName) · "
+                 + ByteCountFormatter.string(fromByteCount: proxies.cacheSizeBytes,
+                                             countStyle: .file))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
         }
     }
 }

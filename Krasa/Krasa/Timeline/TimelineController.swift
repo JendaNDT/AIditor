@@ -276,6 +276,21 @@ final class TimelineController: ObservableObject {
         project = next
     }
 
+    /// Odšije všechny proxy z projektu — před smazáním cache nebo změnou
+    /// umístění. Jeden zápis, ne N; kompozice se přestaví na originály.
+    func clearAssetProxies() {
+        guard project.usesProxies || project.assets.contains(where: { $0.proxyURL != nil })
+        else { return }
+        var next = project
+        for asset in next.assets where asset.proxyURL != nil {
+            var updated = asset
+            updated.proxyURL = nil
+            next.addAsset(updated)
+        }
+        next.usesProxies = false
+        project = next
+    }
+
     // MARK: - Zátěžový projekt (výkonový test fáze 2)
 
     /// Postaví syntetickou osu pro výkonový test: `pairs` dvojic obraz+zvuk

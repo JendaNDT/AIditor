@@ -36,17 +36,79 @@ final class ProxyStore: ObservableObject {
     /// Originál → hotová proxy. Zdroj pravdy pro opakované přišití k projektu
     /// (undo vrací snapshoty z doby, kdy proxy ještě nebyla).
     @Published private(set) var finished: [URL: URL] = [:]
+    /// Součet velikostí souborů v aktuálním úložišti — ProRes je velký
+    /// a uživatel má vidět, kolik proxy stojí.
+    @Published private(set) var cacheSizeBytes: Int64 = 0
+    /// Pro sidebar: kam se ukládá.
+    @Published private(set) var directoryDisplayName = "výchozí složka aplikace"
 
     private var isGenerating = false
 
-    private static var directory: URL? {
+    // MARK: Umístění
+
+    /// Kritérium fáze 4: „proxy jde vygenerovat na externí disk". Zvolená
+    /// složka se drží security-scoped bookmarkem (sandbox) — stejný vzorec
+    /// jako `MediaImporter` u zdrojů. `nil` = výchozí Application Support.
+    private static let directoryBookmarkKey = "cz.projektkrasa.proxyDirectory"
+    private var customRoot: URL?
+
+    private static var defaultDirectory: URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first?.appendingPathComponent("Proxies", isDirectory: true)
     }
 
+    /// Aktuální úložiště. Ve zvolené složce se dělá podsložka, aby se
+    /// hashované .mov soubory nesypaly uživateli do kořene disku.
+    private var directory: URL? {
+        customRoot?.appendingPathComponent("Krása Proxy", isDirectory: true)
+            ?? Self.defaultDirectory
+    }
+
+    init() {
+        restoreCustomDirectory()
+        refreshCacheSize()
+    }
+
+    /// Nastaví (a bookmarkem si zapamatuje) složku pro proxy. Evidence se
+    /// vyprázdní — volající pak spustí generování znovu, do nového umístění.
+    func chooseDirectory(_ url: URL) {
+        guard let data = try? url.bookmarkData(options: .withSecurityScope,
+                                               includingResourceValuesForKeys: nil,
+                                               relativeTo: nil) else { return }
+        UserDefaults.standard.set(data, forKey: Self.directoryBookmarkKey)
+        _ = url.startAccessingSecurityScopedResource()
+        customRoot = url
+        directoryDisplayName = url.path
+        finished = [:]
+        refreshCacheSize()
+    }
+
+    private func restoreCustomDirectory() {
+        guard let data = UserDefaults.standard.data(forKey: Self.directoryBookmarkKey) else { return }
+        var stale = false
+        guard let url = try? URL(resolvingBookmarkData: data,
+                                 options: .withSecurityScope,
+                                 relativeTo: nil,
+                                 bookmarkDataIsStale: &stale),
+              url.startAccessingSecurityScopedResource() else {
+            // Odpojený externí disk: potichu spadnout na výchozí složku —
+            // klipy pojedou z originálů, nic nespadne.
+            return
+        }
+        if stale, let fresh = try? url.bookmarkData(options: .withSecurityScope,
+                                                    includingResourceValuesForKeys: nil,
+                                                    relativeTo: nil) {
+            UserDefaults.standard.set(fresh, forKey: Self.directoryBookmarkKey)
+        }
+        customRoot = url
+        directoryDisplayName = url.path
+    }
+
+    // MARK: Cache
+
     /// Cesta proxy pro daný zdroj — otisk cesty, velikosti a času změny.
     /// Přejmenovaný nebo přepsaný originál dostane novou proxy sám od sebe.
-    static func cacheURL(for source: URL) -> URL? {
+    func cacheURL(for source: URL) -> URL? {
         guard let directory,
               let attributes = try? FileManager.default.attributesOfItem(atPath: source.path),
               let size = attributes[.size] as? Int64,
@@ -55,6 +117,32 @@ final class ProxyStore: ObservableObject {
         let digest = SHA256.hash(data: Data(fingerprint.utf8))
         let name = digest.map { String(format: "%02x", $0) }.joined()
         return directory.appendingPathComponent(name + ".mov")
+    }
+
+    /// Smaže obsah aktuálního úložiště a vyprázdní evidenci. Volající musí
+    /// NEJDŘÍV odšít proxy z projektu — jinak by kompozice chvíli ukazovala
+    /// na smazané soubory.
+    func deleteAll() {
+        guard !isGenerating, let directory else { return }
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil)) ?? []
+        for item in contents where ["mov", "partial"].contains(item.pathExtension) {
+            try? FileManager.default.removeItem(at: item)
+        }
+        finished = [:]
+        refreshCacheSize()
+    }
+
+    private func refreshCacheSize() {
+        guard let directory,
+              let contents = try? FileManager.default.contentsOfDirectory(
+                at: directory, includingPropertiesForKeys: [.fileSizeKey]) else {
+            cacheSizeBytes = 0
+            return
+        }
+        cacheSizeBytes = contents.reduce(0) { sum, url in
+            sum + Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
     }
 
     /// Zajistí proxy pro všechny klipy, postupně (ProRes engine je jeden).
@@ -71,7 +159,7 @@ final class ProxyStore: ObservableObject {
 
         var pending: [(ClipTiming, URL)] = []
         for timing in timings {
-            guard let cache = Self.cacheURL(for: timing.url) else { continue }
+            guard let cache = cacheURL(for: timing.url) else { continue }
             if FileManager.default.fileExists(atPath: cache.path) {
                 finished[timing.url] = cache
                 onReady(timing.url, cache)
@@ -91,6 +179,7 @@ final class ProxyStore: ObservableObject {
                 // má fallback. Zaznamenat a jet dál, ne spadnout.
                 print("Proxy pro \(timing.name) selhala: \(error)")
             }
+            refreshCacheSize()
         }
     }
 

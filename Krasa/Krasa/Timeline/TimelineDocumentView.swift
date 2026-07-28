@@ -771,7 +771,21 @@ final class TimelineDocumentView: NSView {
         ramp.target = self
         menu.addItem(ramp)
 
+        // Sync klopáku (fáze 7, modul 5). U klipu s rampou vypnuto —
+        // zvuk položený lineárně by se s křivkou rozjel.
+        menu.addItem(.separator())
+        let sync = NSMenuItem(title: "Synchronizovat externí zvuk…",
+                              action: #selector(menuSyncAudio(_:)), keyEquivalent: "")
+        sync.target = self
+        sync.isEnabled = !hasRamp
+        menu.addItem(sync)
+
         return menu
+    }
+
+    @objc private func menuSyncAudio(_ sender: Any?) {
+        guard let clipID = menuClipID else { return }
+        controller.onSyncAudioRequest?(clipID)
     }
 
     @objc private func menuToggleRamp(_ sender: Any?) {

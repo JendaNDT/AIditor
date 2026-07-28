@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor: svatební asistent škrtnut 28. 07. 2026 na pokyn autora** (AI analýza scén a obličejů zůstává podmíněná za v1.0).
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) ROZJETÁ: modul 1 `LoudnessMeter` hotový.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. Příští krok: FÁZE 8 — titulky přes WhisperKit.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -64,7 +64,7 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   ⚠️ K tomu past do sbírky: **zakryté okno pozastaví display link z `NSView.displayLink`** — benchmark pak visí na prvním tiku a nikdy nezačne. Proto si okno před měřením říká o popředí (`makeKeyAndOrderFront`) a čas se počítá až od prvního tiku. Stejná třída pasti jako „měření náhledu je platné, jen když bylo na co koukat".
 
-## 🔄 FÁZE 7 — audio engine (rozjetá 28. 07. 2026)
+## ✅ FÁZE 7 — audio engine (HOTOVÁ 28. 07. 2026)
 
 Rozvrh fáze: **1)** `LoudnessMeter` (hotový, níže), **2)** per-track hlasitost a mute do přehrávání i exportu přes `AVAudioMix` (model už `AudioSettings` na stopě má), **3)** LUFS normalizace exportu — změřit mix kompozice offline průchodem, aplikovat gain podle profilu, volba profilu v UI, **4)** cross-korelační sync klopáku (FFT). Pozn.: `AVAudioEngine` ze jména fáze zatím potřeba nebyl — mix a normalizace jdou přes `AVAudioMix` + gain; nasadí se, až půjde o víc než hlasitost.
 
@@ -106,7 +106,17 @@ Rozvrh fáze: **1)** `LoudnessMeter` (hotový, níže), **2)** per-track hlasito
   - ⚠️ Testovací signály musí mít amplitudovou STRUKTURU (bursty) — čistý bílý šum má plochou obálku a obálková korelace na něm nemá co chytit. Řeč i hudba strukturu mají, je to vlastnost metody, ne vada.
   - **Ověřeno na reálném zvuku:** z testovacího klipu (44,9 s, rány sekerou) vyrobený „klopák" — posun 5,4321 s, gain 0,3×, přidaný šum HLASITĚJŠÍ než signál (SNR ≈ −3 dB). Sync našel **5,4321 s přesně** (chyba < 0,1 ms), jistota 0,86, výpočet 0,17 s.
 
-  **Zbývá z fáze 7 — modul 5: sync v UI.** Import zvukového souboru (WAV z rekordéru — `MediaImporter` zatím bere jen videa), akce „synchronizovat s klipem", položení na A2 podle nalezeného posunu, a chování při nízké jistotě (nabídnout, ne mlčky položit). Případné převzorkování na společnou frekvenci je věc volajícího — `WaveformSync` ho záměrně nedělá.
+✅ **Modul 5 — sync v UI (28. 07. 2026): FÁZE 7 JE TÍM HOTOVÁ.** Kontextové menu klipu → „Synchronizovat externí zvuk…" → panel na výběr nahrávky (WAV, M4A…) → korelace → položení na A2. Rozhodnutí:
+
+  - **Referencí je celý ZDROJOVÝ soubor klipu**, ne jeho výřez na ose — trim na výsledek nemá vliv a korelace má nejvíc materiálu. Umístění: začátek klipu + (posun − zdrojový začátek). Jen pro klipy bez rampy (menu položku vypne) — lineárně položený zvuk by se s křivkou rozjel.
+  - **Kvantizace na snímky s kompenzací ve zdroji:** klip smí začít jen na celém snímku; zbytek posunu se schová do `sourceStart`, takže sync drží přesnost vzorků, ne snímků. Nahrávka přečnívající před nulu osy se přistřihne.
+  - **Nízká jistota (< 25 %) = dialog, ne tiché položení.** `MonoAudioReader` čte oba zvuky mono/48 kHz přes `AVComposition` — kvůli edit listu (pravidlo o 44 ms), a hlavně STEJNOU cestou, jakou zvuk čte přehrávač i export.
+  - Zvukový asset jde do projektu s bookmarkem (přežije restart), `hasVideo: false`; A2 dostane vlnu z existující `WaveformStore` a export ho míchá už hotovou cestou mixu.
+  - **Ověřeno CLI `--sync-check`** na WAVu vyrobeném z klipu (posun 8,0 s, gain 0,4×, šum): položeno na **+8,000 s přesně — snímek 240, sourceStart 0,0000, jistota 87 %**.
+  - ⚠️ **Cenný nález z ověřování: dekodéry AAC se neshodnou na rozjezdu.** První WAV vyrobený afconvertem vyšel „o 11 ms vedle" — přeměřením obou cest se ukázalo, že afconvert a čtení přes `AVComposition` se liší přesně o 528 vzorků (11,00 ms) v tom, kolik AAC rozjezdu zahodí. Sync měřil SPRÁVNĚ (vůči tomu, jak klip slyší aplikace); chyba byla v očekávání testu. Důsledek pro appku žádný — interní cesty (sync, přehrávač, export) čtou všechny přes kompozici, takže jsou konzistentní, a reálné nahrávky z rekordérů jsou PCM WAV bez téhle dvojznačnosti. Ale je to další patrona do pravidla „zvuk čti jen přes AVComposition".
+  - *Koukanec rukou zatím neproběhl (odloženo autorem): menu na klipu, výběr souboru, zvuk na A2 sedící s obrazem, dialog při nesouvisející nahrávce.*
+
+  **K názvu fáze:** `AVAudioEngine` ani `AVAudioUnitTimePitch` z plánu nakonec potřeba nebyly — mix zvládl `AVAudioMix`, normalizace float32 gain v rendereru, korekci výšky dělá `.timeDomain` na itemu už od Spiku 0. 32-bit float pipeline je splněná měřením i gainem ve floatu (bez ořezu přes ±1). Nasadí se, až bude potřeba víc než hlasitost (EQ, odšumění) — to není v plánu v1.0.
 
 ## 🔄 FÁZE 5 — projekt a export (rozjetá 28. 07. 2026)
 
@@ -303,7 +313,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
 ### Cesta k v1.0 (+~3 měsíce)
-- **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — 🔄 **moduly 1–4 hotové 28. 07. 2026: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm), per-track hlasitost/mute (`--mix-check`), LUFS normalizace exportu se stropem špiček (`--normalize-check`) a jádro cross-korelačního syncu (na reálném zvuku posun nalezen s chybou < 0,1 ms); zbývá modul 5 — sync v UI (import WAV, položení na A2)**
+- **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — ✅ **HOTOVO 28. 07. 2026, pět modulů za jeden den: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm), per-track hlasitost/mute (`--mix-check`), LUFS normalizace exportu se stropem špiček (`--normalize-check`), jádro cross-korelačního syncu a sync v UI (`--sync-check`: položení na vzorek přesně). Koukance rukou odložené autorem — seznam u modulů.**
 - **F8** Titulky přes WhisperKit *(2 týdny)*
 - **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — **+ migrace na `AVVideoComposition.Configuration`** jako druhá větev pod `if #available(macOS 26.0, *)`. Ne dřív.
 - 🚧 **KILL-GATE 2:** prodat deseti lidem, kteří tě neznají

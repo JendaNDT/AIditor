@@ -25,6 +25,7 @@
 		C4A1E9D2073B48F19A55D310 /* TimelineModel in Frameworks */ = {isa = PBXBuildFile; productRef = E7B26F4A15CD8B03D2914C68 /* TimelineModel */; };
 		AE10D10E501AE24B7C3F0901 /* AudioEngine in Frameworks */ = {isa = PBXBuildFile; productRef = AE10D10E501AE24B7C3F0902 /* AudioEngine */; };
 		AE10D10E501AE24B7C3F0904 /* LoudnessScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE10D10E501AE24B7C3F0905 /* LoudnessScanner.swift */; };
+		AE10D10E501AE24B7C3F0906 /* MonoAudioReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE10D10E501AE24B7C3F0907 /* MonoAudioReader.swift */; };
 		2F71D6C304AB859E1D3E7F0A /* TimelineController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0E48B9A17D3F62E0B95741 /* TimelineController.swift */; };
 		A9E3B57C1F0842D6C7B93E15 /* TimelineDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D82F4A0E51C7B394D06A2F8 /* TimelineDocumentView.swift */; };
 		74CB19E8D3A05F2718BE6C40 /* TimelinePane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B5A7D3629F41E8C5A72D094 /* TimelinePane.swift */; };
@@ -45,6 +46,7 @@
 		87BEF812E75F65304C3D45FF /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
 		E9F0A1B2C3D4E5F607182930 /* CompositionBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionBuilder.swift; sourceTree = "<group>"; };
 		AE10D10E501AE24B7C3F0905 /* LoudnessScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoudnessScanner.swift; sourceTree = "<group>"; };
+		AE10D10E501AE24B7C3F0907 /* MonoAudioReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonoAudioReader.swift; sourceTree = "<group>"; };
 		99311C7072B0DEAD06939D03 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
 		A457BB75BADC45205B9B3F69 /* SystemConditions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemConditions.swift; sourceTree = "<group>"; };
 		5C2E8A4D1B7F30529E6D8C4A /* TimelineScrollBenchmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineScrollBenchmark.swift; sourceTree = "<group>"; };
@@ -114,6 +116,7 @@
 				87BEF812E75F65304C3D45FF /* PlaybackController.swift */,
 				E9F0A1B2C3D4E5F607182930 /* CompositionBuilder.swift */,
 				AE10D10E501AE24B7C3F0905 /* LoudnessScanner.swift */,
+				AE10D10E501AE24B7C3F0907 /* MonoAudioReader.swift */,
 				99311C7072B0DEAD06939D03 /* PlayerView.swift */,
 			);
 			path = Media;
@@ -231,6 +234,7 @@
 				B83C201C79F8240BBCBB539B /* PlaybackController.swift in Sources */,
 				D7E8F9A0B1C2D3E4F5061728 /* CompositionBuilder.swift in Sources */,
 				AE10D10E501AE24B7C3F0904 /* LoudnessScanner.swift in Sources */,
+				AE10D10E501AE24B7C3F0906 /* MonoAudioReader.swift in Sources */,
 				2D92BF1645FAEB9D099F10E6 /* PlayerView.swift in Sources */,
 				1F9F8B29E107494593AB0078 /* SystemConditions.swift in Sources */,
 				3A7D1E5C9F2B40618D3C7A5E /* TimelineScrollBenchmark.swift in Sources */,

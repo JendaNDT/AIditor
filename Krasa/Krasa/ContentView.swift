@@ -67,6 +67,10 @@ final class AppModel: ObservableObject {
         timeline.onUserSeek = { [weak self] frame in
             self?.seekPlayer(toTimelineFrame: frame)
         }
+        // Kontextové menu klipu → synchronizace externího zvuku (fáze 7).
+        timeline.onSyncAudioRequest = { [weak self] clipID in
+            self?.syncExternalAudio(clipID: clipID)
+        }
         subscriptions = [
             // Přehrávač → osa: při přehrávání jede hlava za časem přehrávače.
             // Smyčce brání dvojí pojistka: `isUserScrubbing` během tažení
@@ -525,6 +529,128 @@ final class AppModel: ObservableObject {
         await export(to: directory.appendingPathComponent("mix_quarter.mp4"))
         print("A1 na 0,25×: \(status)")
         print("MIX_CHECK_PATH=\(directory.path)")
+    }
+
+    // MARK: Synchronizace externího zvuku (fáze 7, modul 5)
+
+    /// Vstup z kontextového menu: vybrat soubor z rekordéru a spustit sync.
+    func syncExternalAudio(clipID: ClipID) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio]
+        panel.allowsMultipleSelection = false
+        panel.message = "Vyber nahrávku z rekordéru (WAV, M4A…), která patří k tomuhle klipu."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await performAudioSync(clipID: clipID, url: url) }
+    }
+
+    /// Najde posun nahrávky vůči ZDROJOVÉMU souboru klipu (celému — trim
+    /// na výsledek nemá vliv) a položí ji na A2 tak, aby seděla s klipem
+    /// na ose. Jen pro klipy bez rampy: zvuk položený lineárně by se
+    /// s křivkou rozjel.
+    @discardableResult
+    func performAudioSync(clipID: ClipID, url: URL) async -> Bool {
+        let project = timeline.project
+        guard let clip = project.timeline.clip(clipID),
+              let referenceAsset = project.asset(clip.assetID) else { return false }
+        guard clip.speedRamp == nil else {
+            status = "Klip má rychlostní křivku — synchronizuj na klip bez rampy."
+            return false
+        }
+
+        status = "Porovnávám zvukové stopy…"
+        do {
+            let syncRate = 48_000.0
+            guard let reference = try await MonoAudioReader.samples(
+                    url: referenceAsset.originalURL, sampleRate: syncRate),
+                  let candidate = try await MonoAudioReader.samples(
+                    url: url, sampleRate: syncRate) else {
+                status = "Jeden ze souborů nemá zvukovou stopu."
+                return false
+            }
+            guard let match = WaveformSync.offset(reference: reference,
+                                                  candidate: candidate,
+                                                  sampleRate: syncRate) else {
+                status = "Na synchronizaci je zvuku málo, nebo je to samé ticho."
+                return false
+            }
+
+            // Nízká jistota = nahrávky si nejspíš neodpovídají. Zeptat se,
+            // NIKDY nepoložit mlčky — pravidlo z návrhu `WaveformSync`.
+            if match.confidence < 0.25 {
+                let alert = NSAlert()
+                alert.messageText = "Nahrávky si nejspíš neodpovídají"
+                alert.informativeText = String(
+                    format: "Jistota shody je jen %.0f %%. Položit zvuk přesto na nalezené místo?",
+                    match.confidence * 100)
+                alert.addButton(withTitle: "Zrušit")
+                alert.addButton(withTitle: "Položit přesto")
+                guard alert.runModal() == .alertSecondButtonReturn else {
+                    status = "Synchronizace zrušena — nahrávky si neodpovídaly."
+                    return false
+                }
+            }
+
+            // Pozice začátku nahrávky na ose = začátek klipu + (posun −
+            // zdrojový začátek klipu). Klip smí začít jen na celém snímku;
+            // zbytek posunu se schová do sourceStart — sync tak drží
+            // přesnost vzorků, ne snímků.
+            let frameRate = Double(project.timeline.frameRate)
+            var positionSeconds = Double(clip.timelineStart.count) / frameRate
+                + (match.offsetSeconds - clip.sourceStart.seconds)
+            var sourceStartSeconds = 0.0
+            if positionSeconds < 0 {   // nahrávka přečnívá před začátek osy
+                sourceStartSeconds = -positionSeconds
+                positionSeconds = 0
+            }
+            let startFrame = Int((positionSeconds * frameRate).rounded())
+            sourceStartSeconds = max(0, sourceStartSeconds
+                + Double(startFrame) / frameRate - positionSeconds)
+
+            let fileDuration = try await AVURLAsset(url: url).load(.duration).seconds
+            let durationFrames = Int((fileDuration - sourceStartSeconds) * frameRate)
+            guard durationFrames > 0 else {
+                status = "Nahrávka končí dřív, než začíná osa — není co položit."
+                return false
+            }
+
+            let asset = Asset(originalURL: url,
+                              bookmark: ProjectStore.assetBookmark(for: url),
+                              duration: SourceTime(seconds: fileDuration),
+                              measuredFrameRate: frameRate,   // zvuk frekvenci nemá, neutrální
+                              hasVideo: false,
+                              hasAudio: true)
+            guard timeline.placeSyncedAudio(asset: asset,
+                                            timelineStart: Frames(startFrame),
+                                            duration: Frames(durationFrames),
+                                            sourceStart: SourceTime(seconds: sourceStartSeconds))
+            else {
+                status = "Na A2 není v místě synchronizace volno — uvolni ji a zkus to znovu."
+                return false
+            }
+            status = String(format: "Zvuk položen na A2 — posun %+.3f s, jistota %.0f %%.",
+                            match.offsetSeconds, match.confidence * 100)
+            return true
+        } catch {
+            status = "Synchronizace selhala: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    /// CLI ověření syncu: WAV připravený se známým posunem proti prvnímu
+    /// klipu; vytiskne, kam se položil, a čísla se porovnají s očekáváním.
+    func verifySyncedAudio(path: String?) async {
+        guard let path else { print("❌ --sync-check potřebuje cestu k WAV"); return }
+        guard let clip = timeline.project.timeline.tracks.first?.clips.first else {
+            print("❌ na ose není klip"); return
+        }
+        let ok = await performAudioSync(clipID: clip.id, url: URL(fileURLWithPath: path))
+        print(status)
+        guard ok,
+              let a2 = timeline.project.timeline.tracks.last(where: { $0.kind == .audio }),
+              let placed = a2.clips.first else { return }
+        print(String(format: "A2 klip: start %d snímků, délka %d snímků, sourceStart %.4f s",
+                     placed.timelineStart.count, placed.duration.count,
+                     placed.sourceStart.seconds))
     }
 
     /// CLI ověření normalizace (fáze 7, modul 3): export s profilem Web
@@ -1040,6 +1166,8 @@ struct ContentView: View {
                     await model.verifyAudioMixExport()
                 } else if arguments.contains("--normalize-check") {
                     await model.verifyNormalizedExport()
+                } else if arguments.contains("--sync-check") {
+                    await model.verifySyncedAudio(path: explicit.first)
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

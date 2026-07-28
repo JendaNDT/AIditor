@@ -184,6 +184,31 @@ final class TimelineController: ObservableObject {
         project = updated
     }
 
+    // MARK: - Synchronizace externího zvuku (fáze 7, modul 5)
+
+    /// Kontextové menu klipu žádá synchronizaci — obslouží `AppModel`
+    /// (soubor, čtení zvuku, korelace jsou jeho práce, ne osy).
+    var onSyncAudioRequest: ((ClipID) -> Void)?
+
+    /// Položí synchronizovaný zvuk: přidá asset a vloží klip na POSLEDNÍ
+    /// zvukovou stopu (A2 — A1 patří zvuku kamery). Vrací `false`, když
+    /// vložení neprojde (typicky překryv s něčím, co na A2 už leží).
+    func placeSyncedAudio(asset: Asset, timelineStart: Frames,
+                          duration: Frames, sourceStart: SourceTime) -> Bool {
+        guard duration > .zero,
+              let a2 = project.timeline.tracks.last(where: { $0.kind == .audio })
+        else { return false }
+        var updated = project
+        updated.addAsset(asset)
+        let clip = Clip(assetID: asset.id, timelineStart: timelineStart,
+                        duration: duration, sourceStart: sourceStart)
+        guard (try? updated.insert(clip, onTrack: a2.id)) != nil else { return false }
+        undo.record(project)
+        project = updated
+        selection = [clip.id]
+        return true
+    }
+
     // MARK: - Hlasitost stop (fáze 7, modul 2)
 
     func setTrackMuted(_ trackID: TrackID, muted: Bool) {

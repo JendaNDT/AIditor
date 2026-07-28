@@ -80,7 +80,29 @@ final class AppModel: ObservableObject {
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.reapplyKnownProxies() },
+            // Indikátor „neuloženo" hned…
+            timeline.$project
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] project in self?.projectStore.updateDirty(project) },
+            // …a záloha 5 s po poslední změně. Zapíše se, jen když se stav
+            // liší od baseline — pouhé spuštění a sken zálohu nevyrábí.
+            timeline.$project
+                .removeDuplicates()
+                .debounce(for: .seconds(5), scheduler: DispatchQueue.main)
+                .sink { [weak self] project in self?.projectStore.autosaveIfDirty(project) },
         ]
+
+        // Ukončení aplikace nesmí zahodit posledních pár sekund práce —
+        // debounce zálohy by je nestihl.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.projectStore.autosaveIfDirty(self.timeline.project)
+            }
+        }
     }
 
     private func reapplyKnownProxies() {
@@ -129,8 +151,28 @@ final class AppModel: ObservableObject {
     func openProject(at url: URL) async {
         do {
             let raw = try projectStore.load(from: url)
-            let project = projectStore.resolveAssets(in: raw)
+            var project = projectStore.resolveAssets(in: raw)
             timeline.loadProject(project)
+            projectStore.markCurrent(project)
+
+            // Záloha novější než soubor = minule to neskončilo uložením.
+            // Nabídnout, ne mlčky přepsat — rozhodnutí patří uživateli.
+            if let backup = projectStore.pendingAutosave(),
+               backup.modifiedAt > (projectStore.lastSavedAt ?? .distantPast)
+                   .addingTimeInterval(1) {
+                if Self.askRestore(
+                    message: "Našla se automatická záloha novější než uložený soubor",
+                    detail: "Záloha je z \(backup.modifiedAt.formatted(date: .abbreviated, time: .shortened)). "
+                        + "Obnovená práce zůstane neuložená, dokud ji nepotvrdíš přes ⌘S.") {
+                    project = projectStore.resolveAssets(in: backup.project)
+                    timeline.loadProject(project)
+                    // Baseline zůstává obsah SOUBORU — obnovená práce se má
+                    // hlásit jako neuložená.
+                } else {
+                    projectStore.discardAutosave()
+                }
+            }
+
             let offline = project.assets.filter(\.isOffline).count
             status = offline == 0
                 ? "Otevřen projekt \(projectStore.displayName)."
@@ -140,6 +182,35 @@ final class AppModel: ObservableObject {
             status = "Projekt se nepodařilo otevřít: "
                 + ((error as? ProjectFileError)?.description ?? error.localizedDescription)
         }
+    }
+
+    /// Obnova neuloženého projektu po pádu — volá se při startu, když není
+    /// co otevírat, ale slot neuloženého projektu má zálohu.
+    func offerUnsavedRecovery() async -> Bool {
+        guard projectStore.fileURL == nil,
+              let backup = projectStore.pendingAutosave() else { return false }
+        guard Self.askRestore(
+            message: "Našla se záloha neuloženého projektu",
+            detail: "Aplikace minule neskončila uložením. Záloha je z "
+                + "\(backup.modifiedAt.formatted(date: .abbreviated, time: .shortened)).") else {
+            projectStore.discardAutosave()
+            return false
+        }
+        let project = projectStore.resolveAssets(in: backup.project)
+        timeline.loadProject(project)
+        projectStore.markRestoredUnsaved()   // dál „neuloženo", autosave chrání
+        status = "Obnoven neuložený projekt ze zálohy. ⌘S ho uloží."
+        await refreshSidebar(for: project)
+        return true
+    }
+
+    private static func askRestore(message: String, detail: String) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = detail
+        alert.addButton(withTitle: "Obnovit zálohu")
+        alert.addButton(withTitle: "Zahodit zálohu")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// Start aplikace: otevřít poslední projekt. `false` = není co otevřít
@@ -192,6 +263,43 @@ final class AppModel: ObservableObject {
         } catch {
             print("❌ roundtrip selhal: \(error)")
         }
+    }
+
+    /// CLI ověření autosave: baseline po skenu čistá, střih zašpiní,
+    /// záloha se zapíše, sedí a jde zahodit.
+    func verifyAutosave() {
+        projectStore.discardAutosave()   // čistý start — slot mohl zbýt z minula
+        guard !projectStore.isDirty else {
+            print("❌ po skenu je projekt špinavý — baseline nesedí")
+            return
+        }
+        guard projectStore.pendingAutosave() == nil else {
+            print("❌ záloha existuje, ještě než se cokoli změnilo")
+            return
+        }
+
+        if let first = timeline.project.timeline.tracks.first?.clips.first {
+            timeline.toggleClassicRamp(first.id)
+        }
+        projectStore.updateDirty(timeline.project)   // sink jede asynchronně
+        guard projectStore.isDirty else {
+            print("❌ po střihu se projekt nehlásí jako neuložený")
+            return
+        }
+
+        projectStore.autosaveIfDirty(timeline.project)
+        guard let backup = projectStore.pendingAutosave(),
+              backup.project.timeline == timeline.project.timeline else {
+            print("❌ záloha chybí nebo nesedí s projektem")
+            return
+        }
+
+        projectStore.discardAutosave()
+        guard projectStore.pendingAutosave() == nil else {
+            print("❌ zálohu se nepodařilo zahodit")
+            return
+        }
+        print("✅ autosave: čistý po skenu, špinavý po střihu, záloha sedí a jde zahodit")
     }
 
     // MARK: Správa proxy úložiště (fáze 4)
@@ -276,6 +384,7 @@ final class AppModel: ObservableObject {
         }
         timeline.loadScannedClips(clips, bookmarks: bookmarks)
         projectStore.detachFromFile()
+        projectStore.markCurrent(timeline.project)   // sken je baseline, ne „neuloženo"
 
         status = "\(clips.count) klipů. Vyber jeden a přehraj, nebo spusť měření."
         if selected == nil, let first = clips.first { await select(first) }
@@ -656,10 +765,14 @@ struct ContentView: View {
                     await model.runTimelineStressBench()
                 } else if arguments.contains("--roundtrip-project") {
                     model.verifyProjectRoundtrip()
+                } else if arguments.contains("--autosave-check") {
+                    model.verifyAutosave()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
                 // Projekt z minula — sken se nespouští, timeline je ze souboru.
+            } else if await model.offerUnsavedRecovery() {
+                // Pád s neuloženým projektem — obnoveno ze zálohy.
             } else {
                 await model.restoreAndScan()
             }
@@ -815,6 +928,7 @@ private struct ProjectStatusRow: View {
     }
 
     private var suffix: String {
+        if store.isDirty { return " · neuloženo" }
         guard let saved = store.lastSavedAt else { return " · ⌘S uloží" }
         return " · uloženo " + saved.formatted(date: .omitted, time: .shortened)
     }

@@ -10,6 +10,7 @@
 /* Begin PBXBuildFile section */
 		5A8B7A9F858B0D17DE3ECAD7 /* KrasaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7374B0D5EC1DDCB8C979DA /* KrasaApp.swift */; };
 		2A8F5CFFD87674FB2B9862C3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16260C585190F1B74295BB31 /* ContentView.swift */; };
+		2F6B8D4A9C1E30517F8A2D6C /* ProxyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D8F2B6C1A9E50713D5C8F2A /* ProxyStore.swift */; };
 		4B5D8B6164C2AA68F3B7B073 /* MediaImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAEE8DA94BE24BFA4C09F61 /* MediaImporter.swift */; };
 		10018FACF7C253DE3EA2AF0F /* VFRDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F5DB175B37741ADE928956 /* VFRDetector.swift */; };
 		B83C201C79F8240BBCBB539B /* PlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87BEF812E75F65304C3D45FF /* PlaybackController.swift */; };
@@ -34,6 +35,7 @@
 		7D1043473D55BFA90E8530D3 /* Krasa.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Krasa.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5B7374B0D5EC1DDCB8C979DA /* KrasaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KrasaApp.swift; sourceTree = "<group>"; };
 		16260C585190F1B74295BB31 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		4D8F2B6C1A9E50713D5C8F2A /* ProxyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxyStore.swift; sourceTree = "<group>"; };
 		DEAEE8DA94BE24BFA4C09F61 /* MediaImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaImporter.swift; sourceTree = "<group>"; };
 		60F5DB175B37741ADE928956 /* VFRDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VFRDetector.swift; sourceTree = "<group>"; };
 		87BEF812E75F65304C3D45FF /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
@@ -99,6 +101,7 @@
 		BD13434066203B2825EE5A5F /* Media */ = {
 			isa = PBXGroup;
 			children = (
+				4D8F2B6C1A9E50713D5C8F2A /* ProxyStore.swift */,
 				DEAEE8DA94BE24BFA4C09F61 /* MediaImporter.swift */,
 				60F5DB175B37741ADE928956 /* VFRDetector.swift */,
 				87BEF812E75F65304C3D45FF /* PlaybackController.swift */,
@@ -211,6 +214,7 @@
 			files = (
 				5A8B7A9F858B0D17DE3ECAD7 /* KrasaApp.swift in Sources */,
 				2A8F5CFFD87674FB2B9862C3 /* ContentView.swift in Sources */,
+				2F6B8D4A9C1E30517F8A2D6C /* ProxyStore.swift in Sources */,
 				4B5D8B6164C2AA68F3B7B073 /* MediaImporter.swift in Sources */,
 				10018FACF7C253DE3EA2AF0F /* VFRDetector.swift in Sources */,
 				B83C201C79F8240BBCBB539B /* PlaybackController.swift in Sources */,

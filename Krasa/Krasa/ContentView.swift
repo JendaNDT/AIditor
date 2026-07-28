@@ -25,6 +25,8 @@ final class AppModel: ObservableObject {
 
     let importer = MediaImporter()
     let controller = PlaybackController()
+    /// Generátor a evidence proxy (fáze 4).
+    let proxies = ProxyStore()
     /// Stav časové osy. Žije v modelu, ne ve view — `TimelinePaneView` se
     /// smí kdykoli přetvořit, `TimelineController` to nesmí pocítit.
     let timeline = TimelineController()
@@ -68,7 +70,21 @@ final class AppModel: ObservableObject {
                 .removeDuplicates()
                 .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
                 .sink { [weak self] _ in self?.rebuildTimelineComposition() },
+            // Proxy se k assetům přišívají znovu po KAŽDÉ změně projektu:
+            // undo vrací snapshoty z doby, kdy proxy ještě neexistovaly,
+            // a bez tohohle by ⌘Z tiše přepnul přehrávání na originály.
+            // Smyčka nehrozí — `setProxy` při shodě nezapisuje.
+            timeline.$project
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.reapplyKnownProxies() },
         ]
+    }
+
+    private func reapplyKnownProxies() {
+        for (original, proxy) in proxies.finished {
+            timeline.setProxy(proxy, forAssetWithOriginal: original)
+        }
     }
 
     func attach(_ view: PlayerHostView) { hostView = view }
@@ -113,6 +129,16 @@ final class AppModel: ObservableObject {
         timeline.loadScannedClips(clips)
         status = "\(clips.count) klipů. Vyber jeden a přehraj, nebo spusť měření."
         if selected == nil, let first = clips.first { await select(first) }
+
+        // Proxy na pozadí — ale ne pod CLI měřeními, soupeřily by o stroj.
+        if !CommandLine.arguments.dropFirst().contains(where: { $0.hasPrefix("--") }) {
+            let scanned = clips
+            Task { [weak self] in
+                await self?.proxies.ensureProxies(for: scanned) { original, proxy in
+                    self?.timeline.setProxy(proxy, forAssetWithOriginal: original)
+                }
+            }
+        }
     }
 
     /// Sólo poslech zdroje z sidebaru — kvůli kontrole klipu a benchmarkům.
@@ -133,7 +159,8 @@ final class AppModel: ObservableObject {
         compositionRebuild?.cancel()
         let project = timeline.project
         compositionRebuild = Task { [weak self] in
-            guard let composition = try? await CompositionBuilder.build(project: project),
+            guard let composition = try? await CompositionBuilder.build(
+                    project: project, usingProxies: project.usesProxies),
                   let self, !Task.isCancelled else { return }
             let frameRate = project.timeline.frameRate
             self.timelineComposition = composition
@@ -526,6 +553,8 @@ struct ContentView: View {
                 }
             }
 
+            ProxyControls(timeline: model.timeline, proxies: model.proxies)
+
             Button(model.isMeasuring ? "Měřím…" : "Změřit náhled v okně") {
                 Task { await model.runBenchmark() }
             }
@@ -603,6 +632,32 @@ struct ContentView: View {
             }
 
             TransportBar(controller: model.controller, hidden: model.chromeHidden)
+        }
+    }
+}
+
+/// Přepínač proxy a průběh generování (fáze 4). Vlastní malé view ze
+/// stejného důvodu jako `TransportBar`: SwiftUI nesleduje vnořené
+/// `ObservableObject`y, takže `model.proxies.progressText` by se v těle
+/// `ContentView` nikdy nepřekreslil.
+private struct ProxyControls: View {
+    @ObservedObject var timeline: TimelineController
+    @ObservedObject var proxies: ProxyStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Stříhat z proxy (rychlejší scrubování)", isOn: Binding(
+                get: { timeline.project.usesProxies },
+                set: { timeline.setUsesProxies($0) }))
+                .disabled(timeline.project.assets.allSatisfy { $0.proxyURL == nil })
+                .help("ProRes 422 Proxy v polovičním rozlišení, VFR zploštěné na CFR. "
+                    + "Seek 6 ms místo 41–95 ms. Export půjde vždy z originálů.")
+
+            if let text = proxies.progressText {
+                Text(text)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

@@ -251,6 +251,31 @@ final class TimelineController: ObservableObject {
         undo = UndoStack()
     }
 
+    // MARK: - Proxy (fáze 4)
+
+    /// Přišije proxy k assetu. BEZ undo kroku — dostupnost proxy není
+    /// střihové rozhodnutí a ⌘Z ji nemá vracet. Undo snapshoty z doby před
+    /// dokončením proxy ji neznají, proto se po každé změně projektu
+    /// přišívá znovu (`AppModel.reapplyKnownProxies`).
+    func setProxy(_ url: URL, forAssetWithOriginal original: URL) {
+        guard let asset = project.assets.first(where: { $0.originalURL == original }),
+              asset.proxyURL != url else { return }
+        var updated = asset
+        updated.proxyURL = url
+        var next = project
+        next.addAsset(updated)   // nahrazuje podle ID, klipy zůstávají
+        project = next
+    }
+
+    /// Volba „stříhat z proxy" je per projekt, ne per klip (rozhodnutí
+    /// z fáze 2). Také bez undo — je to režim práce, ne střih.
+    func setUsesProxies(_ value: Bool) {
+        guard project.usesProxies != value else { return }
+        var next = project
+        next.usesProxies = value
+        project = next
+    }
+
     // MARK: - Zátěžový projekt (výkonový test fáze 2)
 
     /// Postaví syntetickou osu pro výkonový test: `pairs` dvojic obraz+zvuk

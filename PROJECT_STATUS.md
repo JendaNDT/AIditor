@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 12 HOTOVÁ)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 13: modul 1 hotový + rozhodnutí o technice)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -9,11 +9,26 @@ Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (v
 
 **Fáze 0–9 HOTOVÉ (MVP) + vylepšovací fáze 10–12 HOTOVÉ; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a LUFS normalizací → export SRT.
 
-Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (351, 26 invariantů), `AudioEngine` (32), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
+Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (365, 28 invariantů), `AudioEngine` (32), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 13 — barevné presety, modul 1** (Core Image per klip s intenzitou 0–100 %; rozhodnout mezi `AVVideoComposition(applyingCIFiltersWith:)` a vlastním compositorem — kritérium je shoda náhled/export a výkon; další kandidát na GPU skok, měřit). Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 13 — barevné presety, modul 2** — vlastní `AVVideoCompositing` compositor (rozhodnutí padlo v modulu 1, viz níže): převzít vykreslení stávajících instrukcí (aspect-fit, opacity rampy, transform rampy) a přidat CIFilter per klip podle `Clip.colorGrade`. Ověřit kvantitativně (`--color-check` — dvojí export s presetem a bez, vzorec `--title-check`) a změřit GPU skok (`--color-gpu`, vzorec `--transition-gpu`). Modul 3 pak UI (výběr presetu + posuvník intenzity v inspektoru).
+
+## 🚧 FÁZE 13 — barevné presety (modul 1 HOTOVÝ 29. 07. 2026)
+
+✅ **Modul 1 — model: `ColorGrade` na klipu + ROZHODNUTÍ o technice renderování (29. 07. 2026).** Čistý Swift, **+14 testů, celkem 365, 0 selhání**; aplikace se s novým modelem překládá beze změn.
+
+  - **`ColorGrade`** = `ColorPreset` (jemný svatební `softWedding`, teplý film `warmFilm`, čistá pleť `cleanSkin`, ČB `blackAndWhite` — syrové hodnoty jsou smlouva formátu, hlídá je test) + intenzita 0–1 (UI ukáže 0–100 %; **nula je legální** — obraz beze změny, ale volba presetu zůstává). Model nese JEN volbu; které CIFiltry s jakými parametry preset znamená, ví až kompoziční vrstva — vzhled jde ladit bez zásahu do formátu souboru.
+  - **Preset patří KLIPU** (plán F13: „per klip, intenzita"), jen na obrazové stopě — fotka ano (je to obrazový klip), zvukový klip ne (`colorGradeNeedsVideoTrack`). Zapisuje se přes `setColorGrade`, invarianty 27–28 (preset mimo obrazovou stopu, intenzita mimo 0–1). Volitelné pole na `Clip`, staré soubory se čtou dál, verze formátu zůstává 2 (vzorec `kenBurns`).
+  - **Dědění: split, duplicate i ocásek po overwrite preset drží** — test na split hned první běh odhalil, že `splitSingle` staví pravou polovinu výslovným konstruktorem a nové pole by ztratil; stejná díra byla v `duplicate` a v ocásku `overwrite`. Všechna tři místa opravená a zamčená testy. (Ken Burns tudy prošel správně už ve F12 — pole se předávalo.)
+  - **⚠️ ROZHODNUTÍ (kritérium plánu — shoda náhled/export a výkon): vlastní `AVVideoCompositing`, NE `applyingCIFiltersWithHandler`.** Podklady z dokumentace (pravidlo 6):
+    - `init(asset:applyingCIFiltersWithHandler:)` volá handler „once for each frame … from the asset's **first enabled video track**" — jenže naše kompozice má od F10 VÍC drah (A/B rozklad prolínaček). Klipy na dráze B by filtr nedostaly a přechody by nehrály vůbec: inicializátor si staví VLASTNÍ instrukce, takže naše opacity/transform rampy a aspect-fit zahodí. Navíc si sám nastavuje `frameDuration` z `nominalFrameRate` — o kterém máme ZMĚŘENO, že lže (119,369 vs. 120,000) — a od iOS 18 je deprecated. <https://developer.apple.com/documentation/avfoundation/avmutablevideocomposition/init(asset:applyingcifilterswithhandler:)>
+    - Vlastní compositor (macOS 10.9+) je dokumentovaná cesta: AVFoundation mu předává **instrukce kompozice** a per snímek `AVAsynchronousVideoCompositionRequest` se snímky **všech** stop instrukce — víc drah není problém. <https://developer.apple.com/documentation/avfoundation/avvideocompositing>
+    - Stávající `makeVideoComposition` může zůstat: standardní instrukce jdou ve vlastním compositoru ČÍST dokumentovanými gettery (`getOpacityRamp` macOS 10.7+, `getTransformRamp` totéž) — compositor převezme touž sémantiku a přidá CIFilter per klip. <https://developer.apple.com/documentation/avfoundation/avvideocompositionlayerinstruction/getopacityramp(for:startopacity:endopacity:timerange:)>
+    - Shoda náhled/export je konstrukcí (tentýž `videoComposition` objekt dostává player item i `CFRRenderer` — vzorec F10), kvantitativně ji ověří `--color-check` v modulu 2. Poznámka z CLAUDE.md „vlastní `AVVideoCompositing` speed ramping neřeší" platí dál a nekoliduje — compositor je na PIXELY, přesně tohle.
+  - **Dvoucestná filozofie zůstává:** bez presetu/přechodu/Ken Burns se video kompozice vůbec nestaví a platí GPU baseline z fáze 1; s presetem se čeká skok třídy F10 (medián ~12 %) — změří ho `--color-gpu` sonda v modulu 2.
+  - *Koukanec rukou: zatím není na co — preset je v modelu, hrát začne modul 2.*
 
 ## ✅ FÁZE 12 — fotky a Ken Burns (HOTOVÁ 29. 07. 2026)
 
@@ -127,7 +142,7 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 1. ✅ **F10 — přechody** (HOTOVÁ 28. 07.; GPU skok změřen — medián ~12 % s kompozicí)
 2. ✅ **F11 — texty a titulky + stopa T1** (HOTOVÁ 29. 07.; obě splátky fáze 8 splacené, export přes `frameDecorator` místo CoreAnimationTool — viz oprava v plánu)
 3. ✅ **F12 — fotky a Ken Burns** (HOTOVÁ 29. 07.; fotka přes „still movie" mezisoubor, freeze frame jako fotka)
-4. **F13 — barevné presety** (Core Image per klip, intenzita) **← PRÁVĚ TADY**
+4. 🚧 **F13 — barevné presety** (Core Image per klip, intenzita) **← PRÁVĚ TADY** (modul 1 hotový, rozhodnuto: vlastní `AVVideoCompositing`; zbývá modul 2 kompozice+export a modul 3 UI)
 5. **F14 — hudební synchronizace** (beat-grid na vlastní FFT, magnet na doby, dopasování tempa 90–115 % s respektem k limitu zpomalení — VLAJKOVÁ)
 6. **F15 — analýzy kvality** (neostrost, ticho/prázdno; jen návrhy, nikdy automatický střih)
 7. **F16 — vymazlení** (zvukové fade úchyty, dBTP strop, správa Whisper modelu)

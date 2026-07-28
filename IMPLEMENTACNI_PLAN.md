@@ -258,15 +258,9 @@ Klíčové detaily:
 
 ---
 
-## 🚧 KILL-GATE 1 — po v0.5
+## 🚧 KILL-GATE 1 — ~~po v0.5~~ PŘESUNUT na konec vývoje
 
-> **Sestříhej touhle appkou celou reálnou svatbu. Od začátku do konce. Bez cheatů.**
-
-Ne test, ne ukázka. Reálná zakázka nebo reálná rodinná svatba.
-
-- **Zvládl jsi to a nebylo to utrpení** → pokračuj fází 6.
-- **Zvládl jsi to, ale bolelo to** → další 3 týdny jen na opravy toho, co bolelo. Žádné nové funkce.
-- **Nezvládl jsi to** → zastav. Zúži produkt (sekce 8). Tohle je nejdůležitější rozhodnutí v celém plánu.
+**Rozhodnutí autora 28. 07. 2026:** svatební materiál bude až ~koncem srpna 2026, vývoj mezitím pokračuje vylepšovacími fázemi 10–16. Gate v plné podobě je zapsaný za fází 16; kritéria („zvládl / bolelo / nezvládl") platí beze změny, jen se vyhodnotí nad kompletnější aplikací.
 
 ---
 
@@ -343,15 +337,105 @@ Apple Developer Program: 99 USD/rok, pokrývá obojí.
 
 ---
 
-### FÁZE 10 — AI analýza scén (2 týdny) → v1.1
+## Vylepšovací fáze 10–16 (sestaveno 28. 07. 2026)
 
-`SceneDetector`, `QualityFilter`, generátor 48h teaseru.
+**Kontext:** kill-gate 1 se přesouvá NA KONEC vývoje — svatební materiál bude ~za měsíc (konec srpna 2026). Fáze 10–16 vznikly výběrem z dokumentu `Projekt_Krasa_navrh_implementace.docx` (vzat zásobník nápadů, ne jeho plán — neznal stav projektu) + z našich odložených drobností. Nevybrané nápady dokumentu jsou v podmíněných fázích a backlogu s důvodem.
 
-**Bezpečná AI** — žádná biometrika, žádné právní riziko, žádné licenční problémy. Vision API, `VNDetectFaceCaptureQualityRequest` (pozor na správný název).
+**Přejatá produktová zásada (dobrá):** automatická analýza NIKDY sama nestříhá — všechno jsou značky a návrhy, které uživatel přijme nebo zahodí.
+
+Pořadí: nejdřív díry v základní výbavě filmu (přechody, texty, barvy — bez nich hotový svatební film nejde odevzdat), pak vlajková hudební synchronizace, pak analýzy. Odhady neuvádím v týdnech — dosavadní tempo je fáze za den až dva; platí ale korekce ×1,7 na hledání „proč to nefunguje".
 
 ---
 
-### FÁZE 11 — Rozpoznávání obličejů (8–12 týdnů) — **PODMÍNĚNÁ**
+### FÁZE 10 — Přechody → v0.10
+
+Prolínačka, zatmívačka (černá/bílá) a zvukový crossfade na střihu.
+
+- **Model nejdřív:** `Transition` patří STŘIHU mezi sousedy (typ, délka v snímcích). Klíčová validace: prolínačka spotřebovává zdroj ZA hranou střihu na obou stranách — meze přes `remainingSourceFrames`/`availableSourceFramesBefore` (s rampou je už umí přepočítávat). První verze: přechod na rampovaném střihu zakázat (kombinace = zvláštní případy; povolit až bude důvod).
+- **Kompozice:** dvě obrazové stopy střídavě (A/B roll) + instrukce `AVVideoComposition` s opacity rampou přes překryv; zvuk crossfade přes `AVAudioMix` volume rampy (`setVolumeRamp`). Tady **poprvé vznikne video kompozice v přehrávání** — ⚠️ podle měření z fáze 1 to přepne náhled ze samostatné vrstvy do skládání přes GPU (0,25 % → skok). Změřit HNED v modulu kompozice a zapsat čísla; je to očekávaný, plánovaný skok, ne regrese.
+- **UI:** přechod z kontextového menu střihu, kreslení na ose (lichoběžník přes hranu), délka tažením okraje.
+
+---
+
+### FÁZE 11 — Texty, titulky a stopa T1 → v0.11
+
+Jména, datum, kapitoly, závěrečné poděkování — grafické titulky s českými šablonami.
+
+- **Model:** nový druh stopy `.title` (T1) a titulkový klip (text, šablona, zarovnání). Stopa se přidá do výchozího projektu; starší projektové soubory bez ní se dál načtou.
+- **Náhled:** overlay vzorcem `SubtitleOverlay` (kreslí se jen když má co říct — chrání GPU baseline). **Export:** `AVVideoCompositionCoreAnimationTool` (jen pro export, do přehrávání nepatří — dokumentovaný limit API).
+- **Splácí dvě odložené drobnosti:** pruh T1 na ose kreslí i titulky z řeči (fáze 8) a přibude editace textu titulků (inspektor vybraného titulku).
+
+---
+
+### FÁZE 12 — Fotky a Ken Burns → v0.12
+
+- Import fotek (HEIC/JPEG) jako asset bez zvuku; klip s volnou délkou na V1.
+- **Ken Burns:** počáteční a koncový výřez → `TransformRamp` v instrukcích kompozice (lineární rampy stačí — pohyb je pomalý a krátký).
+- **Freeze frame jako fotka:** „zmrazit snímek" vytáhne aktuální snímek do fotky na ose. ⚠️ NE přes `SpeedRampEngine` — zákaz nulové rychlosti kvůli invertibilitě mapování platí dál; fotka na ose je čistší cesta.
+
+---
+
+### FÁZE 13 — Barevné presety → v0.13
+
+Jemný svatební vzhled, teplý film, čistá pleť, ČB — per klip, intenzita 0–100 %.
+
+- Technika: Core Image filtry v kompozici. Rozhodnout v modulu 1 mezi `AVVideoComposition(applyingCIFiltersWith:)` (handler zná čas → umí per-klip řízení) a vlastním compositorem; kritérium je shoda náhled/export a výkon. ⚠️ Další kandidát na GPU skok — měřit.
+- LUT soubory (.cube) až v backlogu; presety stačí jako pojmenované řetězce CIFilterů.
+
+---
+
+### FÁZE 14 — Hudební synchronizace → v0.14 (vlajková funkce)
+
+Střihy a rychlosti reagující na hudbu. Sedí na hotové jádro: FFT máme vlastní (`AudioEngine`), rychlostní matematiku taky (`SpeedRampEngine`).
+
+- **Modul 1 — `BeatGrid` v `AudioEngine`:** onsety (energie + spektrální tok přes vlastní FFT), odhad tempa, mřížka hlavních/vedlejších dob, ruční korekce prvního taktu a násobku tempa. Čistý Swift, testy na syntetických klikových stopách se známým tempem.
+- **Modul 2 — hudební mapa na ose:** doby z klipu na A2 jako značky v pravítku; **magnetické přichytávání** střihů a klipů na doby = nový druh kandidáta v `TimelineGeometry` (otestovatelné bez UI, síla kandidáta mezi „hrana klipu" a „mřížka snímků").
+- **Modul 3 — dopasování na dobu:** „přizpůsobit klip" = konstantní změna rychlosti v mezích 90–115 %, ⚠️ **vždy nad limitem čistého zpomalení** (`výstupFps/zdrojFps` — žlutá zóna platí i tady); „rampa na úder" = preset `SpeedRampEngine` končící zpomalením přesně na době. **Při velké odchylce nevynucovat** — nabídnout trim nebo jiný bod (zásada přiznaných mezí).
+
+---
+
+### FÁZE 15 — Analýzy kvality záběrů → v0.15
+
+Nahrazuje původní fázi „AI analýza scén". Návrhová vrstva, žádné automatické zásahy.
+
+- **Detekce neostrosti:** Laplaceova ostrost + hrany přes vImage/Accelerate na zmenšených náhledech, 2–5 vzorků/s, cache otiskem souboru (vzorec vln). Barevné značky na klipu (zelená/oranžová/červená), klik = seek. Pohybové rozmazání řešit konzervativně: nastavitelná citlivost, ne chytristika.
+- **Detekce ticha a prázdna:** RMS + přítomnost řeči (máme K-váhování) × jas/entropie/pohyb obrazu; minimální délka úseku 3–10 s. Tichý statický záběr na dekoraci NENÍ chyba — kombinovat oba signály.
+- Generátor „48h teaseru" z původní fáze 10 → backlog (stojí na detekci momentů, která je podmíněná).
+
+---
+
+### FÁZE 16 — Vymazlení a technické dluhy → v1.0-osobní
+
+- Zvukové fade úchyty na klipech (nájezd/dojezd per klip přes `AVAudioMix` rampy).
+- Strop normalizace na **true peak (dBTP)** — 4× převzorkování ve špičkovém měření (`AudioEngine`), místo dnešní špičky vzorků.
+- Správa modelu Whisperu (zobrazit velikost, smazat, přemístit).
+- Zbylé drobnosti z koukanců a co vyleze při používání.
+
+---
+
+## 🚧 KILL-GATE 1 — na KONCI vývoje (materiál ~konec srpna 2026)
+
+> **Sestříhej touhle appkou celou reálnou svatbu. Od začátku do konce. Bez cheatů.**
+
+Při tom se ověří i kritérium fáze 4 (plynulost na 200GB reálném materiálu), přepis na reálné řeči a všechny koukance najednou.
+
+- **Zvládl jsi to a nebylo to utrpení** → hotovo; případně podmíněné fáze podle chuti.
+- **Zvládl jsi to, ale bolelo to** → opravy toho, co bolelo. Žádné nové funkce, dokud to nebolí míň.
+- **Nezvládl jsi to** → zastav a zúži. Tohle je nejdůležitější rozhodnutí v celém plánu.
+
+---
+
+## Podmíněné fáze (po kill-gate 1, podle chuti)
+
+### FÁZE 17 — Stabilizace obrazu — **PODMÍNĚNÁ**
+
+Z dokumentu; technicky poctivý návrh (trajektorie z bodových příznaků, vyhlazení, opačná transformace, přiznaný ořez), ale je to nejtěžší položka výběru — „gumový obraz" je reálné riziko a vyžaduje předvýpočet. Až po zkušenosti ze svatby: možná se ukáže, že gimbal/stativ problém řeší líp než software.
+
+### FÁZE 18 — Detekce momentů (bez biometrie) — **PODMÍNĚNÁ**
+
+Polibek, potlesk, tanec přes Vision detekci (obličeje-DETEKCE, pózy, pohyb) + pravidla — bez rozpoznávání identity, takže bez právního gate. Přesnost nebude vysoká (dokument to u prstenů sám přiznává); dělat jen, když po svatbě bude jasné, že ruční procházení bolí.
+
+### FÁZE 19 — Rozpoznávání obličejů (8–12 týdnů) — **PODMÍNĚNÁ, tři gaty**
 
 Tohle není funkce. Je to samostatný projekt uvnitř projektu.
 
@@ -371,9 +455,11 @@ To poslední není leštění. Ente na tom pracovalo 21 měsíců s placeným t�
 
 ---
 
-### FÁZE 12+ — Backlog
+### FÁZE 20+ — Backlog
 
-Multicam, HDR, slovenština, LUTs. Optical flow škrtnout.
+Automatický reframe 16:9 → 9:16 (Vision + dynamický crop), masky a sledování objektu (rozmazání SPZ/obličeje), obraz v obraze, multicam UI (korelační sync už je hotový z fáze 7 — chybí jen přepínání úhlů), HDR end-to-end, slovenština, LUT soubory (.cube), generátor 48h teaseru, ducking hudby pod řečí a odšumění (`AVAudioEngine` — první skutečný důvod ho nasadit). Optical flow zůstává škrtnutý.
+
+**Z dokumentu vědomě NEpřevzato:** SQLite/Core Data místo projektového souboru (náš JSON formát je hotový, deterministický a verzovaný — migrace bez užitku), přestavba UI na čtyři pracovní režimy (velká přestavba bez jasného přínosu pro jednoho uživatele; jednotlivé prvky — inspektor, režim exportu — můžou přijít postupně) a „učení z potvrzení uživatele" u momentů (nejasná hodnota, dost práce).
 
 ---
 

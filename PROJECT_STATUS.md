@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor: svatební asistent škrtnut 28. 07. 2026 na pokyn autora** (AI analýza scén a obličejů zůstává podmíněná za v1.0).
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. FÁZE 8 (titulky) HOTOVÁ: přepis WhisperKitem, titulky v náhledu, export SRT. FÁZE 9 uzavřená v rozsahu OSOBNÍ appky (28. 07. 2026): distribuce, podpis i licence odloženy — appka je free a jen pro autora. **STAVBA JE KOMPLETNÍ — před námi koukance a KILL-GATE 1.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. FÁZE 8 (titulky) HOTOVÁ: přepis WhisperKitem, titulky v náhledu, export SRT. FÁZE 9 uzavřená v rozsahu OSOBNÍ appky (28. 07. 2026): distribuce, podpis i licence odloženy — appka je free a jen pro autora. **MVP KOMPLETNÍ; kill-gate 1 přesunut na konec vývoje (materiál ~konec srpna). Běží vylepšovací fáze 10–16: přechody, texty, fotky, barvy, hudební sync, analýzy, vymazlení. Příští krok: FÁZE 10 — přechody.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -15,9 +15,21 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 
 **Poslední otevřené kritérium je zavřené.** Plynulost náhledu 4K/60 se ve spiku změřit nedala (přehrávač neexistoval) — fáze 1 ji zodpověděla a **27. 07. 2026 byla přeměřena po opravě metodiky: náhled běží přesně na stropu 60Hz displeje, bez sekání.**
 
-## ⏭️ Příští krok: KOUKANCE a KILL-GATE 1
+## ⏭️ Příští krok: VYLEPŠOVACÍ FÁZE 10–16, kill-gate na konci
 
-**Appka je podle ořezaného plánu KOMPLETNÍ (28. 07. 2026).** Autor odkládal ruční testy, dokud nebude celá — teď je. Konsolidovaný seznam neproběhlých koukanců (odškrtávat po projití):
+**Změna kurzu 28. 07. 2026:** svatební materiál bude až ~koncem srpna, kill-gate 1 se přesouvá NA KONEC vývoje. Mezitím fáze 10–16 (nový plán v `IMPLEMENTACNI_PLAN.md`, sestavený výběrem z dokumentu `Projekt_Krasa_navrh_implementace.docx` + odložených drobností):
+
+1. **F10 — přechody** (prolínačka, zatmívačka, audio crossfade; první video kompozice v přehrávání — čeká se GPU skok, změřit)
+2. **F11 — texty a titulky + stopa T1** (české šablony; splácí editaci titulků z přepisu i pruh T1)
+3. **F12 — fotky a Ken Burns** (+ freeze frame jako fotka, NE přes SpeedRampEngine)
+4. **F13 — barevné presety** (Core Image per klip, intenzita)
+5. **F14 — hudební synchronizace** (beat-grid na vlastní FFT, magnet na doby, dopasování tempa 90–115 % s respektem k limitu zpomalení — VLAJKOVÁ)
+6. **F15 — analýzy kvality** (neostrost, ticho/prázdno; jen návrhy, nikdy automatický střih)
+7. **F16 — vymazlení** (zvukové fade úchyty, dBTP strop, správa Whisper modelu)
+
+Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou před kill-gate (seznam níže).
+
+**Seznam koukanců (odškrtávat po projití):**
 
 - [ ] **Dotaz při zavírání (F5):** změna v projektu → ⌘Q ukáže Uložit/Neukládat/Zrušit (Escape ruší); týž dotaz po výběru souboru při ⌘O a importu; „Uložit" u neuloženého projektu přes „Uložit jako" — zrušení panelu ruší i zavírání.
 - [ ] **Hlasitost stop (F7):** posuvník v hlavičce A1/A2 mění hlasitost ZA BĚHU přehrávání bez zastavení; M ztlumí a vrátí; ⌘Z vrací tažení jedním krokem; hodnoty přežijí uložení a otevření projektu.
@@ -27,9 +39,7 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 - [ ] **Offline scénář (F5, formálně neověřený):** přejmenovat složku s klipy, otevřít projekt — klipy zůstávají, assety offline, po vrácení složky se chytí.
 - [ ] Drobnosti z F4: „Smazat proxy" a start s odpojeným externím diskem.
 
-Pak: 🚧 **KILL-GATE 1 — sestříhat touhle appkou celou reálnou svatbu.** Při něm se přirozeně ověří i kritérium F4 (plynulost střihu na 200GB reálném materiálu) a přepis na reálné řeči.
-
-**Vědomě odložené vymazlovací drobnosti** (kdyby po kill-gate zbyla chuť): editace textu titulků, titulkový pruh T1 na ose, dotažení stropu normalizace na true peak (dBTP), správa místa modelu Whisperu.
+Pak: 🚧 **KILL-GATE 1 — sestříhat touhle appkou celou reálnou svatbu** (materiál ~konec srpna 2026). Při něm se přirozeně ověří i kritérium F4 (plynulost střihu na 200GB reálném materiálu) a přepis na reálné řeči. *(Dřívější seznam „vymazlovacích drobností" je teď rozpuštěný ve fázích 11 a 16 nového plánu.)*
 
 ## ⏭️ Původní zápis příštího kroku (historie)
 
@@ -373,10 +383,21 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F9** ~~Distribuce, notarizace, Sparkle~~ — ✅ **uzavřená 28. 07. 2026 v rozsahu osobní appky: hotová jen migrace na `Configuration` (ověřeno exportem, 0,0 % kolísání); podpis, notarizace, Sparkle i licencování ODLOŽENY — appka je free a jen pro autora**
 - 🚧 ~~KILL-GATE 2~~ — odložen s distribucí (není komu prodávat/rozdávat)
 
-### Za v1.0 — podmíněné
-- **F10** AI analýza scén a kvality záběrů *(2 týdny)* — bezpečná AI, žádné právní riziko
-- **F11** Rozpoznávání obličejů *(8–12 týdnů)* — tři gaty: právní, licenční, poptávkový
-- **F12+** Multicam, HDR, slovenština, LUTs
+### Vylepšovací fáze do svatby (nové, 28. 07. 2026 — detaily v plánu)
+- **F10** Přechody (prolínačka, zatmívačka, audio crossfade)
+- **F11** Texty a titulky + stopa T1 (+ editace titulků z přepisu)
+- **F12** Fotky a Ken Burns (+ freeze frame jako fotka)
+- **F13** Barevné presety (Core Image, intenzita per klip)
+- **F14** Hudební synchronizace (beat-grid, magnet, dopasování tempa) — VLAJKOVÁ
+- **F15** Analýzy kvality (neostrost, ticho — jen návrhová vrstva)
+- **F16** Vymazlení (zvukové fade, dBTP, správa Whisper modelu)
+- 🚧 **KILL-GATE 1 na konci** (svatba, materiál ~konec srpna 2026)
+
+### Podmíněné po kill-gate
+- **F17** Stabilizace obrazu — nejtěžší z výběru, možná ji vyřeší gimbal
+- **F18** Detekce momentů bez biometrie (polibek, potlesk, tanec)
+- **F19** Rozpoznávání obličejů *(8–12 týdnů)* — tři gaty: právní, licenční, poptávkový
+- **F20+** Backlog: reframe 9:16, masky, PiP, multicam UI, HDR, slovenština, LUTs, ducking
 
 ### Škrtnuto
 - **Svatební asistent (F6: checklist, záběrový plán, BPM plánovač).** Škrtnut 28. 07. 2026 na pokyn autora — produkt je čistě videoeditor. Pravidlo „záběry na zpomalení toč na 120 fps" tím nezaniká: říká ho žlutá zóna v editoru křivek (hotová ve fázi 3) a varování o duplikaci snímků musí zůstat v UI přiznané. Číslování fází se nemění, po F5 následuje F7.

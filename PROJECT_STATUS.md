@@ -77,7 +77,13 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   ✅ **Koukanec potvrzen rukou (28. 07. 2026): proxy fungují a scrubování je znatelně svižnější.** Naměřených 6,2 ms proti 41–95 ms je tedy i subjektivně cítit — přesně efekt, kvůli kterému proxy jsou.
 
-  **Zbývá z fáze 4:** volba umístění proxy (externí disk — kritérium „proxy jde vygenerovat na externí disk"), mazání/regenerace z UI, a kritérium „200 GB projekt se stříhá plynule" (chce reálný svatební materiál).
+✅ **Modul 2 — správa úložiště (28. 07. 2026): externí disk a mazání cache.** Volba složky přes `NSOpenPanel` se security-scoped bookmarkem (entitlements read-write + app-scope bookmarky už v projektu byly); ve zvolené složce se dělá podsložka „Krása Proxy", ať se hashované soubory nesypou do kořene disku. Odpojený externí disk = tichý návrat k výchozí složce, klipy jedou z originálů. Mazání cache NEJDŘÍV odšije proxy z projektu — kompozice nesmí ani chvíli ukazovat na mazané soubory. Sidebar ukazuje umístění a velikost cache. Po restartu se hotové proxy najdou otiskem samy — ověřeno okem: „výchozí složka aplikace · 1,66 GB" hned po startu.
+
+  ⚠️ Poznámka k restartu: `usesProxies` je per projekt a projekt se zatím při každém startu staví znovu ze skenu — přepínač se tedy vrací na vypnuto. Srovná se to s projektovým souborem ve fázi 5, není to vada proxy.
+
+  👀 **Koukanec modulu 2:** „Změnit umístění…" na externí disk (nebo jinou složku) → proxy se vygenerují znovu tam a přepínač po dogenerování funguje; „Smazat proxy" vyprázdní úložiště a přepínač zhasne; po odpojení/připojení disku appka nastartuje bez pádu.
+
+  **Zbývá z fáze 4:** kritérium „200 GB projekt se stříhá plynule" — chce reálný svatební materiál, ne pět testovacích klipů.
 
 ## ✅ FÁZE 3 — speed ramping ostrý (HOTOVÁ 28. 07. 2026)
 
@@ -202,7 +208,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 4 — proxy.** `ProxyStore` hotový; zbývá volba umístění (externí disk), správa cache a kritérium plynulosti na reálném materiálu.
+- **Fáze 4 — proxy.** `ProxyStore` i správa úložiště hotové; zbývá kritérium plynulosti na reálném 200GB materiálu (a koukanec externího disku).
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
@@ -211,7 +217,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu — ✅ **HOTOVO 28. 07. 2026** (228 testů modelu, interakce rukou, výkonový test 2000 klipů bez vypadlého tiku)
 - **F3** Speed ramping ostrý — ✅ **HOTOVO 28. 07. 2026** (tři moduly, potvrzeno rukou; reálný čas: dva dny místo tří týdnů)
-- **F4** Proxy + zploštění VFR→CFR *(2 týdny)* — 🔄 **ProxyStore hotový a potvrzený rukou (scrubování znatelně svižnější); zbývá externí disk a správa cache**
+- **F4** Proxy + zploštění VFR→CFR *(2 týdny)* — 🔄 **ProxyStore + správa úložiště hotové (externí disk, mazání cache); zbývá kritérium plynulosti na reálném materiálu**
 - **F5** Projekt, autosave, undo, export *(3 týdny)*
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 

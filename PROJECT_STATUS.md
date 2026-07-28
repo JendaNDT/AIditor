@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (228 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. FÁZE 2 HOTOVÁ: interakce potvrzené rukou a výkonový test 2000 klipů bez vypadlého tiku (obojí 28. 07. 2026).**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (228 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. FÁZE 2 HOTOVÁ, FÁZE 4 ROZJETÁ: proxy se generují a stříhat jde z nich (čeká koukanec).**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -63,6 +63,21 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
   3. **Zpětná smyčka dlaždic vln.** Každá na pozadí dokončená dlaždice bumpla `version` a spustila CELÝ `refreshClips` navíc k tomu scrollovacímu. → throttle odběru na 100 ms.
 
   ⚠️ K tomu past do sbírky: **zakryté okno pozastaví display link z `NSView.displayLink`** — benchmark pak visí na prvním tiku a nikdy nezačne. Proto si okno před měřením říká o popředí (`makeKeyAndOrderFront`) a čas se počítá až od prvního tiku. Stejná třída pasti jako „měření náhledu je platné, jen když bylo na co koukat".
+
+## 🔄 FÁZE 4 — proxy a výkon (rozjetá 28. 07. 2026)
+
+✅ **Modul 1 — `ProxyStore`: generování proxy a přepínač „stříhat z proxy".** ProRes 422 Proxy v polovičním rozlišení, VFR zploštěné na CFR, zvuk LPCM — přesně rozhodnutí z plánu, render dělá sdílený `CFRRenderer` (tentýž kód jako ověřený `Flatten`). Rozložení:
+
+  - **`CFRRenderer` umí `outputScale`** — škáluje se při dekódování přes `AVAssetReaderVideoCompositionOutput` s `renderSize` (ne po snímcích na CPU); kompozice zároveň aplikuje `preferredTransform`, výstup se zapisuje s identitou. Cadence kompozice = cílová mřížka, zero-order hold resampleru projde 1:1.
+  - **Cache** v Application Support/Proxies s otiskem `cesta|velikost|mtime` (stejný vzorec jako vlny); zápis přes `.partial` + přejmenování — nedopsaný soubor po pádu nesmí vypadat jako hotová proxy.
+  - **Generuje se na pozadí po importu**, postupně (ProRes engine je jeden); klip bez proxy dál jede z originálu (`url(usingProxies:)` má fallback).
+  - **Proxy se k assetům přišívají po KAŽDÉ změně projektu** — undo vrací snapshoty z doby před dokončením proxy a bez opětovného přišití by ⌘Z tiše přepnul přehrávání na originály. Smyčka nehrozí, `setProxy` při shodě nezapisuje.
+  - Přepínač v sidebaru je **per projekt** (`Project.usesProxies`, rozhodnutí z fáze 2), bez undo — je to režim práce, ne střih. Kompozice se staví přes `Asset.url(usingProxies:)` — jediné místo volby souboru.
+  - **Ověřeno sondou na všech 5 vygenerovaných proxy: 1920×1080, `apco`, CFR s kolísáním 0,0 %, LPCM 48 kHz, edit list 1:1** — a hlavně zachované PŘESNÉ frekvence originálů (30,01 / 59,68 / 60 / 120 fps), žádné zaokrouhlení na katalogové hodnoty. Velikosti 196–470 MB na klip: ProRes je velký, proxy je o seeku (6,2 ms proti 41–95 ms), ne o místě.
+
+  👀 **Koukanec modulu:** v sidebaru zapni „Stříhat z proxy" (aktivní až po dogenerování) a scrubuj v pravítku — odezva má být znatelně svižnější než z originálů, hlavně u 120fps klipu; obraz v náhledu je poloviční, na velikosti okna to nepoznáš. Vypni a porovnej. Přepínač nesmí posunout hlavu ani rozbít rampy.
+
+  **Zbývá z fáze 4:** volba umístění proxy (externí disk — kritérium „proxy jde vygenerovat na externí disk"), mazání/regenerace z UI, a kritérium „200 GB projekt se stříhá plynule" (chce reálný svatební materiál).
 
 ## ✅ FÁZE 3 — speed ramping ostrý (HOTOVÁ 28. 07. 2026)
 
@@ -187,7 +202,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- *(nic — fáze 0–3 jsou hotové, fáze 4 ještě nezačala)*
+- **Fáze 4 — proxy.** `ProxyStore` hotový; zbývá volba umístění (externí disk), správa cache a kritérium plynulosti na reálném materiálu.
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
@@ -196,7 +211,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu — ✅ **HOTOVO 28. 07. 2026** (228 testů modelu, interakce rukou, výkonový test 2000 klipů bez vypadlého tiku)
 - **F3** Speed ramping ostrý — ✅ **HOTOVO 28. 07. 2026** (tři moduly, potvrzeno rukou; reálný čas: dva dny místo tří týdnů)
-- **F4** Proxy + zploštění VFR→CFR *(2 týdny)*
+- **F4** Proxy + zploštění VFR→CFR *(2 týdny)* — 🔄 **ProxyStore hotový (generování + přepínač, ověřeno sondou); zbývá externí disk a správa cache**
 - **F5** Projekt, autosave, undo, export *(3 týdny)*
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 

@@ -139,6 +139,8 @@ enum CompositionBuilder {
         var videoGroups: [VideoLaneGroup] = []
         /// Rozměr a otočení zdroje podle klipu — pro aspect-fit transformace.
         var clipGeometry: [ClipID: (size: CGSize, transform: CGAffineTransform)] = [:]
+        /// Ken Burns fotek (fáze 12, modul 3) — vynucuje video kompozici.
+        var kenBurnsByClip: [ClipID: KenBurns] = [:]
 
         for track in timeline.tracks {
             guard !track.clips.isEmpty,
@@ -197,6 +199,9 @@ enum CompositionBuilder {
                         clipGeometry[clip.id] = (
                             CGSize(width: timeline.canvasSize.width,
                                    height: timeline.canvasSize.height), .identity)
+                    }
+                    if let kenBurns = clip.kenBurns, kenBurns.isUsable {
+                        kenBurnsByClip[clip.id] = kenBurns
                     }
                     continue
                 }
@@ -261,12 +266,16 @@ enum CompositionBuilder {
             }
         }
 
-        // Video kompozice JEN když je na obrazu co skládat — jinak zůstává
-        // přímá cesta a GPU baseline z fáze 1.
+        // Video kompozice JEN když je na obrazu co skládat (přechod, nebo
+        // Ken Burns fotky) — jinak zůstává přímá cesta a GPU baseline
+        // z fáze 1. S Ken Burns je skok na skládání přes GPU stejná třída
+        // jako u přechodů (změřeno ve fázi 10: medián ~12 %).
         let needsVideoComposition = videoGroups.contains { !$0.plan.overlays.isEmpty }
+            || !kenBurnsByClip.isEmpty
         let videoComposition: AVVideoComposition? = needsVideoComposition
             ? makeVideoComposition(groups: videoGroups,
                                    clipGeometry: clipGeometry,
+                                   kenBurnsByClip: kenBurnsByClip,
                                    canvas: CGSize(width: timeline.canvasSize.width,
                                                   height: timeline.canvasSize.height),
                                    frameRate: timeline.frameRate,
@@ -292,6 +301,7 @@ enum CompositionBuilder {
     private static func makeVideoComposition(
         groups: [VideoLaneGroup],
         clipGeometry: [ClipID: (size: CGSize, transform: CGAffineTransform)],
+        kenBurnsByClip: [ClipID: KenBurns],
         canvas: CGSize,
         frameRate: Int,
         totalDuration: CMTime) -> AVVideoComposition? {
@@ -304,7 +314,9 @@ enum CompositionBuilder {
 
         func ticks(_ frame: Frames) -> Int64 { Int64(frame.count) * ticksPerFrame }
 
-        // Hranice instrukcí.
+        // Hranice instrukcí. Klipy s Ken Burns dostávají hranice na svých
+        // okrajích — jejich úseky pak leží buď celé uvnitř klipu, nebo celé
+        // mimo, a transform rampa se dá zadat po úsecích.
         var boundarySet: Set<Int64> = [0, durationTicks]
         for group in groups {
             for overlay in group.plan.overlays {
@@ -313,6 +325,11 @@ enum CompositionBuilder {
                 if !overlay.kind.needsSourceOverlap {
                     boundarySet.insert(ticks(overlay.cut))
                 }
+            }
+            for placement in group.plan.placements
+            where kenBurnsByClip[placement.clipID] != nil {
+                boundarySet.insert(ticks(placement.start))
+                boundarySet.insert(ticks(placement.start) + Int64(placement.duration.count) * ticksPerFrame)
             }
         }
         let boundaries = boundarySet.filter { $0 >= 0 && $0 <= durationTicks }.sorted()
@@ -344,6 +361,28 @@ enum CompositionBuilder {
                         let pEnd = pStart + Int64(placement.duration.count) * ticksPerFrame
                         guard pStart < t1, t0 < pEnd,
                               let geometry = clipGeometry[placement.clipID] else { continue }
+
+                        // Ken Burns (fáze 12): lineární transform rampa mezi
+                        // výřezy. Krajní hodnoty úseku se interpolují PO
+                        // SLOŽKÁCH — přesně tak rampu interpoluje i sama
+                        // kompozice, takže úseky na sebe navazují beze švů.
+                        // <https://developer.apple.com/documentation/avfoundation/avmutablevideocompositionlayerinstruction/settransformramp(fromstart:toend:timerange:)>
+                        if let kenBurns = kenBurnsByClip[placement.clipID], pEnd > pStart {
+                            let from = cropTransform(kenBurns.start, canvas: canvas)
+                            let to = cropTransform(kenBurns.end, canvas: canvas)
+                            let f0 = Double(max(pStart, t0) - pStart) / Double(pEnd - pStart)
+                            let f1 = Double(min(pEnd, t1) - pStart) / Double(pEnd - pStart)
+                            layer.setTransformRamp(
+                                fromStart: lerp(from, to, f0),
+                                toEnd: lerp(from, to, f1),
+                                timeRange: CMTimeRange(
+                                    start: CMTime(value: max(pStart, t0),
+                                                  timescale: SourceTime.projectTimescale),
+                                    end: CMTime(value: min(pEnd, t1),
+                                                timescale: SourceTime.projectTimescale)))
+                            continue
+                        }
+
                         layer.setTransform(
                             aspectFit(size: geometry.size, preferred: geometry.transform,
                                       into: canvas),
@@ -415,6 +454,37 @@ enum CompositionBuilder {
                                                 timescale: SourceTime.projectTimescale)
         videoComposition.instructions = instructions
         return videoComposition
+    }
+
+    /// Transformace Ken Burns: výřez plátna (normalizovaný, počátek vlevo
+    /// nahoře — souřadnice video kompozice) roztažený přes celé plátno.
+    /// Mezisoubor fotky má rozměr plátna, takže žádné napřímení netřeba.
+    private static func cropTransform(_ rect: NormalizedRect,
+                                      canvas: CGSize) -> CGAffineTransform {
+        let cropWidth = rect.width * canvas.width
+        let cropHeight = rect.height * canvas.height
+        guard cropWidth > 0, cropHeight > 0 else { return .identity }
+        // Fill, ne fit: výřez má obrazovku VYPLNIT. UI drží poměr plátna
+        // (w == h v normalizovaných jednotkách), pak jsou obě měřítka stejná.
+        let scale = max(canvas.width / cropWidth, canvas.height / cropHeight)
+        let centerX = (rect.x + rect.width / 2) * canvas.width
+        let centerY = (rect.y + rect.height / 2) * canvas.height
+        return CGAffineTransform(a: scale, b: 0, c: 0, d: scale,
+                                 tx: canvas.width / 2 - scale * centerX,
+                                 ty: canvas.height / 2 - scale * centerY)
+    }
+
+    /// Interpolace transformace po složkách — táž definice, kterou používá
+    /// `setTransformRamp` uvnitř úseku.
+    private static func lerp(_ a: CGAffineTransform, _ b: CGAffineTransform,
+                             _ f: Double) -> CGAffineTransform {
+        let t = CGFloat(min(max(f, 0), 1))
+        return CGAffineTransform(a: a.a + (b.a - a.a) * t,
+                                 b: a.b + (b.b - a.b) * t,
+                                 c: a.c + (b.c - a.c) * t,
+                                 d: a.d + (b.d - a.d) * t,
+                                 tx: a.tx + (b.tx - a.tx) * t,
+                                 ty: a.ty + (b.ty - a.ty) * t)
     }
 
     /// Aspect-fit klipu na plátno: napřímení (`preferredTransform`),

@@ -372,6 +372,33 @@ final class TimelineController: ObservableObject {
         }
     }
 
+    // MARK: - Fotky a Ken Burns (fáze 12, modul 3)
+
+    /// Kontextové menu žádá zmrazit snímek — obslouží `AppModel` (čtení
+    /// snímku z videa není práce osy).
+    var onFreezeFrameRequest: ((ClipID) -> Void)?
+
+    /// Přepnutí pohybu z pickeru — jeden undo krok.
+    func setKenBurns(_ clipID: ClipID, _ kenBurns: KenBurns?) {
+        guard project.timeline.clip(clipID)?.kenBurns != kenBurns else { return }
+        var updated = project
+        guard (try? updated.setKenBurns(clipID: clipID, kenBurns)) != nil else { return }
+        undo.record(project)
+        project = updated
+    }
+
+    /// Posuvník zoomu — vzorec hlasitosti: mezistavy legální, zapisují se
+    /// průběžně a begin/end z nich složí jeden undo krok.
+    func kenBurnsDragBegan() { undo.beginInteraction(project) }
+
+    func kenBurnsDragChanged(_ clipID: ClipID, _ kenBurns: KenBurns?) {
+        var updated = project
+        guard (try? updated.setKenBurns(clipID: clipID, kenBurns)) != nil else { return }
+        project = updated
+    }
+
+    func kenBurnsDragEnded() { undo.endInteraction(project) }
+
     // MARK: - Synchronizace externího zvuku (fáze 7, modul 5)
 
     /// Kontextové menu klipu žádá synchronizaci — obslouží `AppModel`

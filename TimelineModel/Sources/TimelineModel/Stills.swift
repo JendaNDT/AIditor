@@ -12,8 +12,12 @@
 //  a v `makeClip` — všechno ostatní (trim, split, přesun, přechody,
 //  interakce) z nich meze dostává zadarmo.
 //
-//  Ken Burns = počáteční a koncový VÝŘEZ fotky, oba v normalizovaných
-//  souřadnicích (0–1 vůči obrazu fotky). Kompozice z nich udělá lineární
+//  Ken Burns = počáteční a koncový VÝŘEZ, oba v normalizovaných
+//  souřadnicích 0–1 **vůči PLÁTNU projektu** — mezisoubor fotky má rozměr
+//  plátna s vpáleným aspect-fitem (`StillMovieStore`), takže výřez plátna
+//  je zároveň výřez fotky. U fotky jiného poměru než plátno může výřez
+//  zabrat i černé pruhy — vědomé zjednodušení v1, UI nabízí nájezd/odjezd
+//  ve středu, kde pruhy nejsou. Kompozice z výřezů udělá lineární
 //  `TransformRamp` (plán fáze 12: pohyb je pomalý a krátký, lineár stačí).
 //  Rychlostní křivka na fotce nemá smysl (co by zpomalovala?) a je
 //  ZAKÁZANÁ — freeze frame se dělá fotkou, ne nulovou rychlostí

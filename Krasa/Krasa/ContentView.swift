@@ -74,6 +74,9 @@ final class AppModel: ObservableObject {
             self?.syncExternalAudio(clipID: clipID)
         }
         // Kontextové menu klipu → titulky z řeči (fáze 8).
+        timeline.onFreezeFrameRequest = { [weak self] clipID in
+            self?.freezeFrame(clipID: clipID)
+        }
         timeline.onTranscribeRequest = { [weak self] clipID in
             Task { await self?.performTranscription(clipID: clipID) }
         }
@@ -393,6 +396,70 @@ final class AppModel: ObservableObject {
             return .web   // první spuštění: výchozí podle spec
         }
         return LoudnessProfile(rawValue: raw)   // „none" → nil
+    }
+
+    /// Zmrazí snímek pod hlavou (fáze 12, modul 3): vytáhne ho z ORIGINÁLU
+    /// jako PNG do kontejneru a položí jako fotku na konec V1. Fotka, ne
+    /// nulová rychlost — zákaz z plánu platí (invertibilita SpeedRampEngine).
+    func freezeFrame(clipID: ClipID) {
+        let project = timeline.project
+        guard let clip = project.timeline.clip(clipID),
+              let source = project.asset(clip.assetID),
+              !source.isStill, source.hasVideo,
+              clip.contains(frame: timeline.playhead) else { return }
+        let offset = timeline.playhead - clip.timelineStart
+        let sourceTime = project.sourceOffset(in: clip, atFrame: offset)
+        status = "Zmrazuju snímek…"
+
+        Task {
+            do {
+                let generator = AVAssetImageGenerator(
+                    asset: AVURLAsset(url: source.originalURL))
+                generator.requestedTimeToleranceBefore = .zero
+                generator.requestedTimeToleranceAfter = .zero
+                generator.appliesPreferredTrackTransform = true
+                let time = CMTime(value: sourceTime.value, timescale: sourceTime.timescale)
+                let image = try await generator.image(at: time).image
+
+                let directory = FileManager.default.urls(
+                    for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("FreezeFrames", isDirectory: true)
+                try FileManager.default.createDirectory(
+                    at: directory, withIntermediateDirectories: true)
+                let name = source.originalURL.deletingPathExtension().lastPathComponent
+                let fileURL = directory.appendingPathComponent(
+                    "\(name)-\(UUID().uuidString.prefix(8)).png")
+                guard let destination = CGImageDestinationCreateWithURL(
+                    fileURL as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+                    status = "Zmrazení snímku selhalo — PNG se nepodařilo založit."
+                    return
+                }
+                CGImageDestinationAddImage(destination, image, nil)
+                guard CGImageDestinationFinalize(destination) else {
+                    status = "Zmrazení snímku selhalo — PNG se nepodařilo zapsat."
+                    return
+                }
+
+                // V kontejneru aplikace — sandbox ho pustí i bez bookmarku.
+                var updated = timeline.project
+                guard let v1 = updated.timeline.tracks.first(where: { $0.kind == .video })?.id
+                else { return }
+                let photo = Asset.still(url: fileURL)
+                updated.addAsset(photo)
+                guard let still = try? updated.makeClip(assetID: photo.id,
+                                                        at: updated.duration),
+                      (try? updated.insert(still, onTrack: v1)) != nil else {
+                    status = "Zmrazený snímek se nepodařilo položit na osu."
+                    return
+                }
+                timeline.undo.record(timeline.project)
+                timeline.project = updated
+                timeline.selectClips([still.id])
+                status = "Snímek zmrazen — fotka na konci osy (5 s, jde natáhnout)."
+            } catch {
+                status = "Zmrazení snímku selhalo: \(error.localizedDescription)"
+            }
+        }
     }
 
     /// Přidá fotky na konec V1 (fáze 12). Na rozdíl od importu klipů
@@ -958,6 +1025,15 @@ final class AppModel: ObservableObject {
             var still = try project.makeClip(assetID: photo.id, at: Frames(60))
             still.duration = Frames(90)
             try project.insert(still, onTrack: project.timeline.tracks[0].id)
+            // Druhá fotka s Ken Burns (modul 3): nájezd z celku do středu.
+            // Na konci nájezdu je výřez celý uvnitř bílého čtverce, takže
+            // z posledního snímku zmizí černé pruhy — to je měřitelné.
+            var moving = try project.makeClip(assetID: photo.id, at: Frames(150))
+            moving.duration = Frames(90)
+            try project.insert(moving, onTrack: project.timeline.tracks[0].id)
+            try project.setKenBurns(clipID: moving.id, KenBurns(
+                start: .full,
+                end: NormalizedRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5)))
         } catch {
             print("❌ stavba osy selhala: \(error)"); return
         }
@@ -969,7 +1045,9 @@ final class AppModel: ObservableObject {
 
         guard let videoFrame = await lumaGrid(url: url, seconds: 30.5 / 30),
               let photoFrame = await lumaGrid(url: url, seconds: 100.5 / 30),
-              let lastFrame = await lumaGrid(url: url, seconds: 149.5 / 30) else {
+              let lastFrame = await lumaGrid(url: url, seconds: 149.5 / 30),
+              let kbStart = await lumaGrid(url: url, seconds: 150.5 / 30),
+              let kbEnd = await lumaGrid(url: url, seconds: 239.5 / 30) else {
             print("❌ nepodařilo se přečíst kontrolní snímky"); return
         }
 
@@ -991,7 +1069,73 @@ final class AppModel: ObservableObject {
         print(videoMean > 5 && columns(videoFrame, [0, 7]) < 200
               ? String(format: "✓ snímek videa vypadá jako video (průměr %.0f)", videoMean)
               : "❌ snímek videa je podezřelý")
+
+        // Ken Burns: na začátku nájezdu celek (pruhy), na konci výřez celý
+        // uvnitř bílého čtverce — pruhy zmizí a krajní sloupce zbělají.
+        let kbStartBars = columns(kbStart, [0, 7])
+        let kbEndBars = columns(kbEnd, [0, 7])
+        print(String(format: "Ken Burns: pruhy na začátku %.0f | na konci %.0f",
+                     kbStartBars, kbEndBars))
+        print(kbStartBars < 25 && kbEndBars > 180
+              ? "✓ Ken Burns jede — nájezd do středu vytlačil pruhy z obrazu"
+              : "❌ Ken Burns v exportu nefunguje")
         print("PHOTO_CHECK_PATH=\(directory.path)")
+    }
+
+    /// CLI ověření freeze framu (fáze 12, modul 3): klip na ose, hlava
+    /// na snímek 30 → zmrazit → na konci osy je fotka, jejíž PNG se
+    /// obsahově shoduje se zdrojovým snímkem v čase 1 s.
+    func verifyFreezeFrame() async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        var project = Project.empty()
+        project.addAsset(source)
+        let clipID: ClipID
+        do {
+            var clip = try project.makeClip(assetID: source.id)
+            clip.duration = Frames(90)
+            try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+            clipID = clip.id
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        timeline.project = project
+        timeline.setPlayheadFromUser(Frames(30))
+
+        freezeFrame(clipID: clipID)
+        for _ in 0..<40 where !timeline.project.assets.contains(where: \.isStill) {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        guard let photo = timeline.project.assets.first(where: \.isStill) else {
+            print("❌ fotka po zmrazení nevznikla"); return
+        }
+        print("PNG: \(photo.originalURL.lastPathComponent)")
+        guard FileManager.default.fileExists(atPath: photo.originalURL.path) else {
+            print("❌ soubor fotky neexistuje"); return
+        }
+        guard let still = timeline.project.timeline.tracks[0].clips.last,
+              still.assetID == photo.id, still.timelineStart == Frames(90) else {
+            print("❌ klip fotky neleží na konci osy"); return
+        }
+        print("✓ fotka leží na konci osy (od snímku 90, délka \(still.duration.count))")
+
+        // Obsah: PNG proti zdrojovému snímku v čase 1,000 s (hlava 30
+        // → zdroj 1 s; obě cesty čtou zero-tolerance týž snímek).
+        guard let sourceGrid = await lumaGrid(url: source.originalURL, seconds: 1.0),
+              let imageSource = CGImageSourceCreateWithURL(photo.originalURL as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(imageSource, 0, nil),
+              let photoGrid = Self.lumaGrid(image: image) else {
+            print("❌ nepodařilo se přečíst snímky k porovnání"); return
+        }
+        let mae = zip(sourceGrid, photoGrid).map { abs($0 - $1) }.reduce(0, +)
+            / Double(sourceGrid.count)
+        print(String(format: "odchylka fotky od zdrojového snímku: %.2f", mae))
+        print(mae < 4
+              ? "✓ zmrazený snímek odpovídá obrazu pod hlavou"
+              : "❌ zmrazený snímek NEODPOVÍDÁ obrazu pod hlavou")
     }
 
     /// Bílý čtverec jako PNG — syntetická fotka pro `--photo-check`.
@@ -1109,7 +1253,11 @@ final class AppModel: ObservableObject {
         generator.maximumSize = CGSize(width: 192, height: 108)
         let time = CMTime(seconds: seconds, preferredTimescale: SourceTime.projectTimescale)
         guard let image = try? await generator.image(at: time).image else { return nil }
+        return Self.lumaGrid(image: image)
+    }
 
+    /// Táž mřížka z hotového obrázku — pro PNG z freeze framu.
+    private static func lumaGrid(image: CGImage) -> [Double]? {
         let side = 8
         var pixels = [UInt8](repeating: 0, count: side * side * 4)
         let ok = pixels.withUnsafeMutableBytes { buffer -> Bool in
@@ -1803,6 +1951,8 @@ struct ContentView: View {
                     await model.verifyTitleExport()
                 } else if arguments.contains("--photo-check") {
                     await model.verifyPhotoExport()
+                } else if arguments.contains("--freeze-check") {
+                    await model.verifyFreezeFrame()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
@@ -2006,9 +2156,21 @@ private struct InspectorStrip: View {
         } else if let speech = timeline.selectedSpeech,
                   let text = speechText(speech) {
             SpeechInspector(timeline: timeline, selection: speech, currentText: text)
+        } else if let still = selectedStillClip() {
+            // Fotka: editor křivky by tu neměl co dělat (rampa na fotce
+            // je zakázaná) — místo něj Ken Burns (fáze 12, modul 3).
+            PhotoInspector(timeline: timeline, clipID: still)
         } else {
             RampEditorPaneView(controller: timeline)
         }
+    }
+
+    private func selectedStillClip() -> ClipID? {
+        guard timeline.selection.count == 1,
+              let id = timeline.selection.first,
+              let clip = timeline.project.timeline.clip(id),
+              timeline.project.asset(clip.assetID)?.isStill == true else { return nil }
+        return id
     }
 
     private func speechText(_ speech: TimelineController.SpeechSelection) -> String? {
@@ -2073,6 +2235,87 @@ private struct TitleInspector: View {
             .frame(width: 220)
         }
         .padding(10)
+    }
+}
+
+/// Inspektor fotky (fáze 12, modul 3): Ken Burns jako pohyb + zoom.
+/// Výřezy drží poměr plátna (v normalizovaných jednotkách w == h) a sedí
+/// ve středu — nájezd/odjezd, klasika svatebních prezentací. Volné
+/// obdélníky až bude důvod; model je umí už teď.
+private struct PhotoInspector: View {
+    @ObservedObject var timeline: TimelineController
+    let clipID: ClipID
+
+    private enum Motion: String, CaseIterable {
+        case none, zoomIn, zoomOut
+    }
+
+    var body: some View {
+        let kenBurns = timeline.project.timeline.clip(clipID)?.kenBurns
+        let motion = Self.motion(of: kenBurns)
+        let zoom = Self.zoom(of: kenBurns)
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Fotka — pohyb (Ken Burns)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("Pohyb", selection: Binding(
+                get: { motion },
+                set: { timeline.setKenBurns(clipID, Self.kenBurns(motion: $0, zoom: zoom)) })) {
+                Text("Bez pohybu").tag(Motion.none)
+                Text("Nájezd").tag(Motion.zoomIn)
+                Text("Odjezd").tag(Motion.zoomOut)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 320)
+
+            HStack(spacing: 10) {
+                Text("Zoom")
+                Slider(value: Binding(
+                    get: { zoom },
+                    set: { timeline.kenBurnsDragChanged(
+                        clipID, Self.kenBurns(motion: motion, zoom: $0)) }),
+                    in: 1.1...2.0,
+                    onEditingChanged: { editing in
+                        if editing { timeline.kenBurnsDragBegan() }
+                        else { timeline.kenBurnsDragEnded() }
+                    })
+                    .frame(width: 220)
+                    .disabled(motion == .none)
+                Text(String(format: "%.1f×", zoom))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Nájezd jede z celku do středu, odjezd obráceně. "
+                 + "Pohyb je vidět v náhledu i v exportu.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private static func motion(of kenBurns: KenBurns?) -> Motion {
+        guard let kenBurns else { return .none }
+        return kenBurns.start.width >= kenBurns.end.width ? .zoomIn : .zoomOut
+    }
+
+    private static func zoom(of kenBurns: KenBurns?) -> Double {
+        guard let kenBurns else { return 1.3 }
+        return 1.0 / min(kenBurns.start.width, kenBurns.end.width)
+    }
+
+    private static func kenBurns(motion: Motion, zoom: Double) -> KenBurns? {
+        guard motion != .none else { return nil }
+        let width = 1.0 / max(zoom, 1.01)
+        let inner = NormalizedRect(x: (1 - width) / 2, y: (1 - width) / 2,
+                                   width: width, height: width)
+        return motion == .zoomIn
+            ? KenBurns(start: .full, end: inner)
+            : KenBurns(start: inner, end: .full)
     }
 }
 

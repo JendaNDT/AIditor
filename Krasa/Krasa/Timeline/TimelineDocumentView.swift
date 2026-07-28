@@ -1346,15 +1346,42 @@ final class TimelineDocumentView: NSView {
         ripple.target = self
         menu.addItem(ripple)
 
+        // Fotka (fáze 12): rampa, sync ani přepis na ní nedávají smysl —
+        // položky zůstávají VYPNUTÉ s vysvětlením, nemizí (přiznané meze).
+        let menuClip = controller.project.timeline.clip(hit.clipID)
+        let isStillClip = menuClip.flatMap { controller.project.asset($0.assetID) }?
+            .isStill == true
+
         // Preset klasického svatebního rampu — jemné doladění je na editoru
         // křivky pod přehrávačem (modul 3).
         menu.addItem(.separator())
-        let hasRamp = controller.project.timeline.clip(hit.clipID)?.speedRamp != nil
+        let hasRamp = menuClip?.speedRamp != nil
         let ramp = NSMenuItem(title: hasRamp ? "Zrušit rychlostní křivku"
                                              : "Zpomalit 0,25× (klasický ramp)",
                               action: #selector(menuToggleRamp(_:)), keyEquivalent: "")
         ramp.target = self
+        ramp.isEnabled = !isStillClip
+        if isStillClip { ramp.toolTip = "Fotka stojí sama — zpomalovat není co." }
         menu.addItem(ramp)
+
+        // Zmrazit snímek (fáze 12, modul 3): z videa pod hlavou se udělá
+        // fotka na konci osy. Jen když hlava vede vnitřkem klipu.
+        if !isStillClip {
+            let freeze = NSMenuItem(title: "Zmrazit snímek (fotka na konec osy)",
+                                    action: #selector(menuFreezeFrame(_:)),
+                                    keyEquivalent: "")
+            freeze.target = self
+            if let clip = menuClip {
+                freeze.isEnabled = clip.contains(frame: controller.playhead)
+                    && controller.project.timeline.track(id: hit.trackID)?.kind == .video
+            } else {
+                freeze.isEnabled = false
+            }
+            if !freeze.isEnabled {
+                freeze.toolTip = "Postav hlavu na snímek uvnitř obrazového klipu."
+            }
+            menu.addItem(freeze)
+        }
 
         // Sync klopáku (fáze 7, modul 5). U klipu s rampou vypnuto —
         // zvuk položený lineárně by se s křivkou rozjel.
@@ -1362,7 +1389,8 @@ final class TimelineDocumentView: NSView {
         let sync = NSMenuItem(title: "Synchronizovat externí zvuk…",
                               action: #selector(menuSyncAudio(_:)), keyEquivalent: "")
         sync.target = self
-        sync.isEnabled = !hasRamp
+        sync.isEnabled = !hasRamp && !isStillClip
+        if isStillClip { sync.toolTip = "Fotka nemá zvuk, ke kterému by se synchronizovalo." }
         menu.addItem(sync)
 
         // Titulky z řeči (fáze 8) — přepis patří assetu, takže stačí
@@ -1370,9 +1398,16 @@ final class TimelineDocumentView: NSView {
         let transcribe = NSMenuItem(title: "Vytvořit titulky z řeči",
                                     action: #selector(menuTranscribe(_:)), keyEquivalent: "")
         transcribe.target = self
+        transcribe.isEnabled = !isStillClip
+        if isStillClip { transcribe.toolTip = "Fotka nemá řeč k přepisu." }
         menu.addItem(transcribe)
 
         return menu
+    }
+
+    @objc private func menuFreezeFrame(_ sender: Any?) {
+        guard let clipID = menuClipID else { return }
+        controller.onFreezeFrameRequest?(clipID)
     }
 
     @objc private func menuAddTitle(_ sender: NSMenuItem) {

@@ -107,6 +107,9 @@ enum TimelinePalette {
 final class ClipLayer: CALayer {
 
     let title = CATextLayer()
+    /// Poslední zapsaný titulek — `title.string` se přepisuje jen při změně,
+    /// jinak `CATextLayer` rastruje text při každém scrollovacím tiku znova.
+    var titleText: String?
     /// Kontejner dlaždic vlny — pod titulkem, ořezaný na klip.
     let waveContainer = CALayer()
     /// Dlaždice podle indexu. Obsah spravuje `TimelineDocumentView`.
@@ -222,7 +225,39 @@ final class TimelineDocumentView: NSView {
 
     /// Přepočítá POČET vrstev podle stop. Volá se při změně sady stop,
     /// ne při každém layoutu — ten jen přepisuje rámce.
+    /// Data klipu potřebná ke kreslení, jedním slovníkovým sáhnutím.
+    ///
+    /// ⚠️ `timeline.clip()` je LINEÁRNÍ přes všechny klipy. Volat ho (a hledání
+    /// assetu a jména) pro každý viditelný klip při každém tiku scrollu stálo
+    /// na ose s 2000 klipy ~5 ms z rozpočtu 16,7 ms — změřeno výkonovým
+    /// testem fáze 2. Slovník se přestavuje jen při změně projektu.
+    private struct ClipDrawInfo {
+        let clip: Clip
+        let asset: Asset?
+        let kind: TrackKind
+        let name: String
+    }
+    private var clipInfo: [ClipID: ClipDrawInfo] = [:]
+
+    private func rebuildClipInfo() {
+        let project = controller.project
+        var info: [ClipID: ClipDrawInfo] = [:]
+        for track in project.timeline.tracks {
+            for clip in track.clips {
+                let asset = project.asset(clip.assetID)
+                info[clip.id] = ClipDrawInfo(
+                    clip: clip,
+                    asset: asset,
+                    kind: track.kind,
+                    name: asset.map { $0.originalURL.deletingPathExtension().lastPathComponent }
+                        ?? "—")
+            }
+        }
+        clipInfo = info
+    }
+
     func rebuildLanes() {
+        rebuildClipInfo()
         let count = controller.project.timeline.tracks.count
 
         while laneLayers.count > count {
@@ -312,6 +347,12 @@ final class TimelineDocumentView: NSView {
         let diff = TimelineLayout.diff(previous: Set(mountedClipLayers.keys),
                                        next: placements)
 
+        // Pojistka proti zastaralému slovníku: normálně ho přestaví `reload`,
+        // ale kdyby refresh předběhl, doplní se tady místo kreslení pomlček.
+        if placements.contains(where: { clipInfo[$0.clipID] == nil }) {
+            rebuildClipInfo()
+        }
+
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
@@ -348,7 +389,8 @@ final class TimelineDocumentView: NSView {
         layer.frame = CGRect(x: placement.x, y: placement.y,
                              width: placement.width, height: placement.height)
 
-        let kind = controller.project.timeline.track(id: placement.trackID)?.kind ?? .video
+        let info = clipInfo[placement.clipID]
+        let kind = info?.kind ?? .video
         let fill = kind == .video ? TimelinePalette.clipVideoFill : TimelinePalette.clipAudioFill
         layer.backgroundColor = fill.cgColor
         layer.borderColor = placement.isSelected
@@ -359,12 +401,19 @@ final class TimelineDocumentView: NSView {
         // U titěrných klipů se titulek i vlna schovávají ÚPLNĚ, nezmenšují —
         // zmenšený text je rozsypaný a zmenšená vlna šum (návrh, sekce 6).
         layer.title.isHidden = placement.width < 40
-        layer.title.string = clipName(placement.clipID)
+        // Přepsat jen při ZMĚNĚ: `CATextLayer` po každém zápisu `string`
+        // rastruje text znova, i když je stejný — při scrollu to dělalo
+        // desítky rastrů za tik.
+        let name = info?.name ?? "—"
+        if layer.titleText != name {
+            layer.titleText = name
+            layer.title.string = name
+        }
         layer.title.foregroundColor = TimelinePalette.clipText.cgColor
         layer.title.frame = CGRect(x: 6, y: 2,
                                    width: max(0, placement.width - 12), height: 15)
 
-        applyWaveform(placement, to: layer, kind: kind, visible: visible)
+        applyWaveform(placement, to: layer, info: info, visible: visible)
     }
 
     // MARK: - Vlnové průběhy (krok 10)
@@ -374,12 +423,11 @@ final class TimelineDocumentView: NSView {
     /// jen posune výřez. Renderují se líně na pozadí; dokud nejsou, je pod
     /// titulkem prostě jen barva klipu.
     private func applyWaveform(_ placement: TimelineLayout.Placement, to layer: ClipLayer,
-                               kind: TrackKind, visible: NSRect) {
+                               info: ClipDrawInfo?, visible: NSRect) {
         let pointsPerFrame = controller.geometry.pointsPerFrame
-        guard kind == .audio,
+        guard let info, info.kind == .audio,
               placement.width >= 32,
-              let clip = controller.project.timeline.clip(placement.clipID),
-              let asset = controller.project.asset(clip.assetID),
+              let asset = info.asset,
               let peaks = controller.waveforms.peaks(for: asset),
               peaks.count > 0
         else {
@@ -387,6 +435,7 @@ final class TimelineDocumentView: NSView {
             layer.waveRung = 0
             return
         }
+        let clip = info.clip
 
         let rung = WaveformStore.rung(for: pointsPerFrame)
         if layer.waveRung != rung {
@@ -441,12 +490,6 @@ final class TimelineDocumentView: NSView {
         }
     }
 
-    /// Jméno souboru bez přípony. Klip vlastní jméno nemá — bere ho z assetu.
-    private func clipName(_ clipID: ClipID) -> String {
-        guard let clip = controller.project.timeline.clip(clipID),
-              let asset = controller.project.asset(clip.assetID) else { return "—" }
-        return asset.originalURL.deletingPathExtension().lastPathComponent
-    }
 
     // MARK: - Barvy
 

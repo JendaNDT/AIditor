@@ -16,6 +16,7 @@
 		D7E8F9A0B1C2D3E4F5061728 /* CompositionBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9F0A1B2C3D4E5F607182930 /* CompositionBuilder.swift */; };
 		2D92BF1645FAEB9D099F10E6 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99311C7072B0DEAD06939D03 /* PlayerView.swift */; };
 		1F9F8B29E107494593AB0078 /* SystemConditions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A457BB75BADC45205B9B3F69 /* SystemConditions.swift */; };
+		3A7D1E5C9F2B40618D3C7A5E /* TimelineScrollBenchmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C2E8A4D1B7F30529E6D8C4A /* TimelineScrollBenchmark.swift */; };
 		D8D296ED416C1618E779BF80 /* PlaybackBenchmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9168C630193BE62D64B5B960 /* PlaybackBenchmark.swift */; };
 		35F555F0783E426C92AA424B /* ProbeKit in Frameworks */ = {isa = PBXBuildFile; productRef = B0DAC348D3FBC2130428908B /* ProbeKit */; };
 		D37162A8507F2462184062CA /* SpeedRampEngine in Frameworks */ = {isa = PBXBuildFile; productRef = AF884B639665597476B455E5 /* SpeedRampEngine */; };
@@ -39,6 +40,7 @@
 		E9F0A1B2C3D4E5F607182930 /* CompositionBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionBuilder.swift; sourceTree = "<group>"; };
 		99311C7072B0DEAD06939D03 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
 		A457BB75BADC45205B9B3F69 /* SystemConditions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemConditions.swift; sourceTree = "<group>"; };
+		5C2E8A4D1B7F30529E6D8C4A /* TimelineScrollBenchmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineScrollBenchmark.swift; sourceTree = "<group>"; };
 		9168C630193BE62D64B5B960 /* PlaybackBenchmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackBenchmark.swift; sourceTree = "<group>"; };
 		E8CE4721331CF75E9478C7F2 /* Krasa.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Krasa.entitlements; sourceTree = "<group>"; };
 		5C0E48B9A17D3F62E0B95741 /* TimelineController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineController.swift; sourceTree = "<group>"; };
@@ -110,6 +112,7 @@
 			isa = PBXGroup;
 			children = (
 				A457BB75BADC45205B9B3F69 /* SystemConditions.swift */,
+				5C2E8A4D1B7F30529E6D8C4A /* TimelineScrollBenchmark.swift */,
 				9168C630193BE62D64B5B960 /* PlaybackBenchmark.swift */,
 			);
 			path = Measure;
@@ -214,6 +217,7 @@
 				D7E8F9A0B1C2D3E4F5061728 /* CompositionBuilder.swift in Sources */,
 				2D92BF1645FAEB9D099F10E6 /* PlayerView.swift in Sources */,
 				1F9F8B29E107494593AB0078 /* SystemConditions.swift in Sources */,
+				3A7D1E5C9F2B40618D3C7A5E /* TimelineScrollBenchmark.swift in Sources */,
 				D8D296ED416C1618E779BF80 /* PlaybackBenchmark.swift in Sources */,
 				2F71D6C304AB859E1D3E7F0A /* TimelineController.swift in Sources */,
 				A9E3B57C1F0842D6C7B93E15 /* TimelineDocumentView.swift in Sources */,

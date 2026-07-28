@@ -134,9 +134,13 @@ final class TimelinePane: NSView {
                 .sink { [weak self] _ in self?.documentView.updatePlayhead() },
             // Dopočítané špičky a dlaždice vlny (krok 10). Verze roste na
             // pozadí dokončenou prací — refresh si hotové kusy vyzvedne.
+            // Throttle: při scrollu přes neviděný obsah doběhne desítky
+            // dlaždic za sekundu a každá by spustila celý refresh navíc
+            // k tomu scrollovacímu — výkonový test to měřil jako vypadlé
+            // tiky. Deset sběrů za sekundu hotové dlaždice ukáže stejně.
             controller.waveforms.$version
                 .dropFirst()
-                .receive(on: DispatchQueue.main)
+                .throttle(for: .milliseconds(100), scheduler: DispatchQueue.main, latest: true)
                 .sink { [weak self] _ in self?.documentView.refreshClips() },
         ]
     }
@@ -292,9 +296,13 @@ final class TimelinePane: NSView {
 /// sáhl po tom systémovém.
 struct TimelinePaneView: NSViewRepresentable {
     let controller: TimelineController
+    /// Ohlásí čerstvě vytvořený pane — výkonový test potřebuje scroll view.
+    var onMake: ((TimelinePane) -> Void)? = nil
 
     func makeNSView(context: Context) -> TimelinePane {
-        TimelinePane(controller: controller)
+        let pane = TimelinePane(controller: controller)
+        onMake?(pane)
+        return pane
     }
 
     func updateNSView(_ nsView: TimelinePane, context: Context) {

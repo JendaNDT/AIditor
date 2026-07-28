@@ -250,4 +250,61 @@ final class TimelineController: ObservableObject {
         playhead = .zero
         undo = UndoStack()
     }
+
+    // MARK: - Zátěžový projekt (výkonový test fáze 2)
+
+    /// Postaví syntetickou osu pro výkonový test: `pairs` dvojic obraz+zvuk
+    /// (tedy 2×`pairs` klipů) nastříhaných dokola z naskenovaných assetů.
+    /// Délky klipů cyklují 45–150 snímků a zdrojový začátek se posouvá,
+    /// ať recyklované vrstvy a dlaždice vln nedostávají identickou práci.
+    func loadStressProject(from timings: [ClipTiming], pairs: Int) {
+        var built = Project.empty()
+        guard let videoTrack = built.timeline.tracks.first(where: { $0.kind == .video })?.id,
+              let audioTrack = built.timeline.tracks.first(where: { $0.kind == .audio })?.id
+        else { return }
+
+        var usable: [Asset] = []
+        for timing in timings
+        where timing.measuredFrameRate > 0 && timing.sampleCount > 0
+            && timing.audioSourceOffset != nil {
+            let seconds = Double(timing.sampleCount) / timing.measuredFrameRate
+            let asset = Asset(originalURL: timing.url,
+                              duration: SourceTime(seconds: seconds),
+                              measuredFrameRate: timing.measuredFrameRate)
+            built.addAsset(asset)
+            usable.append(asset)
+        }
+        guard !usable.isEmpty else { return }
+
+        let durations = [45, 90, 150, 60, 120]
+        var cursor = Frames.zero
+        for index in 0..<pairs {
+            let asset = usable[index % usable.count]
+            let available = built.timeline.availableFrames(from: asset.duration)
+            let length = Frames(min(durations[index % durations.count], available.count))
+            guard length.count > 0 else { continue }
+            let slack = max(1, available.count - length.count + 1)
+            let sourceStart = built.timeline.sourceTime(Frames((index * 30) % slack))
+
+            let link = LinkID()
+            let video = Clip(assetID: asset.id, linkID: link,
+                             timelineStart: cursor, duration: length,
+                             sourceStart: sourceStart)
+            let audio = Clip(assetID: asset.id, linkID: link,
+                             timelineStart: cursor, duration: length,
+                             sourceStart: sourceStart)
+            do {
+                try built.insert(video, onTrack: videoTrack)
+                try built.insert(audio, onTrack: audioTrack)
+            } catch {
+                continue
+            }
+            cursor += length
+        }
+
+        project = built
+        selection = []
+        playhead = .zero
+        undo = UndoStack()
+    }
 }

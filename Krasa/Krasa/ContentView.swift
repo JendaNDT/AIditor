@@ -29,6 +29,11 @@ final class AppModel: ObservableObject {
     /// smí kdykoli přetvořit, `TimelineController` to nesmí pocítit.
     let timeline = TimelineController()
     private(set) var hostView: PlayerHostView?
+    /// Pane osy — jen pro výkonový test, který potřebuje scroll view.
+    private(set) weak var timelinePane: TimelinePane?
+    /// Výkonový test osy staví projekt s 2000 klipy — kompozice z něj by se
+    /// stavěla desítky sekund a s měřením scrollu nesouvisí.
+    private var skipsCompositionRebuild = false
 
     /// Pauza mezi běhy. Air je bezventilátorový — bez chladnutí měří druhý
     /// běh teplejší stroj, ne jiný stav.
@@ -67,6 +72,7 @@ final class AppModel: ObservableObject {
     }
 
     func attach(_ view: PlayerHostView) { hostView = view }
+    func attachTimeline(_ pane: TimelinePane) { timelinePane = pane }
 
     // MARK: Import
 
@@ -123,6 +129,7 @@ final class AppModel: ObservableObject {
     /// Od fáze 3 je tohle výchozí obsah přehrávače — hlava, klik do
     /// pravítka i mezerník jedou nad CELOU osou, ne nad jedním souborem.
     private func rebuildTimelineComposition() {
+        guard !skipsCompositionRebuild else { return }
         compositionRebuild?.cancel()
         let project = timeline.project
         compositionRebuild = Task { [weak self] in
@@ -364,6 +371,61 @@ final class AppModel: ObservableObject {
         for line in lines { print(line) }
     }
 
+    // MARK: Výkonový test osy (kritérium fáze 2)
+
+    /// 1000 dvojic obraz+zvuk (2000 klipů), scroll přes celou osu tam
+    /// a zpět, počítání vypadlých tiků. Detaily v `TimelineScrollBenchmark`.
+    func runTimelineStressBench(pairs: Int = 1000) async {
+        guard !clips.isEmpty else {
+            status = "Nejsou naskenované klipy — není z čeho stavět zátěžový projekt."
+            return
+        }
+
+        skipsCompositionRebuild = true
+        defer { skipsCompositionRebuild = false }
+
+        status = "Stavím zátěžový projekt (\(pairs) dvojic klipů)…"
+        timeline.loadStressProject(from: clips, pairs: pairs)
+
+        // Zoom tak, aby se celá osa dala projet za dobu testu se slušnou
+        // hustotou klipů na obrazovce (~40 000 bodů dokumentu).
+        let totalFrames = max(1, timeline.project.duration.count)
+        var geometry = timeline.geometry
+        geometry.setZoom(40_000 / Double(totalFrames))
+        timeline.geometry = geometry
+
+        NSApp.activate(ignoringOtherApps: true)
+
+        let deadline = Date().addingTimeInterval(10)
+        while timelinePane?.window == nil, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        guard let pane = timelinePane, let window = pane.window else {
+            status = "Osa se nedostala do okna, není co scrollovat."
+            return
+        }
+        // Okno musí být VIDĚT: zakryté okno pozastaví display link a měření
+        // by viselo na prvním tiku. Stejná třída pasti jako u měření náhledu.
+        window.makeKeyAndOrderFront(nil)
+
+        // Usadit layout a nechat doběhnout první vlnu výpočtu špiček.
+        status = "Čekám na usazení osy…"
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+
+        isMeasuring = true
+        defer { isMeasuring = false }
+        status = "Scrolluju přes celou osu…"
+
+        let clipCount = timeline.project.timeline.tracks.reduce(0) { $0 + $1.clips.count }
+        let bench = TimelineScrollBenchmark(pane: pane, clipCount: clipCount)
+        let result = await bench.run()
+
+        reportLines = result.report
+        status = "Hotovo."
+        writeReport(result.report, to: "KrasaTimelineBench.txt")
+        for line in result.report { print(line) }
+    }
+
     private func describeCodec(_ clip: ClipTiming) -> String {
         clip.isVariable ? "VFR zdroj" : "CFR zdroj"
     }
@@ -407,6 +469,9 @@ struct ContentView: View {
                 NSApplication.shared.terminate(nil)
             } else if arguments.contains("--benchmark") {
                 await model.runBenchmark(only: Array(explicit))
+                NSApplication.shared.terminate(nil)
+            } else if arguments.contains("--timeline-bench") {
+                await model.runTimelineStressBench()
                 NSApplication.shared.terminate(nil)
             }
         }
@@ -532,7 +597,8 @@ struct ContentView: View {
                 // podělily napůl a pod třemi pruhy (156 bodů) zbylo přes
                 // dvě stě bodů prázdna. Tady si osa říká přesně o svoje;
                 // roztahovací dělič je věc kroku 3, až přibude pravítko.
-                TimelinePaneView(controller: model.timeline)
+                TimelinePaneView(controller: model.timeline,
+                                 onMake: { model.attachTimeline($0) })
                     .frame(height: 220)
             }
 

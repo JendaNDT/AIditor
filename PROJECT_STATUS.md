@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 12, modul 2)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 12 HOTOVÁ)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,9 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): přechody → texty/T1 → fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 12, modul 3 — Ken Burns v kompozici a freeze frame.** Ken Burns = lineární transform rampy v instrukcích video kompozice (u fotky s KB kompozice vzniknout MUSÍ — pozor na GPU skok, vzorec přechodů) + UI (inspektor fotky s výřezy); freeze frame = „zmrazit snímek" vytáhne aktuální snímek do fotky na ose. Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 13 — barevné presety, modul 1** (Core Image per klip s intenzitou 0–100 %; rozhodnout mezi `AVVideoComposition(applyingCIFiltersWith:)` a vlastním compositorem — kritérium je shoda náhled/export a výkon; další kandidát na GPU skok, měřit). Detail v `IMPLEMENTACNI_PLAN.md`.
 
-## 🔄 FÁZE 12 — fotky a Ken Burns (rozjetá 29. 07. 2026)
+## ✅ FÁZE 12 — fotky a Ken Burns (HOTOVÁ 29. 07. 2026)
 
 ✅ **Modul 1 — model: fotka jako asset, klip s volnou délkou, Ken Burns (29. 07. 2026).** Čistý Swift, **+15 testů, celkem 351, 0 selhání**; aplikace i balíčky se překládají beze změn.
 
@@ -32,6 +32,14 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
   - **Import: menu Soubor → „Přidat fotky…"** (HEIC/JPEG/PNG, security-scoped bookmark hned) — fotky se PŘIDÁVAJÍ na konec V1 do rozdělané práce, nepřepisují osu jako import klipů. Jeden undo krok. Na ose se fotka kreslí jako obrazový klip (je to `Clip` na V1 — kreslení zadarmo).
   - **Ověřeno CLI `--photo-check` kvantitativně:** syntetický bílý čtverec 1000×1000 → osa video (0–60) + fotka (60–150) → export 150 snímků. Snímek fotky: **střed 244 jasu, pruhy 0** (aspect-fit čtverce do 16:9 přesně); fotka drží do posledního snímku (zero-order hold); snímek videa nedotčený. Vytažený snímek okem: bílý čtverec uprostřed, černé pruhy po stranách.
   - *Koukanec rukou (odloženo autorem, v seznamu): Přidat fotky…, fotka v náhledu při přehrávání a scrubování, natažení délky fotky tažením okraje.*
+
+✅ **Modul 3 — Ken Burns v kompozici, inspektor fotky a freeze frame (29. 07. 2026): FÁZE 12 JE TÍM HOTOVÁ.**
+
+  - **Ken Burns v `CompositionBuilderu`:** výřezy (normalizované vůči PLÁTNU — mezisoubor fotky má rozměr plátna, sémantika upřesněná v modelu) → `setTransformRamp` s lineární interpolací. Krajní hodnoty úseků instrukcí se interpolují PO SLOŽKÁCH — přesně tak rampu interpoluje kompozice sama, takže úseky navazují beze švů (kombinace KB + přechod na témže klipu funguje). Klip s KB vynucuje video kompozici — GPU skok stejné třídy jako u přechodů (změřeno F10, medián ~12 %), bez KB a přechodů zůstává přímá cesta.
+  - **Inspektor fotky** (pás pod přehrávačem místo editoru křivky — rampa na fotce je zakázaná): pohyb Bez pohybu / Nájezd / Odjezd + zoom 1,1–2,0× (posuvník = jeden undo krok, vzorec hlasitosti). Výřezy drží poměr plátna a sedí ve středu; volné obdélníky model umí, UI je nabídne, až bude důvod.
+  - **Freeze frame:** kontextové menu klipu → „Zmrazit snímek (fotka na konec osy)" — snímek pod hlavou se vytáhne z ORIGINÁLU (`AVAssetImageGenerator`, zero tolerance, `preferredTransform`) jako PNG do kontejneru (`FreezeFrames/`, bez bookmarku — kontejner sandbox pustí) a položí jako fotka na konec V1. Fotka, ne nulová rychlost — zákaz z plánu platí. Na fotce jsou rampa/sync/přepis v menu VYPNUTÉ s vysvětlením (přiznané meze).
+  - **Ověřeno CLI:** `--photo-check` rozšířen o klip s nájezdem — pruhy na začátku **0**, na konci **254** (nájezd do bílého čtverce je vytlačil z obrazu), snímek uprostřed pohybu okem sedí (čtverec větší, pruhy tenčí). `--freeze-check`: fotka vznikne na konci osy a od zdrojového snímku pod hlavou se liší o **1,29** jasu (dekodér+PNG, prakticky shoda).
+  - *Koukanec rukou (v seznamu): inspektor fotky mění pohyb v náhledu, zmrazit snímek z menu.*
 
 ## ✅ FÁZE 11 — texty, titulky a stopa T1 (HOTOVÁ 29. 07. 2026)
 
@@ -129,6 +137,7 @@ Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou p�
 **Seznam koukanců (odškrtávat po projití):**
 
 - [ ] **Přechody (F10):** pravý klik poblíž střihu → prolínačka/zatmívačka (na zvukové stopě prolnutí zvuku); lichoběžník na ose jde roztáhnout tažením okraje se zarážkou; „Odebrat přechod" funguje; nedosažitelná prolínačka je v menu vypnutá s vysvětlením; prolínačka v náhledu měkce prolne, zatmívačka projde černou/bílou, crossfade je slyšet; export vypadá i zní jako náhled.
+- [ ] **Fotky a Ken Burns (F12):** Soubor → Přidat fotky… položí fotky na konec V1 (5 s); fotka hraje v náhledu při přehrávání i scrubování (aspect-fit s pruhy); délka fotky jde natáhnout tažením okraje bez omezení; inspektor fotky (výběr klipu fotky) přepíná Bez pohybu / Nájezd / Odjezd a zoom mění pohyb v náhledu; pravý klik na video klip → Zmrazit snímek udělá fotku na konci osy shodnou se snímkem pod hlavou; na fotce jsou rampa/sync/přepis vypnuté s vysvětlením; export vypadá jako náhled (fotka, pohyb i pruhy).
 - [ ] **Texty a T1 (F11):** pravý klik na volné místo T1 → Přidat titulek (obsazené místo vypnuté s vysvětlením); nový titulek se vybere a v inspektoru jde hned psát — text se mění v náhledu při psaní; šablony mění vzhled (jména velká patková přes střed), zarovnání funguje; tažení těla přesouvá se zarážkou o sousedy, okraje trimují, Shift vypíná přichytávání, Escape ruší, Delete maže, ⌘Z vrací; klik na zelený pásek řeči → inspektor přepisu, úprava textu se propíše do titulku v náhledu, prázdný text úsek smaže; titulek za posledním klipem prodlouží film (přes černou); exportovaný film má titulky na stejných místech a se stejným vzhledem jako náhled.
 - [ ] **Dotaz při zavírání (F5):** změna v projektu → ⌘Q ukáže Uložit/Neukládat/Zrušit (Escape ruší); týž dotaz po výběru souboru při ⌘O a importu; „Uložit" u neuloženého projektu přes „Uložit jako" — zrušení panelu ruší i zavírání.
 - [ ] **Hlasitost stop (F7):** posuvník v hlavičce A1/A2 mění hlasitost ZA BĚHU přehrávání bez zastavení; M ztlumí a vrátí; ⌘Z vrací tažení jedním krokem; hodnoty přežijí uložení a otevření projektu.

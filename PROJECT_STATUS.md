@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 28. 07. 2026*
+*Naposled aktualizováno: 28. 07. 2026 (pozdě večer — fáze 10, modul 1)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,7 +13,21 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): přechody → texty/T1 → fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 10 — přechody, modul 1 (model `Transition` + testy).** Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 10 — přechody, modul 2 (kompozice: A/B roll + opacity rampy + audio crossfade; ⚠️ HNED změřit GPU skok — první video kompozice v přehrávání).** Modul 1 (model) je hotový, viz sekce fáze 10 níže. Detail v `IMPLEMENTACNI_PLAN.md`.
+
+## 🔄 FÁZE 10 — přechody (rozjetá 28. 07. 2026)
+
+✅ **Modul 1 — model `Transition` v `TimelineModelu` (28. 07. 2026).** Čistý Swift, **+30 testů, celkem 284, 0 selhání**; aplikace se s novým modelem překládá beze změn.
+
+  - **Přechod patří STŘIHU, ne klipu:** `Transition` žije na stopě a drží dvojici (levý, pravý klip); platí, jen dokud ty dva na ose skutečně sousedí. Druhy: prolínačka, zatmívačka do černé/bílé (obraz), crossfade (zvuk) — druh se kontroluje proti druhu stopy. Na jednom střihu nejvýš jeden; přepsání zachovává ID (výběr v UI se nemá rozpadnout kvůli změně délky).
+  - **Oblast:** celková délka D snímků, před střihem ⌊D/2⌋, za ním zbytek (liché délky přidávají snímek ZA střih — pevně, ne podle nálady). Prolínačka a crossfade **spotřebovávají zdroj za hranou střihu na obou stranách** (meze přes hotové `remainingSourceFrames`/`availableSourceFramesBefore`); zatmívačka žádný přesah nepotřebuje — levý dojede do barvy ve svých snímcích, pravý se z ní vynoří ve svých.
+  - **`maxTransitionDuration`** — model spočítá největší legální délku střihu (vejití do dvojice, zdrojové přesahy, oblasti sousedních přechodů) a `setTransition` ji vymáhá; při překročení ji vrací v chybě `transitionTooLong(maxDuration:)` — **z té UI v modulu 3 udělá zarážku tažení** (vzorec `wouldOverlap.nearestLegal`). Property test: na maximu projde vždy, nad ním nikdy (40 kol, seedovaně).
+  - **Dvě pravidla pro editace, vymáhaná operacemi:** ① střih zanikl (smazání, přesun, mezera po trimu, ripple, overwrite, closeGap) → **přechod umírá s ním** (undo ho vrátí, snapshoty nesou celý projekt); ② střih žije, ale operace by přechod rozbila (trim pod rameno oblasti, slip pod zdrojový přesah, roll mimo meze, split vedený oblastí) → **operace se odmítne** s `blockedByTransition` — žádné tiché zkracování. Jediné místo vyhodnocení pravidel je `transitionDefects()`; `validate()` z něj překládá 6 nových invariantů (12–17), operace přes `reconcileTransitions`.
+  - **Split/join přechody přepojují:** levá polovina dědí ID originálu (levý střih drží sám), přechod na pravém střihu se přepojí na pravou polovinu; join maže přechod zaniklého vnitřního střihu a vnější přepojí na slepenec.
+  - **Rampovaný střih zakázán OBĚMA směry** (v1 dle plánu): přechod na rampu nejde přidat (`transitionOnRampedCut`) a rampa na klip s přechodem taky ne (`blockedByTransition`) — UI řekne „napřed smaž přechod".
+  - **Starší projektové soubory se dál načtou:** pole `Track.transitions` se čte jako prázdné, verze formátu se nezvedá (týž vzorec jako `Asset.transcript`); test dekóduje stopu z JSON bez toho pole.
+
+  **Zbývá z fáze 10:** modul 2 — kompozice (A/B roll dvě obrazové stopy, `AVVideoComposition` opacity rampy přes překryv, zvukový crossfade přes `AVAudioMix.setVolumeRamp`; ⚠️ první video kompozice v přehrávání = očekávaný GPU skok, změřit HNED a zapsat čísla) a modul 3 — UI (přechod z kontextového menu střihu, lichoběžník přes hranu, délka tažením okraje se zarážkou z `maxTransitionDuration`).
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 

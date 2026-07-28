@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 28. 07. 2026 (v noci — fáze 11, modul 1)*
+*Naposled aktualizováno: 28. 07. 2026 (v noci — fáze 11, modul 2)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,7 +13,7 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): přechody → texty/T1 → fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 11, modul 2 — titulky v náhledu (overlay vzorcem `SubtitleOverlay`) a kreslení pruhu T1 na ose.** Modul 1 (model) je hotový, viz níže. Pak: export přes `AVVideoCompositionCoreAnimationTool`, inspektor s editací textu (splácí i editaci titulků z přepisu). Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 11, modul 3 — interakce titulků a inspektor.** Přidání titulku z menu na pruhu T1, tažení/trim/výběr titulkového klipu, inspektor s editací textu (splácí i editaci titulků z přepisu). Pak modul 4: vypálení do exportu přes `AVVideoCompositionCoreAnimationTool`. Detail v `IMPLEMENTACNI_PLAN.md`.
 
 ## 🔄 FÁZE 11 — texty, titulky a stopa T1 (rozjetá 28. 07. 2026)
 
@@ -26,6 +26,13 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
   - **Formát souboru v2.** Nový PŘÍPAD enumu `TrackKind.title` není volitelné pole — starší aplikace by na něm spadla dekódovací chybou místo srozumitelného „soubor je z novější verze", a výchozí projekt teď T1 obsahuje vždy. Soubory verze 1 se dál načtou (test na doslovném JSON z doby před fází 11); pole `Track.titles` se u nich čte jako prázdné (vzorec `transitions`).
   - **Drobnosti kolem:** `project.duration` počítá i titulky (závěrečné poděkování za posledním záběrem film prodlužuje — přes černou); geometrie zná výšku titulkové stopy (28 b); hrany titulků jsou kandidáti přichytávání.
   - *Koukanec rukou: zatím není na co — stopa je v modelu, kreslit ji začne modul 2.*
+
+✅ **Modul 2 — titulky v náhledu a pruh T1 na ose (28. 07. 2026).** Rozložení „logika do modelu": **+4 testy (celkem 330)** na `titleCues()` (seřazené promítnutí pro overlay, nese šablonu i zarovnání), `titlePlacements` (viditelnostní filtr, souřadnice dokumentu, nese text — titulků jsou jednotky, slovník netřeba) a `subtitleStripPlacements` (pásky řeči v pruhu PRVNÍ titulkové stopy; hotové cues dodává volající — přepočet patří do reloadu, ne do scrollu; bez T1 prázdné).
+
+  - **`TitleOverlay` v náhledu:** týž vzorec jako `SubtitleOverlay` (cues přepočítané jen při změně projektu s debounce 150 ms, na tik hlavy jen filtr, kreslí se JEN když má co říct — GPU baseline chráněná, při měřeních schovaný). Šablona tady dostává konkrétní podobu: jména velkým patkovým písmem přes střed, kapitola/poděkování/datum menší pod sebou, prostý text v dolní třetině NAD řečovými titulky. Velikosti jsou zlomky výšky náhledu; **stín místo podkladové desky** — deska je poznávací znak řečového titulku, grafika leží na obraze.
+  - **Pruh T1 v `TimelineDocumentView`:** `TitleLayer` (CALayer + CATextLayer, žádné `draw` — past `ContentLayer` platí), terakotová výplň (nová v paletě: neplete se s modrou/zelenou/fialovou/žlutou), recyklace ručně jako u přechodů, text přepisovaný jen při změně. **Pásky titulků z řeči**: tenké zelené proužky při spodní hraně pruhu (zvuková zelená s průhledností — řeč žije ve zvuku a pásek je projekce, ne uchopitelný objekt), pod titulkovými klipy, recyklované indexem (nemají identitu). Cues v mezipaměti obnovované v `rebuildClipInfo`.
+  - **Ověřeno screenshoty běžící aplikace (`--title-demo`):** jména patkovým písmem uprostřed náhledu SOUČASNĚ s řečovým titulkem na desce dole; na ose tři terakotové titulky na T1 a zelený pásek řeči viditelný v mezeře mezi nimi. Demo staví osu s titulky a syntetickým přepisem, postaví hlavu do jmen a drží okno ~25 s v popředí.
+  - Interakce s titulky na ose zatím ŽÁDNÁ (tažení, menu, výběr) — modul 3; overlay i pruh jsou čistě kreslení.
 
 ## ✅ FÁZE 10 — přechody (HOTOVÁ 28. 07. 2026)
 

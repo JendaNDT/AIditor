@@ -8,15 +8,30 @@
 //  s týmž objektem jako okno.
 //
 
+import AppKit
 import SwiftUI
+
+/// Delegát kvůli ⌘Q s neuloženými změnami — SwiftUI vlastní hák na „zeptej
+/// se před ukončením" nemá, `applicationShouldTerminate` ho má. Model se
+/// přišívá v `onAppear`, delegáta vyrábí SwiftUI dřív než `@StateObject`.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    weak var model: AppModel?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        (model?.shouldTerminate() ?? true) ? .terminateNow : .terminateCancel
+    }
+}
 
 @main
 struct KrasaApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel()
 
     var body: some Scene {
         WindowGroup("Krása") {
             ContentView(model: model)
+                .onAppear { appDelegate.model = model }
         }
         .windowResizability(.contentMinSize)
         .commands {

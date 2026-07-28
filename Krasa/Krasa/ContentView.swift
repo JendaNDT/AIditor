@@ -115,6 +115,47 @@ final class AppModel: ObservableObject {
 
     // MARK: Projektový soubor (fáze 5)
 
+    /// Dotaz před zahozením neuložené práce: ukončení aplikace, otevření
+    /// jiného projektu i import (= nový projekt). Vrací `true` = pokračuj.
+    ///
+    /// „Neukládat" zahazuje i autosave — je to výslovné rozhodnutí a příští
+    /// start by jinak „obnovoval" práci, kterou uživatel právě zahodil.
+    /// Volá se až PO výběru v panelu (otevřít/import), ne před ním: kdyby
+    /// uživatel řekl „Neukládat" a pak panel zrušil, projekt by zůstal,
+    /// ale ochrana už by byla pryč.
+    func confirmLosingUnsavedWork() -> Bool {
+        guard projectStore.isDirty else { return true }
+        let alert = NSAlert()
+        alert.messageText = "Uložit změny v projektu „\(projectStore.displayName)“?"
+        alert.informativeText = "Bez uložení se změny ztratí."
+        alert.addButton(withTitle: "Uložit")
+        alert.addButton(withTitle: "Neukládat")
+        alert.addButton(withTitle: "Zrušit")
+        alert.buttons[2].keyEquivalent = "\u{1b}"   // Escape = Zrušit
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            saveProject()
+            // Neuložený projekt jde přes „Uložit jako" a ten panel se dá
+            // zrušit — pak je pořád špinavo a pokračovat se nesmí.
+            return !projectStore.isDirty
+        case .alertSecondButtonReturn:
+            projectStore.discardAutosave()
+            projectStore.markCurrent(timeline.project)
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// ⌘Q. CLI běhy (`--…`) se neptají — `terminate(nil)` v headless
+    /// režimu by visel na modálním dialogu.
+    func shouldTerminate() -> Bool {
+        if CommandLine.arguments.dropFirst().contains(where: { $0.hasPrefix("--") }) {
+            return true
+        }
+        return confirmLosingUnsavedWork()
+    }
+
     func saveProject() {
         if let url = projectStore.fileURL {
             performSave(to: url)
@@ -147,6 +188,7 @@ final class AppModel: ObservableObject {
         panel.allowedContentTypes = [ProjectStore.fileType]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard confirmLosingUnsavedWork() else { return }
         Task { await openProject(at: url) }
     }
 
@@ -427,6 +469,9 @@ final class AppModel: ObservableObject {
     func openFiles(directories: Bool) async {
         let urls = importer.promptForAccess(directories: directories)
         guard !urls.isEmpty else { return }
+        // Import = nový projekt, stávající osa se přepíše — tedy stejný
+        // dotaz jako při otevírání a ukončování.
+        guard confirmLosingUnsavedWork() else { return }
         await ingest(urls: urls)
     }
 

@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE FUNKČNĚ KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR, všechno potvrzené rukou. Před námi KILL-GATE 1.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -92,7 +92,13 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   ✅ **Koukanec modulu 3 potvrzen rukou a uchem (28. 07. 2026): export funguje, video je plynulé i se zvukem.**
 
-  **Zbývá z fáze 5:** drobnost — dotaz při zavírání neuloženého projektu (autosave ale práci chrání i bez něj). Pak je **v0.5 „MVP nula" KOMPLETNÍ** a před námi KILL-GATE 1: sestříhat touhle appkou celou reálnou svatbu.
+✅ **Modul 4 — dotaz při zahazování neuložené práce (28. 07. 2026).** Jeden dialog „Uložit / Neukládat / Zrušit" na třech místech, kde se zahazuje rozdělaná práce: ⌘Q (přes `NSApplicationDelegate.applicationShouldTerminate` — SwiftUI vlastní hák nemá, delegát je přišitý přes `@NSApplicationDelegateAdaptor`), otevření jiného projektu a import klipů (= nový projekt). Tři rozhodnutí:
+
+  - **„Neukládat" zahazuje i autosave** — je to výslovné rozhodnutí uživatele; příští start by jinak „obnovoval" práci, kterou právě zahodil. „Uložit" u neuloženého projektu jde přes „Uložit jako" a zrušení toho panelu ruší i zavírání (hlídá se `isDirty` po návratu, ne návratová hodnota panelu).
+  - **Dotaz přichází až PO výběru v panelu** (otevřít/import), ne před ním — kdyby uživatel řekl „Neukládat" a pak panel zrušil, projekt by zůstal, ale záloha už by byla pryč.
+  - **CLI běhy (`--…`) se neptají** — `terminate(nil)` v headless režimu by visel na modálním dialogu. Ověřeno: `--autosave-check` po změně prošel a aplikace se ukončila i se špinavým projektem.
+
+  **v0.5 „MVP nula" je tím KOMPLETNÍ** — před námi KILL-GATE 1: sestříhat touhle appkou celou reálnou svatbu. *(Koukanec dialogu rukou zatím neproběhl: ⌘Q se změnami, Uložit/Neukládat/Zrušit, dotaz před otevřením i importem.)*
 
 ## ✅ FÁZE 4 — proxy a výkon (HOTOVÁ až na kritérium reálného materiálu, 28. 07. 2026)
 
@@ -239,7 +245,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 
 ## 🔄 Rozjeté (nedodělané)
 - **Fáze 4 — proxy.** Hotová a potvrzená rukou; otevřené zůstává jen kritérium plynulosti na reálném 200GB materiálu (přirozeně u Kill-gate 1).
-- **Fáze 5 — projekt a export.** Hotová až na drobnost (dotaz při zavírání neuloženého projektu). MVP nula je funkčně kompletní — na řadě je KILL-GATE 1: sestříhat reálnou svatbu.
+- **Fáze 5 — projekt a export.** HOTOVÁ včetně dotazu při zavírání neuloženého projektu (dialog čeká na koukanec rukou). MVP nula je kompletní — na řadě je KILL-GATE 1: sestříhat reálnou svatbu.
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
@@ -249,7 +255,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu — ✅ **HOTOVO 28. 07. 2026** (228 testů modelu, interakce rukou, výkonový test 2000 klipů bez vypadlého tiku)
 - **F3** Speed ramping ostrý — ✅ **HOTOVO 28. 07. 2026** (tři moduly, potvrzeno rukou; reálný čas: dva dny místo tří týdnů)
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)* — 🔄 **ProxyStore + správa úložiště hotové a potvrzené rukou (externí disk funguje); zbývá kritérium plynulosti na reálném materiálu**
-- **F5** Projekt, autosave, undo, export *(3 týdny)* — ✅ **HOTOVO 28. 07. 2026 až na drobnost (dotaz při zavírání neuloženého projektu) — projektový soubor, autosave s obnovou po pádu i export, vše potvrzeno rukou**
+- **F5** Projekt, autosave, undo, export *(3 týdny)* — ✅ **HOTOVO 28. 07. 2026 — projektový soubor, autosave s obnovou po pádu, export i dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou)**
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
 ### Cesta k v1.0 (+~4 měsíce)

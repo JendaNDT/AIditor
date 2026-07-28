@@ -81,7 +81,7 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   ⚠️ Poznámka k restartu: `usesProxies` je per projekt a projekt se zatím při každém startu staví znovu ze skenu — přepínač se tedy vrací na vypnuto. Srovná se to s projektovým souborem ve fázi 5, není to vada proxy.
 
-  👀 **Koukanec modulu 2:** „Změnit umístění…" na externí disk (nebo jinou složku) → proxy se vygenerují znovu tam a přepínač po dogenerování funguje; „Smazat proxy" vyprázdní úložiště a přepínač zhasne; po odpojení/připojení disku appka nastartuje bez pádu.
+  ✅ **Koukanec modulu 2 potvrzen rukou (28. 07. 2026): externí disk funguje, proxy se vygenerovaly znovu do nového umístění.** Kritérium plánu „proxy jde vygenerovat na externí disk" je tím splněné. *(Neověřené drobnosti: „Smazat proxy" a start s odpojeným diskem — kód na to je, oko na tom nebylo.)*
 
   **Zbývá z fáze 4:** kritérium „200 GB projekt se stříhá plynule" — chce reálný svatební materiál, ne pět testovacích klipů.
 
@@ -217,7 +217,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu — ✅ **HOTOVO 28. 07. 2026** (228 testů modelu, interakce rukou, výkonový test 2000 klipů bez vypadlého tiku)
 - **F3** Speed ramping ostrý — ✅ **HOTOVO 28. 07. 2026** (tři moduly, potvrzeno rukou; reálný čas: dva dny místo tří týdnů)
-- **F4** Proxy + zploštění VFR→CFR *(2 týdny)* — 🔄 **ProxyStore + správa úložiště hotové (externí disk, mazání cache); zbývá kritérium plynulosti na reálném materiálu**
+- **F4** Proxy + zploštění VFR→CFR *(2 týdny)* — 🔄 **ProxyStore + správa úložiště hotové a potvrzené rukou (externí disk funguje); zbývá kritérium plynulosti na reálném materiálu**
 - **F5** Projekt, autosave, undo, export *(3 týdny)*
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 

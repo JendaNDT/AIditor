@@ -43,6 +43,10 @@ public enum TimelineError: Error, Hashable, Sendable {
     /// Operaci brání přechod na dotčeném střihu — napřed ho zkrať nebo smaž.
     /// Hází se místo tichého zkracování: střih žije, přechod by se rozbil.
     case blockedByTransition(TransitionID)
+    case titleNotFound(TitleClipID)
+    /// Titulek by se překryl s jiným — nese mez, na které UI zarazí tažení
+    /// (vzorec `wouldOverlap.nearestLegal`).
+    case titleWouldOverlap(with: TitleClipID, nearestLegal: Frames)
 }
 
 // MARK: - Assety
@@ -156,10 +160,20 @@ extension Project {
         guard clip.timelineStart.count >= 0 else { throw TimelineError.negativePosition }
 
         if let asset = asset(clip.assetID) {
-            let ok = (track.kind == .video) ? asset.hasVideo : asset.hasAudio
-            guard ok else {
-                throw TimelineError.wrongTrackKind(expected: track.kind,
-                                                   got: track.kind == .video ? .audio : .video)
+            switch track.kind {
+            case .video:
+                guard asset.hasVideo else {
+                    throw TimelineError.wrongTrackKind(expected: .video, got: .audio)
+                }
+            case .audio:
+                guard asset.hasAudio else {
+                    throw TimelineError.wrongTrackKind(expected: .audio, got: .video)
+                }
+            case .title:
+                // Titulková stopa asset klipy nenese nikdy — patří na ni
+                // jen `TitleClip`y (fáze 11).
+                throw TimelineError.wrongTrackKind(expected: .title,
+                                                   got: asset.hasVideo ? .video : .audio)
             }
         } else {
             throw TimelineError.assetNotFound(clip.assetID)

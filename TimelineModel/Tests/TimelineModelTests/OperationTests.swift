@@ -355,11 +355,12 @@ final class OperationTests: XCTestCase {
 
     // MARK: Ostatní (62–67)
 
-    // 62.
-    func testEmptyProjectHasThreeTracks() {
+    // 62. Od fáze 11 s titulkovou T1 — schválně POSLEDNÍ, aplikace si
+    // domýšlí tracks[0] = V1 a tracks[1] = A1.
+    func testEmptyProjectHasFourTracks() {
         let p = Project.empty()
-        XCTAssertEqual(p.timeline.tracks.map(\.name), ["V1", "A1", "A2"])
-        XCTAssertEqual(p.timeline.tracks.map(\.kind), [.video, .audio, .audio])
+        XCTAssertEqual(p.timeline.tracks.map(\.name), ["V1", "A1", "A2", "T1"])
+        XCTAssertEqual(p.timeline.tracks.map(\.kind), [.video, .audio, .audio, .title])
         XCTAssertValid(p)
     }
 

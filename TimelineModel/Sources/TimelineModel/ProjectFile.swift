@@ -37,7 +37,11 @@ public struct ProjectFile: Codable, Equatable, Sendable {
 
     /// Zvyšovat při každé změně formátu, která starší aplikaci znemožní
     /// soubor přečíst. Doplnění volitelného pole verzi nezvedá.
-    public static let currentFormatVersion = 1
+    ///
+    /// Verze 2 (fáze 11): druh stopy `title`. Nový PŘÍPAD enumu není
+    /// volitelné pole — starší aplikace by na něm spadla dekódovací chybou
+    /// místo srozumitelného odmítnutí, a výchozí projekt T1 obsahuje vždy.
+    public static let currentFormatVersion = 2
 
     public var formatVersion: Int
     public var name: String

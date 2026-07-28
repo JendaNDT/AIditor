@@ -185,6 +185,10 @@ public struct Clip: Identifiable, Hashable, Codable, Sendable {
 
 public enum TrackKind: String, Codable, Sendable {
     case video, audio
+    /// Titulková stopa (T1, fáze 11). Nese `TitleClip`y, nikdy asset klipy.
+    /// ⚠️ Starší aplikace tenhle případ nedokáže dekódovat — proto zvedl
+    /// `ProjectFile.currentFormatVersion` na 2.
+    case title
 }
 
 public struct AudioSettings: Hashable, Codable, Sendable {
@@ -209,26 +213,32 @@ public struct Track: Identifiable, Hashable, Codable, Sendable {
     /// Přechody na střihách téhle stopy (fáze 10). Zapisuj jen přes
     /// `Project.setTransition` a spol. — operace hlídají meze.
     public internal(set) var transitions: [Transition]
+    /// Titulkové klipy (fáze 11). Jen na stopě druhu `.title`; vždy seřazené
+    /// a nepřekrývající se, stejná pravidla jako `clips`. Zapisuj přes
+    /// `Project.addTitle` a spol.
+    public internal(set) var titles: [TitleClip]
 
     public init(id: TrackID = TrackID(),
                 kind: TrackKind,
                 name: String,
                 audio: AudioSettings? = nil,
                 clips: [Clip] = [],
-                transitions: [Transition] = []) {
+                transitions: [Transition] = [],
+                titles: [TitleClip] = []) {
         self.id = id
         self.kind = kind
         self.name = name
         self.audio = audio ?? (kind == .audio ? AudioSettings() : nil)
         self.clips = clips
         self.transitions = transitions
+        self.titles = titles
     }
 
-    /// Starší projektové soubory pole `transitions` nemají — čte se jako
-    /// prázdné a verze formátu se kvůli němu nezvedá (týž vzorec jako
+    /// Starší projektové soubory pole `transitions` a `titles` nemají — čtou
+    /// se jako prázdná a verze formátu se kvůli nim nezvedá (týž vzorec jako
     /// `Asset.transcript`). Zápis zůstává syntetizovaný.
     private enum CodingKeys: String, CodingKey {
-        case id, kind, name, audio, clips, transitions
+        case id, kind, name, audio, clips, transitions, titles
     }
 
     public init(from decoder: Decoder) throws {
@@ -239,10 +249,14 @@ public struct Track: Identifiable, Hashable, Codable, Sendable {
         audio = try c.decodeIfPresent(AudioSettings.self, forKey: .audio)
         clips = try c.decode([Clip].self, forKey: .clips)
         transitions = try c.decodeIfPresent([Transition].self, forKey: .transitions) ?? []
+        titles = try c.decodeIfPresent([TitleClip].self, forKey: .titles) ?? []
     }
 
     public func clip(id: ClipID) -> Clip? { clips.first { $0.id == id } }
     public func index(of id: ClipID) -> Int? { clips.firstIndex { $0.id == id } }
+
+    public func title(id: TitleClipID) -> TitleClip? { titles.first { $0.id == id } }
+    public func index(ofTitle id: TitleClipID) -> Int? { titles.firstIndex { $0.id == id } }
 
     /// Vloží při zachování pořadí. Nekontroluje překryv — to dělá operace.
     mutating func insertSorted(_ clip: Clip) {
@@ -252,6 +266,15 @@ public struct Track: Identifiable, Hashable, Codable, Sendable {
 
     mutating func resort() {
         clips.sort { $0.timelineStart < $1.timelineStart }
+    }
+
+    mutating func insertSorted(_ title: TitleClip) {
+        let i = titles.firstIndex { $0.timelineStart > title.timelineStart } ?? titles.count
+        titles.insert(title, at: i)
+    }
+
+    mutating func resortTitles() {
+        titles.sort { $0.timelineStart < $1.timelineStart }
     }
 }
 
@@ -365,12 +388,18 @@ public struct Project: Hashable, Codable, Sendable {
 
     public func asset(_ id: AssetID) -> Asset? { assets.first { $0.id == id } }
 
-    /// Výchozí prázdný projekt: V1 + A1 + A2 podle specifikace 8.1.
+    /// Výchozí prázdný projekt: V1 + A1 + A2 podle specifikace 8.1,
+    /// od fáze 11 navíc titulková T1.
+    ///
+    /// ⚠️ T1 je ZÁMĚRNĚ poslední: aplikace si na několika místech domýšlí
+    /// `tracks[0]` = V1 a `tracks[1]` = A1. Pořadí v poli je datové, ne
+    /// zobrazovací — kde má T1 ležet na obrazovce, rozhoduje UI.
     public static func empty(canvasSize: CanvasSize = .uhd4K) -> Project {
         Project(timeline: Timeline(canvasSize: canvasSize, tracks: [
             Track(kind: .video, name: "V1"),
             Track(kind: .audio, name: "A1"),
             Track(kind: .audio, name: "A2"),
+            Track(kind: .title, name: "T1"),
         ]))
     }
 

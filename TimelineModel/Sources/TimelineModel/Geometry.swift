@@ -28,6 +28,9 @@ public struct TimelineGeometry: Hashable, Sendable {
     public var videoTrackHeight: Double
     /// Výška zvukové stopy v bodech.
     public var audioTrackHeight: Double
+    /// Výška titulkové stopy v bodech. Nejnižší — nese jen krátký text,
+    /// vlna ani náhled na ní nikdy nebudou.
+    public var titleTrackHeight: Double
     /// Mezera mezi stopami.
     public var trackSpacing: Double
 
@@ -39,12 +42,14 @@ public struct TimelineGeometry: Hashable, Sendable {
     public init(pointsPerFrame: Double = 4,
                 videoTrackHeight: Double = 64,
                 audioTrackHeight: Double = 44,
+                titleTrackHeight: Double = 28,
                 trackSpacing: Double = 2,
                 edgeGrabWidth: Double = 8,
                 snapTolerance: Double = 10) {
         self.pointsPerFrame = pointsPerFrame
         self.videoTrackHeight = videoTrackHeight
         self.audioTrackHeight = audioTrackHeight
+        self.titleTrackHeight = titleTrackHeight
         self.trackSpacing = trackSpacing
         self.edgeGrabWidth = edgeGrabWidth
         self.snapTolerance = snapTolerance
@@ -88,7 +93,11 @@ public struct TimelineGeometry: Hashable, Sendable {
     // MARK: - Svislé rozvržení
 
     public func height(of kind: TrackKind) -> Double {
-        kind == .video ? videoTrackHeight : audioTrackHeight
+        switch kind {
+        case .video: return videoTrackHeight
+        case .audio: return audioTrackHeight
+        case .title: return titleTrackHeight
+        }
     }
 
     /// Horní hrana stopy na daném indexu.
@@ -273,6 +282,12 @@ extension TimelineGeometry {
             for clip in track.clips where !excluding.contains(clip.id) {
                 out.append(SnapCandidate(frame: clip.timelineStart, kind: .clipEdge))
                 out.append(SnapCandidate(frame: clip.timelineEnd, kind: .clipEdge))
+            }
+            // Hrany titulků přitahují stejně jako hrany klipů — titulek se
+            // typicky zarovnává na střih a střih na titulek.
+            for title in track.titles {
+                out.append(SnapCandidate(frame: title.timelineStart, kind: .clipEdge))
+                out.append(SnapCandidate(frame: title.timelineEnd, kind: .clipEdge))
             }
         }
         return out

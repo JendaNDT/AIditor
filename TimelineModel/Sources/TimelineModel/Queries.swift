@@ -83,8 +83,12 @@ extension Project {
         return timeline.tracks.flatMap(\.clips).filter { $0.linkID == link && $0.id != clipID }
     }
 
-    /// Celková délka projektu — konec nejpozdějšího klipu.
+    /// Celková délka projektu — konec nejpozdějšího klipu NEBO titulku.
+    /// Titulky se počítají schválně: závěrečné poděkování smí ležet za
+    /// posledním záběrem (přes černou) a film končí až s ním.
     public var duration: Frames {
-        timeline.tracks.flatMap(\.clips).map(\.timelineEnd).max() ?? .zero
+        let clipEnd = timeline.tracks.flatMap(\.clips).map(\.timelineEnd).max() ?? .zero
+        let titleEnd = timeline.tracks.flatMap(\.titles).map(\.timelineEnd).max() ?? .zero
+        return max(clipEnd, titleEnd)
     }
 }

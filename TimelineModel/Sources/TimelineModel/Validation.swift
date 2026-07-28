@@ -2,7 +2,7 @@
 //  Validation.swift
 //  TimelineModel — Projekt Krása
 //
-//  Deset invariantů, které musí platit po KAŽDÉ operaci. Testy je kontrolují
+//  Invarianty (23), které musí platit po KAŽDÉ operaci. Testy je kontrolují
 //  po každém volání, takže chytí i chyby, na které test přímo necílil.
 //
 
@@ -46,6 +46,19 @@ public enum Violation: Hashable, Sendable {
     /// 17. Oblasti dvou přechodů na téže stopě se překrývají
     /// (dva na jednom střihu se překrývají vždy).
     case overlappingTransitions(TransitionID, TransitionID)
+    /// 18. Titulek na stopě, která není titulková. (Obrácený směr — asset
+    /// klip na titulkové stopě — hlásí č. 8 `wrongTrackKind`.)
+    case titleOnWrongTrack(TitleClipID)
+    /// 19. Titulky na stopě nejsou seřazené vzestupně.
+    case unsortedTitles(TrackID)
+    /// 20. Dva titulky na téže stopě se překrývají. (Dotyk překryv NENÍ.)
+    case overlappingTitles(TitleClipID, TitleClipID)
+    /// 21. Titulek nulové nebo záporné délky.
+    case nonPositiveTitleDuration(TitleClipID)
+    /// 22. Titulek začíná před nulou.
+    case negativeTitleStart(TitleClipID)
+    /// 23. Dva titulky sdílejí ID.
+    case duplicateTitleID(TitleClipID)
 }
 
 extension Project {
@@ -100,7 +113,12 @@ extension Project {
                     if end > asset.duration {
                         out.append(.exceedsSource(clip.id))
                     }
-                    let ok = (track.kind == .video) ? asset.hasVideo : asset.hasAudio
+                    let ok: Bool
+                    switch track.kind {
+                    case .video: ok = asset.hasVideo
+                    case .audio: ok = asset.hasAudio
+                    case .title: ok = false   // asset klip na T1 nemá co dělat
+                    }
                     if !ok {
                         out.append(.wrongTrackKind(clip.id, track.kind))
                     }
@@ -119,6 +137,37 @@ extension Project {
             let kinds = Set(members.map(\.1))
             if members.count > 2 || (members.count == 2 && kinds.count != 2) {
                 out.append(.brokenLink(link))
+            }
+        }
+
+        // 18.–23. titulky (fáze 11)
+        var seenTitleIDs = Set<TitleClipID>()
+        for track in timeline.tracks {
+            // 19. seřazenost
+            if zip(track.titles, track.titles.dropFirst()).contains(where: { $0.timelineStart > $1.timelineStart }) {
+                out.append(.unsortedTitles(track.id))
+            }
+            for (i, title) in track.titles.enumerated() {
+                // 18. jen na titulkové stopě
+                if track.kind != .title {
+                    out.append(.titleOnWrongTrack(title.id))
+                }
+                // 23. jedinečnost ID
+                if !seenTitleIDs.insert(title.id).inserted {
+                    out.append(.duplicateTitleID(title.id))
+                }
+                // 21. kladná délka
+                if title.duration.count <= 0 {
+                    out.append(.nonPositiveTitleDuration(title.id))
+                }
+                // 22. nezáporný začátek
+                if title.timelineStart.count < 0 {
+                    out.append(.negativeTitleStart(title.id))
+                }
+                // 20. překryv — stačí soused, pole je seřazené
+                if i + 1 < track.titles.count, title.overlaps(track.titles[i + 1]) {
+                    out.append(.overlappingTitles(title.id, track.titles[i + 1].id))
+                }
             }
         }
 

@@ -53,8 +53,9 @@ final class ProjectFileTests: XCTestCase {
     func testNovejsiVerzeSeOdmitneSrozumitelne() throws {
         let file = ProjectFile(project: Project.empty(), name: "X")
         var text = String(data: try file.encoded(), encoding: .utf8)!
-        text = text.replacingOccurrences(of: "\"formatVersion\" : 1",
-                                         with: "\"formatVersion\" : 999")
+        text = text.replacingOccurrences(
+            of: "\"formatVersion\" : \(ProjectFile.currentFormatVersion)",
+            with: "\"formatVersion\" : 999")
         XCTAssertThrowsError(try ProjectFile.decode(Data(text.utf8))) { error in
             XCTAssertEqual(error as? ProjectFileError,
                            .unsupportedVersion(found: 999,

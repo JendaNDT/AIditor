@@ -38,12 +38,13 @@ final class GeometryTests: XCTestCase {
     // MARK: Svislé rozvržení
 
     func testTrackLayoutStacksWithSpacing() {
-        let p = Project.empty()          // V1 (64) + A1 (44) + A2 (44), mezera 2
+        let p = Project.empty()          // V1 (64) + A1 (44) + A2 (44) + T1 (28), mezera 2
         let g = TimelineGeometry()
         XCTAssertEqual(g.y(ofTrackAt: 0, in: p.timeline), 0)
         XCTAssertEqual(g.y(ofTrackAt: 1, in: p.timeline), 66)
         XCTAssertEqual(g.y(ofTrackAt: 2, in: p.timeline), 112)
-        XCTAssertEqual(g.totalHeight(of: p.timeline), 156, "bez koncové mezery")
+        XCTAssertEqual(g.y(ofTrackAt: 3, in: p.timeline), 158)
+        XCTAssertEqual(g.totalHeight(of: p.timeline), 186, "bez koncové mezery")
     }
 
     func testTrackIndexAtY() {

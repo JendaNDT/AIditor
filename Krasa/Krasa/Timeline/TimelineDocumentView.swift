@@ -48,9 +48,15 @@ enum TimelinePalette {
     static let videoLane = adaptive("timelineVideoLane", dark: 0.24, light: 0.95)
     /// Pruh zvukové stopy.
     static let audioLane = adaptive("timelineAudioLane", dark: 0.17, light: 0.88)
+    /// Pruh titulkové stopy — nejtmavší; je úzký a vedlejší.
+    static let titleLane = adaptive("timelineTitleLane", dark: 0.13, light: 0.83)
 
     static func lane(for kind: TrackKind) -> NSColor {
-        kind == .video ? videoLane : audioLane
+        switch kind {
+        case .video: return videoLane
+        case .audio: return audioLane
+        case .title: return titleLane
+        }
     }
 
     /// Pozadí pravítka a hlaviček. Mezi pozadím osy a pruhy, ať je poznat,
@@ -105,6 +111,20 @@ enum TimelinePalette {
         "transitionStroke",
         dark: NSColor(calibratedRed: 0.78, green: 0.66, blue: 1.00, alpha: 1),
         light: NSColor(calibratedRed: 0.36, green: 0.20, blue: 0.62, alpha: 1))
+
+    /// Výplň titulkového klipu na T1. Terakotová — nesmí se plést s modrým
+    /// obrazem, zeleným zvukem, fialovými přechody ani žlutým výběrem;
+    /// od žluté ji drží dál ztmavení a příklon k červené.
+    static let titleClipFill = adaptive(
+        "titleClipFill",
+        dark: NSColor(calibratedRed: 0.55, green: 0.32, blue: 0.20, alpha: 1),
+        light: NSColor(calibratedRed: 0.87, green: 0.64, blue: 0.48, alpha: 1))
+    /// Pásek titulku z řeči v pruhu T1. Zvuková zelená s průhledností —
+    /// řeč žije ve zvuku a pásek je jen projekce, ne uchopitelný objekt.
+    static let speechStripFill = adaptive(
+        "speechStripFill",
+        dark: NSColor(calibratedRed: 0.16, green: 0.41, blue: 0.30, alpha: 0.60),
+        light: NSColor(calibratedRed: 0.45, green: 0.68, blue: 0.53, alpha: 0.65))
 
     /// Přehrávací hlava. Červená je konvence — jediná svislá červená čára
     /// v celém okně, nesmí se s ničím plést.
@@ -192,6 +212,35 @@ final class TransitionLayer: CAShapeLayer {
     required init?(coder: NSCoder) { fatalError("nepoužívá se") }
 }
 
+/// Vrstva titulkového klipu na pruhu T1 (fáze 11, modul 2). Jen barvy,
+/// obrys a `CATextLayer` s textem — ŽÁDNÉ `draw`, platí past s celookenní
+/// `ContentLayer` (viz `TimelinePane`).
+final class TitleLayer: CALayer {
+
+    let label = CATextLayer()
+    /// Poslední zapsaný text — stejný důvod jako `ClipLayer.titleText`:
+    /// `CATextLayer` rastruje při každém zápisu `string` znova.
+    var labelText: String?
+
+    override init() {
+        super.init()
+        cornerRadius = 3
+        masksToBounds = true
+        borderWidth = 1
+        label.fontSize = 10
+        label.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        label.truncationMode = .end
+        addSublayer(label)
+    }
+
+    override init(layer: Any) {
+        super.init(layer: layer)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("nepoužívá se") }
+}
+
 final class TimelineDocumentView: NSView {
 
     /// Vlastník stavu. Silná reference je v pořádku, protože controller
@@ -219,6 +268,19 @@ final class TimelineDocumentView: NSView {
     private var mountedTransitionLayers: [TransitionID: TransitionLayer] = [:]
     private var transitionLayerPool: [TransitionLayer] = []
 
+    /// Pruh T1 (fáze 11, modul 2): titulkové klipy a pásky titulků z řeči.
+    /// Pásky se přidávají do kontejneru PŘED titulky, takže leží pod nimi.
+    /// Recyklace ručně — obou jsou jednotky, stejný důvod jako u přechodů.
+    private let titlesContainer = CALayer()
+    private var mountedTitleLayers: [TitleClipID: TitleLayer] = [:]
+    private var titleLayerPool: [TitleLayer] = []
+    /// Pásky nemají identitu (jsou to projekce přepisu, ne objekty) —
+    /// recyklují se indexem: přebytek se schová, chybějící se přidá.
+    private var speechStripLayers: [CALayer] = []
+    /// Titulky z řeči promítnuté na osu. Přepočet není zadarmo, proto
+    /// mezipaměť obnovovaná v `rebuildClipInfo` (reload), ne při scrollu.
+    private var speechCues: [SubtitleCue] = []
+
     /// Přehrávací hlava — svislá čára přes celou výšku dokumentu, nad klipy.
     private let playheadLayer = CALayer()
 
@@ -245,6 +307,7 @@ final class TimelineDocumentView: NSView {
         wantsLayer = true
         layer?.addSublayer(backgroundLayer)
         layer?.addSublayer(clipsContainer)
+        layer?.addSublayer(titlesContainer)
         layer?.addSublayer(transitionsContainer)
         layer?.addSublayer(dragOverlay)
         layer?.addSublayer(playheadLayer)
@@ -309,6 +372,9 @@ final class TimelineDocumentView: NSView {
             }
         }
         clipInfo = info
+        // Titulky z řeči pro pruh T1 — přepočet patří sem (reload), scroll
+        // už jen mapuje hotové pole na souřadnice.
+        speechCues = project.subtitleCues()
     }
 
     func rebuildLanes() {
@@ -363,6 +429,7 @@ final class TimelineDocumentView: NSView {
         }
 
         clipsContainer.frame = bounds
+        titlesContainer.frame = bounds
         transitionsContainer.frame = bounds
         dragOverlay.frame = bounds
         refreshClips()
@@ -436,7 +503,86 @@ final class TimelineDocumentView: NSView {
             }
         }
 
+        refreshTitles(visible: visible)
         refreshTransitions(visible: visible)
+    }
+
+    // MARK: - Pruh T1 (fáze 11, modul 2)
+
+    /// Titulkové klipy a pásky titulků z řeči. KDE co leží počítá otestovaný
+    /// `TimelineModel` (`titlePlacements`, `subtitleStripPlacements`) —
+    /// tady se jen vrství. Interakce (tažení, menu, výběr) je modul 3.
+    private func refreshTitles(visible: NSRect) {
+        let placements = TimelineLayout.titlePlacements(
+            project: controller.project,
+            geometry: controller.geometry,
+            scrollX: visible.origin.x,
+            width: visible.width)
+        let strips = TimelineLayout.subtitleStripPlacements(
+            cues: speechCues,
+            project: controller.project,
+            geometry: controller.geometry,
+            scrollX: visible.origin.x,
+            width: visible.width)
+
+        let visibleIDs = Set(placements.map(\.titleID))
+        for (id, layer) in mountedTitleLayers where !visibleIDs.contains(id) {
+            mountedTitleLayers.removeValue(forKey: id)
+            layer.removeFromSuperlayer()
+            titleLayerPool.append(layer)
+        }
+
+        // Pásky podle indexu: chybějící přidat (POD titulky — vkládají se
+        // na začátek kontejneru), přebytečné schovat, vrstvy se nezahazují.
+        while speechStripLayers.count < strips.count {
+            let strip = CALayer()
+            strip.cornerRadius = 2
+            titlesContainer.insertSublayer(strip, at: 0)
+            speechStripLayers.append(strip)
+        }
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            for (index, strip) in speechStripLayers.enumerated() {
+                guard index < strips.count else { strip.isHidden = true; continue }
+                strip.isHidden = false
+                strip.backgroundColor = TimelinePalette.speechStripFill.cgColor
+                let s = strips[index]
+                // Tenký proužek při spodní hraně pruhu — plná výška patří
+                // titulkovým klipům, pásek je jen ukazatel „tady se mluví".
+                let stripHeight = 7.0
+                strip.frame = CGRect(x: s.x, y: s.y + s.height - stripHeight - 2,
+                                     width: s.width, height: stripHeight)
+            }
+
+            for placement in placements {
+                let layer: TitleLayer
+                if let mounted = mountedTitleLayers[placement.titleID] {
+                    layer = mounted
+                } else {
+                    layer = titleLayerPool.popLast() ?? TitleLayer()
+                    layer.contentsScale = window?.backingScaleFactor ?? 2
+                    layer.label.contentsScale = layer.contentsScale
+                    titlesContainer.addSublayer(layer)
+                    mountedTitleLayers[placement.titleID] = layer
+                }
+                layer.frame = CGRect(x: placement.x, y: placement.y,
+                                     width: placement.width, height: placement.height)
+                layer.backgroundColor = TimelinePalette.titleClipFill.cgColor
+                layer.borderColor = TimelinePalette.clipStroke.cgColor
+
+                // Stejná pravidla jako jméno klipu: u titěrné šířky schovat
+                // úplně, přepisovat jen při změně.
+                layer.label.isHidden = placement.width < 40
+                if layer.labelText != placement.text {
+                    layer.labelText = placement.text
+                    layer.label.string = placement.text
+                }
+                layer.label.foregroundColor = TimelinePalette.clipText.cgColor
+                layer.label.frame = CGRect(x: 6, y: 2,
+                                           width: max(0, placement.width - 12),
+                                           height: 14)
+            }
+        }
     }
 
     // MARK: - Lichoběžníky přechodů (fáze 10, modul 3)
@@ -645,6 +791,11 @@ final class TimelineDocumentView: NSView {
         for layer in mountedTransitionLayers.values + transitionLayerPool {
             layer.contentsScale = scale
         }
+        for layer in mountedTitleLayers.values + titleLayerPool {
+            layer.contentsScale = scale
+            layer.label.contentsScale = scale
+        }
+        for strip in speechStripLayers { strip.contentsScale = scale }
     }
 
     /// Volá se i při přesunu okna na displej s jiným rozlišením, ne jen na začátku.

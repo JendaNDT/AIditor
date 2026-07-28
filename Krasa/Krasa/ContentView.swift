@@ -793,6 +793,87 @@ final class AppModel: ObservableObject {
         controller.pause()
     }
 
+    /// CLI ukázka fáze 11 (`--title-demo`): postaví osu s grafickými
+    /// titulky na T1 a syntetickým přepisem (pásky řeči v pruhu), hlavu
+    /// postaví do prvního titulku a nechá okno ~25 s v popředí. Nic
+    /// neměří — je to koukanec pro oko a screenshot.
+    func runTitleDemo() async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        var project = Project.empty()
+        project.addAsset(source)
+        guard project.timeline.availableFrames(from: source.duration).count >= 305 else {
+            print("❌ asset je krátký"); return
+        }
+        let v1 = project.timeline.tracks[0].id
+        let a1 = project.timeline.tracks[1].id
+        do {
+            for (start, src) in [(0, 0), (60, 120), (120, 240)] {
+                let video = Clip(assetID: source.id, timelineStart: Frames(start),
+                                 duration: Frames(60),
+                                 sourceStart: project.timeline.sourceTime(Frames(src)))
+                try project.insert(video, onTrack: v1)
+                if source.hasAudio {
+                    let audio = Clip(assetID: source.id, timelineStart: Frames(start),
+                                     duration: Frames(60),
+                                     sourceStart: project.timeline.sourceTime(Frames(src)))
+                    try project.insert(audio, onTrack: a1)
+                }
+            }
+            // Syntetický přepis na assetu → zelené pásky řeči v pruhu T1.
+            // Časy jsou ZDROJOVÉ: 0,5–1,5 s padne do prvního klipu (osa
+            // 15–45, pod titulkem jmen), 8,2–9,4 s do třetího (zdroj
+            // 8–10 s → osa 126–162) — tam pruh T1 nic nezakrývá a pásek
+            // je vidět samostatně.
+            try project.setTranscript(assetID: source.id, segments: [
+                TranscriptSegment(start: SourceTime(seconds: 0.5),
+                                  end: SourceTime(seconds: 1.5),
+                                  text: "Syntetická řeč jedna"),
+                TranscriptSegment(start: SourceTime(seconds: 8.2),
+                                  end: SourceTime(seconds: 9.4),
+                                  text: "Syntetická řeč dvě"),
+            ])
+            let t1 = project.ensureTitleTrack()
+            let names = try project.makeTitle(text: "Anna a Petr", template: .names,
+                                              at: .zero, duration: Frames(75))
+            try project.addTitle(names, onTrack: t1)
+            let date = try project.makeTitle(text: "12. září 2026 · Kroměříž",
+                                             template: .dateAndPlace,
+                                             at: Frames(75), duration: Frames(45))
+            try project.addTitle(date, onTrack: t1)
+            // Mezera 120–150 nechává vykouknout pásek řeči (osa 75–135) —
+            // jinak by ho titulky zakryly a koukanec by neměl co vidět.
+            let chapter = try project.makeTitle(text: "Kapitola: obřad",
+                                                template: .chapter,
+                                                at: Frames(150), duration: Frames(30))
+            try project.addTitle(chapter, onTrack: t1)
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        // Oddálit, ať se celá 6s osa vejde do okna — koukanec má vidět
+        // i pásek řeči u konce osy. Před přiřazením projektu, aby reload
+        // proběhl už s novou geometrií.
+        var geometry = timeline.geometry
+        geometry.setZoom(2.5)
+        timeline.geometry = geometry
+        timeline.project = project
+        timeline.setPlayheadFromUser(Frames(30))
+
+        if let host = await waitForPlayerWindow() {
+            host.window?.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        for _ in 0..<40 where builtTimeline == nil {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        guard builtTimeline != nil else { print("❌ kompozice nevznikla"); return }
+        print("titulky na ose: \(timeline.project.titleCues().count)")
+        try? await Task.sleep(nanoseconds: 25_000_000_000)
+    }
+
     /// Mřížka jasů 8×8 snímku v daném čase (0–255): dekóduje přes
     /// `AVAssetImageGenerator` s nulovou tolerancí. Čas se zadává o půl
     /// snímku DOVNITŘ intervalu, aby se netrefovala hrana.
@@ -1494,6 +1575,8 @@ struct ContentView: View {
                     await model.verifyTransitionExport()
                 } else if arguments.contains("--transition-gpu") {
                     await model.runTransitionGPUPlayback(enabled: !explicit.contains("off"))
+                } else if arguments.contains("--title-demo") {
+                    await model.runTitleDemo()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
@@ -1642,6 +1725,10 @@ struct ContentView: View {
                     model.attach(view)
                 }
                 if !model.chromeHidden && !model.isMeasuring {
+                    // Grafické titulky (fáze 11) POD řečovými — řeč je
+                    // dole u spodní hrany, grafika výš; pořadí v ZStacku
+                    // rozhoduje jen při překryvu.
+                    TitleOverlay(timeline: model.timeline)
                     SubtitleOverlay(timeline: model.timeline)
                 }
             }
@@ -1674,6 +1761,102 @@ struct ContentView: View {
             }
 
             TransportBar(controller: model.controller, hidden: model.chromeHidden)
+        }
+    }
+}
+
+/// Grafické titulky v náhledu (fáze 11, modul 2). Týž vzorec jako
+/// `SubtitleOverlay`: vlastní malé view, hotové seřazené pole cues
+/// přepočítávané jen při změně projektu, na tik hlavy jen filtr.
+/// **Kreslí se JEN když má co říct** — prázdný overlay by přepnul
+/// WindowServer do skládání a zkazil GPU baseline z fáze 1.
+///
+/// Šablona tady dostává KONKRÉTNÍ podobu (písmo, velikost, pozice) —
+/// model nese jen její jméno. Velikosti jsou zlomky výšky náhledu,
+/// aby titulek vypadal stejně v malém okně i na celé obrazovce.
+private struct TitleOverlay: View {
+    @ObservedObject var timeline: TimelineController
+    @State private var cues: [TitleCue] = []
+
+    var body: some View {
+        GeometryReader { proxy in
+            let active = cues.filter {
+                $0.start <= timeline.playhead && timeline.playhead < $0.end
+            }
+            if !active.isEmpty {
+                let h = proxy.size.height
+                ZStack {
+                    // Středové šablony pod sebou v pořadí cues — jména
+                    // navrchu, datum pod nimi, když platí zároveň.
+                    let centered = active.filter { $0.template != .plain }
+                    if !centered.isEmpty {
+                        VStack(spacing: h * 0.02) {
+                            ForEach(centered, id: \.self) { cue in
+                                styledText(cue, height: h)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    // Prostý text sedí v dolní třetině — nad řečovými
+                    // titulky, které patří až ke spodní hraně.
+                    let plain = active.filter { $0.template == .plain }
+                    if !plain.isEmpty {
+                        VStack(spacing: h * 0.015) {
+                            ForEach(plain, id: \.self) { cue in
+                                styledText(cue, height: h)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity,
+                               alignment: .bottom)
+                        .padding(.bottom, h * 0.18)
+                    }
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .onAppear { cues = timeline.project.titleCues() }
+        .onReceive(timeline.$project
+            .removeDuplicates()
+            .debounce(for: .milliseconds(150), scheduler: DispatchQueue.main)) { project in
+            cues = project.titleCues()
+        }
+    }
+
+    /// Text se stínem místo podkladové desky — grafický titulek leží na
+    /// obraze, deska by z něj udělala řečový titulek.
+    private func styledText(_ cue: TitleCue, height: CGFloat) -> some View {
+        Text(cue.text)
+            .font(font(for: cue.template, height: height))
+            .multilineTextAlignment(textAlignment(cue.alignment))
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.65), radius: height * 0.008, y: 1)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: frameAlignment(cue.alignment))
+    }
+
+    private func font(for template: TitleTemplate, height: CGFloat) -> Font {
+        switch template {
+        case .names:        return .system(size: height * 0.105, weight: .semibold, design: .serif)
+        case .chapter:      return .system(size: height * 0.065, weight: .medium, design: .serif)
+        case .thanks:       return .system(size: height * 0.060, weight: .regular, design: .serif)
+        case .dateAndPlace: return .system(size: height * 0.045, weight: .regular, design: .serif)
+        case .plain:        return .system(size: height * 0.045, weight: .medium)
+        }
+    }
+
+    private func textAlignment(_ alignment: TitleAlignment) -> TextAlignment {
+        switch alignment {
+        case .leading: return .leading
+        case .center: return .center
+        case .trailing: return .trailing
+        }
+    }
+
+    private func frameAlignment(_ alignment: TitleAlignment) -> Alignment {
+        switch alignment {
+        case .leading: return .leading
+        case .center: return .center
+        case .trailing: return .trailing
         }
     }
 }

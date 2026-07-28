@@ -382,4 +382,81 @@ final class TitleTests: XCTestCase {
         XCTAssertTrue(frames.contains(Frames(40)))
         XCTAssertTrue(frames.contains(Frames(60)))
     }
+
+    // MARK: - Promítnutí do náhledu (modul 2)
+
+    func testTitleCuesSortedAndCarryStyle() throws {
+        var (f, t1) = makeFixture()
+        let late = try f.project.makeTitle(text: "kapitola", template: .chapter,
+                                           at: Frames(200), duration: Frames(60))
+        let early = try f.project.makeTitle(text: "jména", template: .names,
+                                            alignment: .leading,
+                                            at: Frames(10), duration: Frames(90))
+        try f.project.addTitle(late, onTrack: t1)
+        try f.project.addTitle(early, onTrack: t1)
+
+        // Druhá titulková stopa se do cues počítá taky.
+        let t2 = f.project.addTrack(kind: .title, name: "T2")
+        let second = try f.project.makeTitle(text: "druhá stopa", at: Frames(50),
+                                             duration: Frames(30))
+        try f.project.addTitle(second, onTrack: t2)
+
+        let cues = f.project.titleCues()
+        XCTAssertEqual(cues.map(\.text), ["jména", "druhá stopa", "kapitola"])
+        XCTAssertEqual(cues[0].template, .names)
+        XCTAssertEqual(cues[0].alignment, .leading)
+        XCTAssertEqual(cues[0].start, Frames(10))
+        XCTAssertEqual(cues[0].end, Frames(100))
+    }
+
+    // MARK: - Rozvržení na ose (modul 2)
+
+    func testTitlePlacementsCoordinatesAndVisibility() throws {
+        var (f, t1) = makeFixture()
+        let visible = try f.project.makeTitle(text: "vidět", at: Frames(10),
+                                              duration: Frames(20))
+        let farAway = try f.project.makeTitle(text: "daleko", at: Frames(10_000),
+                                              duration: Frames(20))
+        try f.project.addTitle(visible, onTrack: t1)
+        try f.project.addTitle(farAway, onTrack: t1)
+
+        let g = TimelineGeometry()   // 4 body/snímek
+        let placements = TimelineLayout.titlePlacements(
+            project: f.project, geometry: g, scrollX: 0, width: 800)
+
+        XCTAssertEqual(placements.map(\.text), ["vidět"], "daleký titulek se filtruje")
+        let p = placements[0]
+        XCTAssertEqual(p.titleID, visible.id)
+        XCTAssertEqual(p.x, 40)                      // 10 snímků × 4 body
+        XCTAssertEqual(p.width, 80)                  // 20 snímků × 4 body
+        XCTAssertEqual(p.y, 158, "pruh T1 je pod V1+A1+A2")
+        XCTAssertEqual(p.height, 28)
+    }
+
+    func testSubtitleStripPlacementsMapToTitleLane() {
+        let (f, _) = makeFixture()
+        let cues = [SubtitleCue(start: Frames(30), end: Frames(60), text: "řeč"),
+                    SubtitleCue(start: Frames(9_000), end: Frames(9_030), text: "daleko")]
+        let g = TimelineGeometry()
+        let strips = TimelineLayout.subtitleStripPlacements(
+            cues: cues, project: f.project, geometry: g, scrollX: 0, width: 800)
+
+        XCTAssertEqual(strips.count, 1, "daleký cue se filtruje")
+        XCTAssertEqual(strips[0].x, 120)
+        XCTAssertEqual(strips[0].width, 120)
+        XCTAssertEqual(strips[0].y, 158)
+        XCTAssertEqual(strips[0].height, 28)
+    }
+
+    func testSubtitleStripPlacementsEmptyWithoutTitleTrack() {
+        // Projekt z doby před fází 11 — bez T1 se pásky nekreslí nikam.
+        let p = Project(timeline: Timeline(tracks: [
+            Track(kind: .video, name: "V1"),
+            Track(kind: .audio, name: "A1"),
+        ]))
+        let strips = TimelineLayout.subtitleStripPlacements(
+            cues: [SubtitleCue(start: Frames(0), end: Frames(30), text: "x")],
+            project: p, geometry: TimelineGeometry(), scrollX: 0, width: 800)
+        XCTAssertTrue(strips.isEmpty)
+    }
 }

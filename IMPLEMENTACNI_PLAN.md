@@ -39,7 +39,7 @@ A jedno zjištění z měření ve Spiku 0 (26. 07. 2026), které mění produkt
 - **Zpomalení potřebuje dost snímků ve zdroji: `zdrojFps × nejnižšíRychlost ≥ výstupFps`.** Jinak se snímky duplikují a zpomalený úsek trhá. Naměřeno: 120 fps zdroj → 0 % duplikátů, 59,7 fps → 13,5 %, 30,0 fps → 37,5 %. Teorie (`průměr z max(0, 1 − v(t)·zdrojFps/výstupFps)`) sedí na 0,04 %.
   - **Plyne z toho tvrdý limit, ne varování:** `maximální čisté zpomalení = výstupFps / zdrojFps`. Posuvník rychlosti dostane pod tou hranicí **žlutou zónu**. Při výstupu 30 fps: zdroj 60 → 0,5×, 120 → 0,25×, 240 → 0,125×.
   - **Nižší výstupní frekvence by dala hlubší čisté zpomalení** (při 24 fps: 60 → 0,4×, 120 → 0,2×). **Zvažovalo se a zamítlo:** základna je 30 fps, protože 60 → 24 je poměr 2,5:1 a trhalo by to při panorámování. Viz tabulka v `CLAUDE.md`.
-  - **Filipa to řeší, Alenu ne.** Filip točí sám a může se zařídit — jemu stačí limit říct dopředu (a checklist ve fázi 6 mu to řekne). Alena skládá film z cizích videí od hostů na 30 fps a zařídit se nemůže. Pro ni je duplikace s přiznaným varováním **legitimní chování, ne nedodělek** — ale musí být v UI přiznané. Tvrdit jí, že výstup je plynulý, když není, je horší než ta duplikace sama.
+  - **Filipa to řeší, Alenu ne.** Filip točí sám a může se zařídit — jemu stačí limit říct dopředu (říká mu ho žlutá zóna v editoru křivek; checklist svatebního asistenta, který to měl říkat týden před svatbou, byl škrtnut — viz fáze 6). Alena skládá film z cizích videí od hostů na 30 fps a zařídit se nemůže. Pro ni je duplikace s přiznaným varováním **legitimní chování, ne nedodělek** — ale musí být v UI přiznané. Tvrdit jí, že výstup je plynulý, když není, je horší než ta duplikace sama.
 - Vision **nemá** veřejné API pro otisk obličeje. `VNGenerateFaceCaptureQualityRequest` navíc neexistuje — správně je `VNDetectFaceCaptureQualityRequest`.
 
 ---
@@ -51,8 +51,8 @@ Při 30 h týdně:
 | Meta | Co to je | Odhad | Po korekci ×1,7 |
 |---|---|---|---|
 | **v0.5 „MVP nula"** | Import, timeline, střih, speed ramp, proxy, export, projekt | ~15 týdnů | **~6 měsíců** |
-| **v1.0** | + svatební asistent, audio engine, titulky, distribuce | +10 týdnů | **~10 měsíců** |
-| **v1.2** | + AI analýza scén a obličejů | +12 týdnů | **~13 měsíců** |
+| **v1.0** | + audio engine, titulky, distribuce | +8 týdnů | **~9 měsíců** |
+| **v1.2** | + AI analýza scén a obličejů | +12 týdnů | **~12 měsíců** |
 | **v2.0** | + multicam, HDR, optical flow, SK | +? | **2+ roky** |
 
 **Ta korekce ×1,7 tam není z opatrnosti.** Odhady u vibecodovaných projektů této složitosti se podceňují systematicky, protože se počítá čas psaní kódu, ne čas hledání, proč to nefunguje. U videoeditoru je ten druhý čas dominantní.
@@ -73,7 +73,6 @@ Rozdělení je navržené tak, aby se každý modul dal napsat a otestovat **izo
 | `ProjectModel` | Datové struktury projektu, Codable | ★☆☆☆☆ |
 | `TimelineModel` | Stopy, klipy, operace střihu (split, trim, ripple) | ★★★☆☆ |
 | `UndoStack` | Historie změn nad ProjectModel | ★★★☆☆ |
-| `ShotPlanModel` | Svatební checklist, záběrový plán | ★☆☆☆☆ |
 | `ClusterEngine` | DBSCAN nad vektory (až fáze 11) | ★★★☆☆ |
 
 **Tohle je tvoje bezpečná zóna.** Čistý Swift, unit testy, žádné „ono se to nějak chová". Piš sem co nejvíc logiky.
@@ -98,7 +97,7 @@ Rozdělení je navržené tak, aby se každý modul dal napsat a otestovat **izo
 | `TimelineView` | Časová osa | **AppKit** — NSView v NSScrollView, CALayer |
 | `PlayerView` | Monitor | AppKit v NSViewRepresentable |
 | `SpeedRampEditor` | Editor křivky | AppKit (kreslení) |
-| Vše ostatní | Panely, inspektor, nastavení, asistent | **SwiftUI** |
+| Vše ostatní | Panely, inspektor, nastavení | **SwiftUI** |
 
 **Proč timeline v AppKitu:** SwiftUI nemá recyklaci buněk, nedá ti viditelnost do drag session (nemůžeš ztlumit tažený klip) a nad tisíci prvky se seká. Riverside Studio — placený produkt s týmem — má SwiftUI chrome a timeline jako samostatný C++/Metal engine. Recut je celý AppKit. To je odpověď.
 
@@ -271,23 +270,16 @@ Ne test, ne ukázka. Reálná zakázka nebo reálná rodinná svatba.
 
 ---
 
-### FÁZE 6 — Svatební asistent (2 týdny) → v0.6
+### ~~FÁZE 6 — Svatební asistent~~ — ŠKRTNUTO 28. 07. 2026
 
-`ShotPlanModel` + SwiftUI. Checklist, záběrový plán, BPM plánovač.
+**Rozhodnutí autora: produkt je čistě videoeditor.** Checklist, záběrový plán ani BPM plánovač se stavět nebudou. Číslování fází se kvůli odkazům v ostatních dokumentech nemění — po fázi 5 následuje rovnou fáze 7 (a verze v0.6 se přeskakuje).
 
-**Nejlevnější odlišení v celém produktu.** Čistý SwiftUI, žádné médiové API, žádné riziko. Zároveň je to jediná věc, kterou DaVinci ani CapCut nemají.
+**Co ze škrtnuté fáze přežívá, protože to není „funkce asistenta", ale podmínka funkčnosti rampingu:** pravidlo „záběry na zpomalení toč na 120 fps" (hod kyticí, first look, první polibek, prstýnky, první tanec). Důvod je měřený: ramp na 0,25× při výstupu 30 fps potřebuje zdroj 120 fps, jinak se každý třetí až osmý snímek duplikuje (viz sekce 1). Asistent to měl říkat týden **před** svatbou; bez něj to musí unést editor sám:
 
-**Konkrétní obsah, který vypadl z měření ve Spiku 0:** u záběrů, které se typicky zpomalují, musí checklist říct **„toč na 120 fps"**. Jmenovitě:
+- **Žlutá zóna v editoru rychlostních křivek** (hotová ve fázi 3) ukazuje mez čistého zpomalení z naměřené frekvence zdroje.
+- **Varování `limitedByFrameRate` a duplikace** musí zůstat v UI přiznané — pro Alenu (cizí klipy na 30 fps) je duplikace legitimní výsledek, ale nikdy se nesmí tvářit jako plynulý.
 
-- hod kyticí
-- první pohled (*first look*)
-- první polibek
-- výměna prstýnků
-- první tanec
-
-Důvod je měřený, ne estetický: ramp na 0,25× při výstupu 30 fps potřebuje zdroj 120 fps, jinak se každý třetí až osmý snímek duplikuje (viz sekce 1). **Tím se ze svatebního asistenta stává zároveň podmínka funkčnosti hlavní funkce produktu**, ne jen odlišovač. Kdo checklist nedodrží, dostane trhaný ramp — a je lepší mu to říct týden před svatbou než po ní.
-
-Tohle je taky argument pro to nedávat asistenta až do fáze 6, kdyby se plán někdy zkracoval: bez něj hlavní funkce tiše nefunguje pro polovinu vstupů.
+Jako samostatný produkt mimo tuhle aplikaci zůstává myšlenka v sekci 8 (Plán B — PWA, nula Swiftu).
 
 ---
 

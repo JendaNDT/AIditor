@@ -177,6 +177,7 @@ Testy pustíš přes `cd TimelineModel && swift test`. Návrh a zdůvodnění v 
 
 ## Co do projektu nepatří
 
+- **Svatební asistent (checklist, záběrový plán, BPM plánovač) — škrtnut 28. 07. 2026 na pokyn autora.** Produkt je čistě videoeditor; specifikace (sekce 4.4) ho sice obsahuje, ale platí plán. Pravidlo „záběry na zpomalení toč na 120 fps" tím nezaniká — říká ho žlutá zóna v editoru křivek a duplikace snímků musí zůstat v UI přiznaná.
 - Optical flow dopočet mezisnímků — škrtnuto, je to výzkumný problém.
 - Rozpoznávání obličejů — až za v1.0 a jen po projití právního a licenčního gate (viz plán, fáze 11).
 - Freeze frame a zpětné přehrávání v `SpeedRampEngine` — rozbilo by invertibilitu mapování.

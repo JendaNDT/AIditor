@@ -2,7 +2,7 @@
 *Naposled aktualizováno: 28. 07. 2026*
 
 ## 🎯 Co to je
-Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
+Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor: svatební asistent škrtnut 28. 07. 2026 na pokyn autora** (AI analýza scén a obličejů zůstává podmíněná za v1.0).
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
 **Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1.**
 
@@ -258,8 +258,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F5** Projekt, autosave, undo, export *(3 týdny)* — ✅ **HOTOVO 28. 07. 2026 — projektový soubor, autosave s obnovou po pádu, export i dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou)**
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
-### Cesta k v1.0 (+~4 měsíce)
-- **F6** Svatební asistent *(2 týdny)* — **podmínka funkčnosti hlavní funkce**, ne jen odlišení: bez pravidla „zpomalované záběry toč na 120 fps" dostane uživatel trhaný ramp
+### Cesta k v1.0 (+~3 měsíce)
 - **F7** Audio engine, 32-bit float, LUFS *(3 týdny)*
 - **F8** Titulky přes WhisperKit *(2 týdny)*
 - **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — **+ migrace na `AVVideoComposition.Configuration`** jako druhá větev pod `if #available(macOS 26.0, *)`. Ne dřív.
@@ -271,6 +270,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F12+** Multicam, HDR, slovenština, LUTs
 
 ### Škrtnuto
+- **Svatební asistent (F6: checklist, záběrový plán, BPM plánovač).** Škrtnut 28. 07. 2026 na pokyn autora — produkt je čistě videoeditor. Pravidlo „záběry na zpomalení toč na 120 fps" tím nezaniká: říká ho žlutá zóna v editoru křivek (hotová ve fázi 3) a varování o duplikaci snímků musí zůstat v UI přiznané. Číslování fází se nemění, po F5 následuje F7.
 - **Optical flow dopočet mezisnímků.** Ne odloženo — škrtnuto. Je to výzkumný problém, ne funkce na dopsání.
 
 ## ⚠️ Známá rizika a korekce specifikace
@@ -331,7 +331,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **`AVAssetExportSession` ignoruje `frameDuration`** → export přes `AVAssetWriter`.
 - **`AVAssetWriter` si bez instrukce zvolí timescale 600 a kvantizuje do ní zapisované časy.** U 29,97 / 59,94 / 23,976 i naší 30,01 fps to vyrobí rozptyl a výstup vyleze jako `CFR≈` místo `CFR`. Vždy `videoInput.mediaTimeScale = frameDuration.timescale`; na zvuku NE, vyhodí výjimku. Odhaleno až ověřením na druhém klipu — na jednom by chyba prošla.
 - **Zvuk v proxy a zploštěných souborech jen jako LPCM.** AAC by přidal vlastní priming delay a rozbil to, kvůli čemu ty soubory vznikají.
-- **Zpomalení potřebuje dost snímků ve zdroji: `zdrojFps × nejnižšíRychlost ≥ výstupFps`.** Ramp na 0,25× při 30 fps výstupu chce zdroj 120 fps. Naměřeno: 120 fps → 0 % duplikátů, 60 fps → 13,5 %, 30 fps → 37,5 %. **Musí to být v UI jako varování dopředu**, ne až ve výsledku. Zároveň argument pro pravidlo „zpomalované záběry toč na 120 fps" ve svatebním asistentovi.
+- **Zpomalení potřebuje dost snímků ve zdroji: `zdrojFps × nejnižšíRychlost ≥ výstupFps`.** Ramp na 0,25× při 30 fps výstupu chce zdroj 120 fps. Naměřeno: 120 fps → 0 % duplikátů, 60 fps → 13,5 %, 30 fps → 37,5 %. **Musí to být v UI jako varování dopředu**, ne až ve výsledku — po škrtnutí svatebního asistenta (28. 07. 2026) je editor jediné místo, které to uživateli řekne: žlutá zóna v editoru křivek.
 - **VFR z telefonu.** Apple nemá API pro detekci — musíš číst délky vzorků sám. **Změřeno 25. 07. 2026 na pěti klipech ze Samsungu (`MediaProbe/RESULTS.md`): ani jeden nemá čistě konstantní časování.** VFR je výchozí stav, ne okrajový případ.
 - **Zvuk má edit list, který zahazuje prvních 44 ms.** Priming AAC kodéru, u všech pěti klipů. **Zvuk se nikdy nesmí číst ze syrové tabulky vzorků** — jen přes `AVComposition` nebo s respektováním `AVAssetTrack.segments`. Jinak je posunutý o 44 ms a chyba se hledá v synchronizaci místo ve čtení.
 - **`nominalFrameRate` lže.** Slow-mo klip hlásí 119,369 fps, naměřeno 120,000. Metadata, ne měření — časovou základnu projektu z něj neodvozovat.

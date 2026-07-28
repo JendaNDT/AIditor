@@ -42,6 +42,27 @@ public struct SubtitleCue: Hashable, Sendable {
     }
 }
 
+/// Titulek z řeči s adresou úseku v přepisu — pro inspektor (fáze 11).
+/// Text je snímek stavu v okamžiku dotazu; po editaci si volající říká znovu.
+public struct SpeechCueRef: Hashable, Sendable {
+    public let assetID: AssetID
+    /// Index v `Asset.transcript` v okamžiku dotazu.
+    public let segmentIndex: Int
+    public let text: String
+    public let start: Frames
+    /// Exkluzivní konec.
+    public let end: Frames
+
+    public init(assetID: AssetID, segmentIndex: Int, text: String,
+                start: Frames, end: Frames) {
+        self.assetID = assetID
+        self.segmentIndex = segmentIndex
+        self.text = text
+        self.start = start
+        self.end = end
+    }
+}
+
 extension Project {
 
     /// Uloží přepis assetu. Úseky se seřadí podle začátku; úseky
@@ -95,6 +116,56 @@ extension Project {
         return cues.sorted {
             ($0.start, $0.end, $0.text) < ($1.start, $1.end, $1.text)
         }
+    }
+
+    /// Titulek z řeči pod daným snímkem osy, S ADRESOU úseku v přepisu.
+    /// Inspektor (fáze 11, modul 3) potřebuje vědět, KTERÝ úsek edituje —
+    /// `subtitleCues` provenienci zahazuje, protože kreslení ji nepotřebuje.
+    ///
+    /// Průchod je týž jako v `subtitleCues` (zvukové stopy, ořez na okno
+    /// klipu, mapování přes inverzi `sourceOffset`), první zásah vyhrává —
+    /// pořadí stop je deterministické.
+    public func speechCueRef(at frame: Frames) -> SpeechCueRef? {
+        for track in timeline.tracks where track.kind == .audio {
+            for clip in track.clips {
+                guard clip.contains(frame: frame),
+                      let asset = asset(clip.assetID),
+                      let transcript = asset.transcript else { continue }
+                let windowStart = clip.sourceStart
+                let windowEnd = clip.sourceStart + sourceConsumption(of: clip)
+
+                for (index, segment) in transcript.enumerated() {
+                    guard segment.end > windowStart, segment.start < windowEnd else { continue }
+                    let clampedStart = max(segment.start, windowStart)
+                    let clampedEnd = min(segment.end, windowEnd)
+                    let startFrame = clip.timelineStart
+                        + frameOffset(forSource: clampedStart, in: clip)
+                    let endFrame = clip.timelineStart
+                        + frameOffset(forSource: clampedEnd, in: clip)
+                    guard startFrame <= frame, frame < endFrame else { continue }
+                    return SpeechCueRef(assetID: asset.id, segmentIndex: index,
+                                        text: segment.text,
+                                        start: startFrame, end: endFrame)
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Přepíše text úseku přepisu. Prázdný text úsek MAŽE — oprava
+    /// artefaktu přepisu i jeho odstranění jsou jedna cesta. Jde přes
+    /// `setTranscript`, takže platí jeho validace a řazení.
+    public mutating func setTranscriptText(assetID: AssetID, segmentIndex: Int,
+                                           text: String) throws {
+        guard let asset = asset(assetID) else {
+            throw TimelineError.assetNotFound(assetID)
+        }
+        guard var segments = asset.transcript,
+              segments.indices.contains(segmentIndex) else {
+            throw TimelineError.invalidTranscriptSegment
+        }
+        segments[segmentIndex].text = text
+        try setTranscript(assetID: assetID, segments: segments)
     }
 
     /// Nejmenší snímek klipu, jehož zdrojová pozice je aspoň `target` —

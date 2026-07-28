@@ -861,6 +861,11 @@ final class AppModel: ObservableObject {
         timeline.geometry = geometry
         timeline.project = project
         timeline.setPlayheadFromUser(Frames(30))
+        // Vybrat první titulek — koukanec vidí rámeček výběru i inspektor.
+        if let first = timeline.project.timeline.tracks
+            .first(where: { $0.kind == .title })?.titles.first {
+            timeline.selectTitle(first.id)
+        }
 
         if let host = await waitForPlayerWindow() {
             host.window?.makeKeyAndOrderFront(nil)
@@ -1745,9 +1750,11 @@ struct ContentView: View {
             // obchází celou; stav osy přežije v `AppModelu`.
             if !model.chromeHidden {
                 Divider()
-                // Editor rychlostní křivky vybraného klipu (fáze 3, modul 3).
+                // Pás inspektoru (fáze 11, modul 3): editor rychlostní
+                // křivky vybraného klipu, NEBO inspektor vybraného
+                // titulku / úseku řeči — výběry se navzájem vylučují.
                 // Pevná výška ze stejného důvodu jako osa pod ním.
-                RampEditorPaneView(controller: model.timeline)
+                InspectorStrip(timeline: model.timeline)
                     .frame(height: 132)
                 Divider()
                 // Pevná výška, ne `idealHeight`. Přehrávač i osa jsou oba
@@ -1762,6 +1769,131 @@ struct ContentView: View {
 
             TransportBar(controller: model.controller, hidden: model.chromeHidden)
         }
+    }
+}
+
+/// Pás pod přehrávačem (fáze 11, modul 3): rozhoduje, co se v něm ukáže.
+/// Vlastní malé view — `selectedTitle` žije na `TimelineController`, což je
+/// vnořený `ObservableObject`, a ContentView by změnu neviděl (známá past).
+private struct InspectorStrip: View {
+    @ObservedObject var timeline: TimelineController
+
+    var body: some View {
+        if let titleID = timeline.selectedTitle,
+           let title = timeline.project.timeline.titleClip(titleID) {
+            TitleInspector(timeline: timeline, titleID: titleID, title: title)
+        } else if let speech = timeline.selectedSpeech,
+                  let text = speechText(speech) {
+            SpeechInspector(timeline: timeline, selection: speech, currentText: text)
+        } else {
+            RampEditorPaneView(controller: timeline)
+        }
+    }
+
+    private func speechText(_ speech: TimelineController.SpeechSelection) -> String? {
+        guard let transcript = timeline.project.asset(speech.assetID)?.transcript,
+              transcript.indices.contains(speech.segmentIndex) else { return nil }
+        return transcript[speech.segmentIndex].text
+    }
+}
+
+/// Inspektor vybraného titulku: text, šablona, zarovnání, smazání.
+/// Text se píše ŽIVĚ (titulek se mění v náhledu při psaní) a undo krok
+/// se skládá kolem fokusu — vzorec posuvníku hlasitosti.
+private struct TitleInspector: View {
+    @ObservedObject var timeline: TimelineController
+    let titleID: TitleClipID
+    let title: TitleClip
+    @FocusState private var textFocused: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Titulek")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: Binding(
+                    get: { timeline.project.timeline.titleClip(titleID)?.text ?? "" },
+                    set: { timeline.titleEditingChanged(titleID, text: $0) }))
+                    .font(.body)
+                    .focused($textFocused)
+                    .onChange(of: textFocused) { focused in
+                        if focused { timeline.titleEditingBegan() }
+                        else { timeline.titleEditingEnded() }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("Šablona", selection: Binding(
+                    get: { title.template },
+                    set: { timeline.setTitleTemplate(titleID, template: $0) })) {
+                    Text("Jména").tag(TitleTemplate.names)
+                    Text("Datum a místo").tag(TitleTemplate.dateAndPlace)
+                    Text("Kapitola").tag(TitleTemplate.chapter)
+                    Text("Poděkování").tag(TitleTemplate.thanks)
+                    Text("Prostý text").tag(TitleTemplate.plain)
+                }
+                .pickerStyle(.menu)
+
+                Picker("Zarovnání", selection: Binding(
+                    get: { title.alignment },
+                    set: { timeline.setTitleAlignment(titleID, alignment: $0) })) {
+                    Text("Vlevo").tag(TitleAlignment.leading)
+                    Text("Na střed").tag(TitleAlignment.center)
+                    Text("Vpravo").tag(TitleAlignment.trailing)
+                }
+                .pickerStyle(.menu)
+
+                Button("Smazat titulek", role: .destructive) {
+                    timeline.deleteTitle(titleID)
+                }
+            }
+            .frame(width: 220)
+        }
+        .padding(10)
+    }
+}
+
+/// Inspektor úseku titulků z řeči (splátka fáze 8). Návrh (koncept)
+/// se drží lokálně a zapisuje při odchodu z pole nebo Enterem — živý
+/// zápis nejde: prázdný text úsek MAŽE a při psaní je prázdno legální
+/// mezistav.
+private struct SpeechInspector: View {
+    @ObservedObject var timeline: TimelineController
+    let selection: TimelineController.SpeechSelection
+    let currentText: String
+    @State private var draft: String = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Titulek z řeči (přepis)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("Text titulku", text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .onSubmit { commit() }
+                .onChange(of: focused) { nowFocused in
+                    if !nowFocused { commit() }
+                }
+            Text("Prázdný text úsek z přepisu smaže. Změna platí pro všechny "
+                 + "klipy z téhož zdroje — přepis patří souboru, ne klipu.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .onAppear { draft = currentText }
+        .onChange(of: selection) { _ in draft = currentText }
+    }
+
+    private func commit() {
+        guard draft != currentText else { return }
+        timeline.setSpeechText(assetID: selection.assetID,
+                               segmentIndex: selection.segmentIndex,
+                               text: draft)
     }
 }
 

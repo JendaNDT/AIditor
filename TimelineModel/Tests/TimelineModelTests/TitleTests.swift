@@ -459,4 +459,149 @@ final class TitleTests: XCTestCase {
             project: p, geometry: TimelineGeometry(), scrollX: 0, width: 800)
         XCTAssertTrue(strips.isEmpty)
     }
+
+    // MARK: - Hit testing (modul 3)
+
+    func testTitleHitTestZones() throws {
+        var (f, t1) = makeFixture()
+        // 4 body/snímek: titulek 10–60 leží na 40–240 bodech.
+        let title = try f.project.makeTitle(text: "x", at: Frames(10), duration: Frames(50))
+        try f.project.addTitle(title, onTrack: t1)
+        let g = TimelineGeometry()
+        let laneY = 160.0    // uvnitř T1 (158–186)
+
+        XCTAssertEqual(g.titleHitTest(x: 42, y: laneY, in: f.project.timeline)?.zone,
+                       .leadingEdge)
+        XCTAssertEqual(g.titleHitTest(x: 238, y: laneY, in: f.project.timeline)?.zone,
+                       .trailingEdge)
+        let body = g.titleHitTest(x: 140, y: laneY, in: f.project.timeline)
+        XCTAssertEqual(body?.zone, .body)
+        XCTAssertEqual(body?.offsetInTitle, Frames(25))
+        XCTAssertEqual(body?.titleID, title.id)
+
+        // Mimo titulek a mimo pruh T1 nic.
+        XCTAssertNil(g.titleHitTest(x: 400, y: laneY, in: f.project.timeline))
+        XCTAssertNil(g.titleHitTest(x: 140, y: 10, in: f.project.timeline),
+                     "na V1 se titulky nechytají")
+    }
+
+    // MARK: - Náhledy tažení (modul 3)
+
+    func testTitleMovePreviewSnapsAndValidates() throws {
+        var (f, t1) = makeFixture()
+        try f.addClip(start: 100, duration: 60)   // hrana klipu na 100 a 160
+        let a = try f.project.makeTitle(text: "a", at: Frames(0), duration: Frames(30))
+        let b = try f.project.makeTitle(text: "b", at: Frames(50), duration: Frames(30))
+        try f.project.addTitle(a, onTrack: t1)
+        try f.project.addTitle(b, onTrack: t1)
+
+        let g = TimelineGeometry()
+        let candidates = g.snapCandidates(in: f.project.timeline,
+                                          excludingTitles: [a.id])
+
+        // Ukazatel u snímku 99 (drženo za snímek 0) → začátek se přichytí
+        // na hranu klipu 100.
+        let snap = f.project.titleMovePreview(id: a.id, pointerFrame: Frames(99),
+                                              grabOffset: .zero,
+                                              candidates: candidates, geometry: g)
+        XCTAssertEqual(snap?.start, Frames(100))
+        XCTAssertEqual(snap?.snappedTo?.frame, Frames(100))
+        XCTAssertEqual(snap?.isValid, true)
+
+        // Cíl v překryvu s B je neplatný — hlásí se, nezařezává.
+        let invalid = f.project.titleMovePreview(id: a.id, pointerFrame: Frames(60),
+                                                 grabOffset: .zero,
+                                                 candidates: [], geometry: g)
+        XCTAssertEqual(invalid?.isValid, false)
+
+        // Záporný začátek se zařeže na nulu.
+        let clamped = f.project.titleMovePreview(id: a.id, pointerFrame: Frames(3),
+                                                 grabOffset: Frames(20),
+                                                 candidates: [], geometry: g)
+        XCTAssertEqual(clamped?.start, .zero)
+    }
+
+    func testTitleTrimPreviewsClampAtNeighbours() throws {
+        var (f, t1) = makeFixture()
+        let a = try f.project.makeTitle(text: "a", at: Frames(0), duration: Frames(40))
+        let b = try f.project.makeTitle(text: "b", at: Frames(60), duration: Frames(40))
+        try f.project.addTitle(a, onTrack: t1)
+        try f.project.addTitle(b, onTrack: t1)
+        let g = TimelineGeometry()
+
+        // Trim začátku B doleva se zarazí o konec A (40).
+        let start = f.project.titleTrimStartPreview(id: b.id, frame: Frames(10),
+                                                    candidates: [], geometry: g)
+        XCTAssertEqual(start?.start, Frames(40))
+        XCTAssertEqual(start?.duration, Frames(60))
+
+        // Trim konce A doprava se zarazí o začátek B (60).
+        let end = f.project.titleTrimEndPreview(id: a.id, frame: Frames(90),
+                                                candidates: [], geometry: g)
+        XCTAssertEqual(end?.duration, Frames(60))
+
+        // Minimální délka 1 snímek na obou stranách.
+        let tiny = f.project.titleTrimEndPreview(id: a.id, frame: Frames(-5),
+                                                 candidates: [], geometry: g)
+        XCTAssertEqual(tiny?.duration, Frames(1))
+    }
+
+    func testMaxNewTitleDuration() throws {
+        var (f, t1) = makeFixture()
+        let title = try f.project.makeTitle(text: "x", at: Frames(100), duration: Frames(50))
+        try f.project.addTitle(title, onTrack: t1)
+
+        XCTAssertEqual(f.project.maxNewTitleDuration(at: Frames(40), onTrack: t1),
+                       Frames(60), "mezera po nejbližší titulek")
+        XCTAssertEqual(f.project.maxNewTitleDuration(at: Frames(120), onTrack: t1),
+                       .zero, "uvnitř titulku není místo")
+        XCTAssertTrue(f.project.maxNewTitleDuration(at: Frames(200), onTrack: t1).count > 100_000,
+                      "za posledním titulkem není mez")
+        XCTAssertEqual(f.project.maxNewTitleDuration(at: Frames(40), onTrack: f.v1),
+                       .zero, "na netitulkové stopě nic")
+    }
+
+    // MARK: - Titulky z řeči: adresa a editace (modul 3, splátka fáze 8)
+
+    private func makeSpeechFixture() throws -> (f: Fixture, clipID: ClipID) {
+        var f = Fixture()
+        let clipID = try f.addClip(start: 0, duration: 120, on: f.a1)
+        try f.project.setTranscript(assetID: f.assetID, segments: [
+            TranscriptSegment(start: SourceTime(seconds: 1.0),
+                              end: SourceTime(seconds: 2.0), text: "první"),
+            TranscriptSegment(start: SourceTime(seconds: 3.0),
+                              end: SourceTime(seconds: 3.5), text: "druhý"),
+        ])
+        return (f, clipID)
+    }
+
+    func testSpeechCueRefFindsSegmentWithAddress() throws {
+        let (f, _) = try makeSpeechFixture()
+        // 1–2 s zdroje = snímky 30–60 na ose (rychlost 1×).
+        let ref = f.project.speechCueRef(at: Frames(45))
+        XCTAssertEqual(ref?.assetID, f.assetID)
+        XCTAssertEqual(ref?.segmentIndex, 0)
+        XCTAssertEqual(ref?.text, "první")
+        XCTAssertEqual(ref?.start, Frames(30))
+        XCTAssertEqual(ref?.end, Frames(60))
+
+        XCTAssertEqual(f.project.speechCueRef(at: Frames(100))?.text, "druhý")
+        XCTAssertNil(f.project.speechCueRef(at: Frames(70)), "mezi úseky nic")
+    }
+
+    func testSetTranscriptTextEditsAndEmptyRemoves() throws {
+        var (f, _) = try makeSpeechFixture()
+        try f.project.setTranscriptText(assetID: f.assetID, segmentIndex: 0,
+                                        text: "opravený")
+        XCTAssertEqual(f.project.speechCueRef(at: Frames(45))?.text, "opravený")
+
+        // Prázdný text úsek maže; druhý úsek se posune na index 0.
+        try f.project.setTranscriptText(assetID: f.assetID, segmentIndex: 0, text: "  ")
+        XCTAssertNil(f.project.speechCueRef(at: Frames(45)))
+        XCTAssertEqual(f.project.speechCueRef(at: Frames(100))?.segmentIndex, 0)
+
+        XCTAssertThrowsUnchanged(&f.project, .invalidTranscriptSegment) {
+            try $0.setTranscriptText(assetID: f.assetID, segmentIndex: 5, text: "x")
+        }
+    }
 }

@@ -268,11 +268,14 @@ extension TimelineGeometry {
 
     /// Sesbírá kandidáty na přichycení.
     ///
-    /// - Parameter excluding: klipy, které se právě táhnou — na vlastní hrany
-    ///   se přichytávat nemá smysl a vyrobilo by to zaseknutí na místě.
+    /// - Parameters:
+    ///   - excluding: klipy, které se právě táhnou — na vlastní hrany
+    ///     se přichytávat nemá smysl a vyrobilo by to zaseknutí na místě.
+    ///   - excludingTitles: totéž pro tažený titulek (fáze 11).
     public func snapCandidates(in timeline: Timeline,
                                playhead: Frames? = nil,
                                excluding: Set<ClipID> = [],
+                               excludingTitles: Set<TitleClipID> = [],
                                onlyTracks: Set<TrackID>? = nil) -> [SnapCandidate] {
         var out: [SnapCandidate] = [SnapCandidate(frame: .zero, kind: .origin)]
         if let playhead { out.append(SnapCandidate(frame: playhead, kind: .playhead)) }
@@ -285,7 +288,7 @@ extension TimelineGeometry {
             }
             // Hrany titulků přitahují stejně jako hrany klipů — titulek se
             // typicky zarovnává na střih a střih na titulek.
-            for title in track.titles {
+            for title in track.titles where !excludingTitles.contains(title.id) {
                 out.append(SnapCandidate(frame: title.timelineStart, kind: .clipEdge))
                 out.append(SnapCandidate(frame: title.timelineEnd, kind: .clipEdge))
             }

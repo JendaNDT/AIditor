@@ -568,7 +568,11 @@ final class TimelineDocumentView: NSView {
                 layer.frame = CGRect(x: placement.x, y: placement.y,
                                      width: placement.width, height: placement.height)
                 layer.backgroundColor = TimelinePalette.titleClipFill.cgColor
-                layer.borderColor = TimelinePalette.clipStroke.cgColor
+                let isSelected = placement.titleID == controller.selectedTitle
+                layer.borderColor = isSelected
+                    ? TimelinePalette.clipSelectedStroke.cgColor
+                    : TimelinePalette.clipStroke.cgColor
+                layer.borderWidth = isSelected ? 2 : 1
 
                 // Stejná pravidla jako jméno klipu: u titěrné šířky schovat
                 // úplně, přepisovat jen při změně.
@@ -829,6 +833,15 @@ final class TimelineDocumentView: NSView {
     }
     private var transitionDrag: TransitionDragState?
 
+    /// Rozjeté tažení titulku (fáze 11, modul 3). Týž vzorec: duch, jeden
+    /// zápis při puštění. Kandidáti přichytávání se počítají při stisku.
+    private struct TitleDragState {
+        let hit: TitleHit
+        let candidates: [SnapCandidate]
+        var result: TitleDragResult? = nil
+    }
+    private var titleDrag: TitleDragState?
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
@@ -848,13 +861,45 @@ final class TimelineDocumentView: NSView {
             return
         }
 
-        guard let hit = controller.geometry.hitTest(x: point.x, y: point.y,
-                                                    in: controller.project.timeline) else {
-            if !controller.selection.isEmpty { controller.selection = [] }
+        // Titulek na T1: vybrat a případně začít tažení (fáze 11, modul 3).
+        if let titleHit = controller.geometry.titleHitTest(
+            x: point.x, y: point.y, in: controller.project.timeline) {
+            controller.selectTitle(titleHit.titleID)
+            titleDrag = TitleDragState(
+                hit: titleHit,
+                candidates: controller.geometry.snapCandidates(
+                    in: controller.project.timeline,
+                    playhead: controller.playhead,
+                    excludingTitles: [titleHit.titleID]))
+            if titleHit.zone == .body { NSCursor.closedHand.set() }
             return
         }
 
-        if controller.selection != [hit.clipID] { controller.selection = [hit.clipID] }
+        // Prázdný pruh T1: klik na pásek řeči vybírá úsek přepisu pro
+        // inspektor; klik do prázdna výběry ruší.
+        if let ti = controller.geometry.trackIndex(atY: point.y,
+                                                   in: controller.project.timeline),
+           controller.project.timeline.tracks[ti].kind == .title {
+            let frame = controller.geometry.frame(atX: point.x)
+            if let ref = controller.project.speechCueRef(at: frame) {
+                controller.selectSpeech(.init(assetID: ref.assetID,
+                                              segmentIndex: ref.segmentIndex))
+            } else {
+                controller.selectTitle(nil)
+                controller.selectSpeech(nil)
+            }
+            return
+        }
+
+        guard let hit = controller.geometry.hitTest(x: point.x, y: point.y,
+                                                    in: controller.project.timeline) else {
+            if !controller.selection.isEmpty { controller.selection = [] }
+            controller.selectTitle(nil)
+            controller.selectSpeech(nil)
+            return
+        }
+
+        controller.selectClips([hit.clipID])
 
         // Modifikátory (krok 9, návrh sekce 4): ⌥ na okraji = roll (operace
         // na hranici), ⌘ v těle = slip (operace na obsahu). Bez souseda
@@ -881,6 +926,12 @@ final class TimelineDocumentView: NSView {
         if transitionDrag != nil {
             let point = convert(event.locationInWindow, from: nil)
             updateTransitionDrag(atX: point.x)
+            return
+        }
+        if titleDrag != nil {
+            let point = convert(event.locationInWindow, from: nil)
+            updateTitleDrag(atX: point.x,
+                            snapping: !event.modifierFlags.contains(.shift))
             return
         }
         guard controller.interaction.isDragging else { return }
@@ -922,6 +973,59 @@ final class TimelineDocumentView: NSView {
                                       geometry: controller.geometry)
     }
 
+    /// Náhled tažení titulku: model přeloží pozici kurzoru na zaraženou
+    /// pozici/délku (`titleMovePreview` a spol.), duch ukáže výsledek.
+    /// Model se nesahá.
+    private func updateTitleDrag(atX x: Double, snapping: Bool) {
+        guard var drag = titleDrag else { return }
+        let geometry = controller.geometry
+        let frame = geometry.frame(atX: x)
+
+        let result: TitleDragResult?
+        switch drag.hit.zone {
+        case .body:
+            result = controller.project.titleMovePreview(
+                id: drag.hit.titleID, pointerFrame: frame,
+                grabOffset: drag.hit.offsetInTitle,
+                candidates: drag.candidates, geometry: geometry, snapping: snapping)
+        case .leadingEdge:
+            result = controller.project.titleTrimStartPreview(
+                id: drag.hit.titleID, frame: frame,
+                candidates: drag.candidates, geometry: geometry, snapping: snapping)
+        case .trailingEdge:
+            result = controller.project.titleTrimEndPreview(
+                id: drag.hit.titleID, frame: frame,
+                candidates: drag.candidates, geometry: geometry, snapping: snapping)
+        }
+        guard let result else { return }
+        drag.result = result
+        titleDrag = drag
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let accent = result.isValid ? TimelinePalette.clipSelectedStroke
+                                        : TimelinePalette.playhead
+            ghostLayer.borderColor = accent.cgColor
+            ghostLayer.backgroundColor = TimelinePalette.titleClipFill
+                .withAlphaComponent(0.4).cgColor
+            snapGuideLayer.backgroundColor = TimelinePalette.clipSelectedStroke.cgColor
+        }
+        ghostLayer.isHidden = false
+        ghostLayer.frame = ghostFrame(trackID: drag.hit.trackID,
+                                      start: result.start, duration: result.duration,
+                                      timeline: controller.project.timeline,
+                                      geometry: geometry)
+        if let snapped = result.snappedTo {
+            snapGuideLayer.isHidden = false
+            let sx = geometry.x(for: snapped.frame)
+            snapGuideLayer.frame = CGRect(x: sx - 0.5, y: 0, width: 1, height: bounds.height)
+        } else {
+            snapGuideLayer.isHidden = true
+        }
+    }
+
     override func mouseUp(with event: NSEvent) {
         if let drag = transitionDrag {
             transitionDrag = nil
@@ -929,6 +1033,26 @@ final class TimelineDocumentView: NSView {
             if let duration = drag.duration {
                 controller.resizeTransition(drag.transitionID, to: duration)
             }
+            return
+        }
+        if let drag = titleDrag {
+            titleDrag = nil
+            ghostLayer.isHidden = true
+            snapGuideLayer.isHidden = true
+            if let result = drag.result {
+                switch drag.hit.zone {
+                case .body:
+                    if result.isValid {
+                        controller.commitTitleMove(drag.hit.titleID, to: result.start)
+                    }
+                case .leadingEdge, .trailingEdge:
+                    controller.commitTitleTrim(drag.hit.titleID,
+                                               start: result.start,
+                                               duration: result.duration)
+                }
+            }
+            let point = convert(event.locationInWindow, from: nil)
+            updateCursor(at: point)
             return
         }
         guard controller.interaction.isDragging else { return }
@@ -967,6 +1091,12 @@ final class TimelineDocumentView: NSView {
             ghostLayer.isHidden = true
             return
         }
+        if event.keyCode == 53, titleDrag != nil {
+            titleDrag = nil
+            ghostLayer.isHidden = true
+            snapGuideLayer.isHidden = true
+            return
+        }
         if event.keyCode == 53, controller.interaction.isDragging {
             controller.interaction.cancel()
             _ = controller.undo.cancelInteraction()
@@ -984,9 +1114,14 @@ final class TimelineDocumentView: NSView {
             return
         }
 
-        // Delete i forward delete mažou výběr (svázaná dvojčata jdou s ním).
+        // Delete i forward delete mažou výběr (svázaná dvojčata jdou s ním);
+        // vybraný titulek má přednost — výběry se navzájem vylučují.
         if event.keyCode == 51 || event.keyCode == 117 {
-            controller.deleteClips(controller.selection)
+            if let titleID = controller.selectedTitle {
+                controller.deleteTitle(titleID)
+            } else {
+                controller.deleteClips(controller.selection)
+            }
             return
         }
 
@@ -1035,11 +1170,20 @@ final class TimelineDocumentView: NSView {
     }
 
     private func updateCursor(at point: NSPoint) {
-        guard !controller.interaction.isDragging, transitionDrag == nil else { return }
+        guard !controller.interaction.isDragging,
+              transitionDrag == nil, titleDrag == nil else { return }
         // Přechod má přednost i u kurzoru — jeho okraje leží NAD klipy.
         if let transitionHit = controller.geometry.transitionHitTest(
             x: point.x, y: point.y, in: controller.project) {
             switch transitionHit.zone {
+            case .leadingEdge, .trailingEdge: Self.edgeCursor.set()
+            case .body: NSCursor.arrow.set()
+            }
+            return
+        }
+        if let titleHit = controller.geometry.titleHitTest(
+            x: point.x, y: point.y, in: controller.project.timeline) {
+            switch titleHit.zone {
             case .leadingEdge, .trailingEdge: Self.edgeCursor.set()
             case .body: NSCursor.arrow.set()
             }
@@ -1062,6 +1206,10 @@ final class TimelineDocumentView: NSView {
     private var menuCut: CutHit?
     /// Přechod pod pravým tlačítkem — cíl `menuRemoveTransition`.
     private var menuTransitionID: TransitionID?
+    /// Titulek pod pravým tlačítkem — cíl `menuDeleteTitle`.
+    private var menuTitleID: TitleClipID?
+    /// Místo na T1, kam míří „Přidat titulek" — snímek a stopa.
+    private var menuTitleSpot: (trackID: TrackID, frame: Frames)?
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let point = convert(event.locationInWindow, from: nil)
@@ -1080,11 +1228,57 @@ final class TimelineDocumentView: NSView {
             return menu
         }
 
+        // Pruh T1 (fáze 11, modul 3): na titulku Smazat, jinde Přidat.
+        if let titleHit = controller.geometry.titleHitTest(
+            x: point.x, y: point.y, in: controller.project.timeline) {
+            controller.selectTitle(titleHit.titleID)
+            menuTitleID = titleHit.titleID
+            let menu = NSMenu()
+            menu.autoenablesItems = false
+            let remove = NSMenuItem(title: "Smazat titulek",
+                                    action: #selector(menuDeleteTitle(_:)),
+                                    keyEquivalent: "")
+            remove.target = self
+            menu.addItem(remove)
+            return menu
+        }
+        if let ti = controller.geometry.trackIndex(atY: point.y,
+                                                   in: controller.project.timeline),
+           controller.project.timeline.tracks[ti].kind == .title {
+            let trackID = controller.project.timeline.tracks[ti].id
+            let frame = controller.geometry.frame(atX: point.x)
+            menuTitleSpot = (trackID, frame)
+            let room = controller.project.maxNewTitleDuration(at: frame, onTrack: trackID)
+
+            let menu = NSMenu()
+            menu.autoenablesItems = false
+            let templates: [(TitleTemplate, String)] = [
+                (.names, "Jména"),
+                (.dateAndPlace, "Datum a místo"),
+                (.chapter, "Kapitola"),
+                (.thanks, "Poděkování"),
+                (.plain, "Prostý text"),
+            ]
+            for (template, name) in templates {
+                let item = NSMenuItem(title: "Přidat titulek: \(name)",
+                                      action: #selector(menuAddTitle(_:)),
+                                      keyEquivalent: "")
+                item.target = self
+                item.representedObject = template.rawValue
+                item.isEnabled = room.count >= 1
+                if room.count < 1 {
+                    item.toolTip = "Tady už titulek leží — přidat jde jen do volného místa."
+                }
+                menu.addItem(item)
+            }
+            return menu
+        }
+
         guard let hit = controller.geometry.hitTest(x: point.x, y: point.y,
                                                     in: controller.project.timeline) else {
             return nil
         }
-        controller.selection = [hit.clipID]
+        controller.selectClips([hit.clipID])
         menuClipID = hit.clipID
 
         let menu = NSMenu()
@@ -1179,6 +1373,18 @@ final class TimelineDocumentView: NSView {
         menu.addItem(transcribe)
 
         return menu
+    }
+
+    @objc private func menuAddTitle(_ sender: NSMenuItem) {
+        guard let spot = menuTitleSpot,
+              let raw = sender.representedObject as? String,
+              let template = TitleTemplate(rawValue: raw) else { return }
+        controller.addTitle(template: template, at: spot.frame, onTrack: spot.trackID)
+    }
+
+    @objc private func menuDeleteTitle(_ sender: Any?) {
+        guard let id = menuTitleID else { return }
+        controller.deleteTitle(id)
     }
 
     @objc private func menuAddTransition(_ sender: NSMenuItem) {

@@ -128,6 +128,11 @@ final class TimelinePane: NSView {
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.documentView.refreshClips() },
+            // Výběr titulku (fáze 11) — rámeček kreslí refresh, stejná cesta.
+            controller.$selectedTitle
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.documentView.refreshClips() },
             controller.$playhead
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)

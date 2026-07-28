@@ -49,6 +49,20 @@ final class TimelineController: ObservableObject {
     /// Výběr. Totéž — stav UI, ne dokumentu.
     @Published var selection: Set<ClipID> = []
 
+    /// Vybraný titulek na T1 (fáze 11, modul 3). Výběry se navzájem
+    /// vylučují — inspektor pod přehrávačem ukazuje právě jednu věc.
+    @Published var selectedTitle: TitleClipID?
+
+    /// Vybraný úsek titulků z řeči (adresa v přepisu assetu). Text se
+    /// v inspektoru čte vždy čerstvý z projektu — adresa po editaci platí,
+    /// dokud úsek existuje.
+    @Published var selectedSpeech: SpeechSelection?
+
+    struct SpeechSelection: Hashable {
+        let assetID: AssetID
+        let segmentIndex: Int
+    }
+
     /// Mezipaměť vlnových průběhů (krok 10). Mezipaměť, ne dokument —
     /// špičky i dlaždice se dají kdykoli zahodit a spočítat znovu.
     let waveforms = WaveformStore()
@@ -220,6 +234,144 @@ final class TimelineController: ObservableObject {
         project = updated
     }
 
+    // MARK: - Titulkové klipy (fáze 11, modul 3)
+
+    /// Přidá titulek z kontextového menu: výchozí délka zaražená o mezeru
+    /// do dalšího titulku. Nový titulek se rovnou vybere — inspektor se
+    /// otevře na něm a uživatel hned píše.
+    func addTitle(template: TitleTemplate, at frame: Frames, onTrack trackID: TrackID) {
+        let room = project.maxNewTitleDuration(at: frame, onTrack: trackID)
+        guard room.count >= 1 else { return }
+        let duration = Frames(min(project.defaultTitleDuration.count, room.count))
+        var updated = project
+        guard let title = try? updated.makeTitle(text: defaultText(for: template),
+                                                 template: template,
+                                                 at: frame, duration: duration),
+              (try? updated.addTitle(title, onTrack: trackID)) != nil else { return }
+        undo.record(project)
+        project = updated
+        selectTitle(title.id)
+    }
+
+    /// Výchozí text nového titulku — něco k přepsání, ne prázdno, které
+    /// by na ose nebylo vidět.
+    private func defaultText(for template: TitleTemplate) -> String {
+        switch template {
+        case .plain: return "Text"
+        case .names: return "Jména novomanželů"
+        case .dateAndPlace: return "Datum a místo"
+        case .chapter: return "Kapitola"
+        case .thanks: return "Poděkování"
+        }
+    }
+
+    func deleteTitle(_ id: TitleClipID) {
+        var updated = project
+        guard (try? updated.removeTitle(id: id)) != nil else { return }
+        undo.record(project)
+        project = updated
+        if selectedTitle == id { selectedTitle = nil }
+    }
+
+    /// Puštění tažení titulku — mezistavy se do modelu nepsaly (duch),
+    /// takže jeden `record()` před zápisem, vzorec `move`/`resizeTransition`.
+    func commitTitleMove(_ id: TitleClipID, to start: Frames) {
+        guard let title = project.timeline.titleClip(id),
+              title.timelineStart != start else { return }
+        var updated = project
+        guard (try? updated.moveTitle(id: id, start: start)) != nil else { return }
+        undo.record(project)
+        project = updated
+    }
+
+    func commitTitleTrim(_ id: TitleClipID, start: Frames, duration: Frames) {
+        guard let title = project.timeline.titleClip(id),
+              title.timelineStart != start || title.duration != duration else { return }
+        var updated = project
+        if title.timelineStart != start {
+            guard (try? updated.trimTitleStart(id: id, to: start)) != nil else { return }
+        } else {
+            guard (try? updated.trimTitleEnd(id: id, to: start + duration)) != nil else { return }
+        }
+        undo.record(project)
+        project = updated
+    }
+
+    // MARK: Inspektor titulku
+
+    /// Psaní textu — vzorec posuvníku hlasitosti: mezistavy jsou legální,
+    /// zapisují se průběžně (uživatel vidí titulek v náhledu při psaní)
+    /// a begin/end kolem fokusu z nich složí jeden undo krok.
+    func titleEditingBegan() { undo.beginInteraction(project) }
+
+    func titleEditingChanged(_ id: TitleClipID, text: String) {
+        guard project.timeline.titleClip(id)?.text != text else { return }
+        var updated = project
+        guard (try? updated.setTitleText(id: id, text)) != nil else { return }
+        project = updated
+    }
+
+    func titleEditingEnded() { undo.endInteraction(project) }
+
+    func setTitleTemplate(_ id: TitleClipID, template: TitleTemplate) {
+        guard let title = project.timeline.titleClip(id), title.template != template
+        else { return }
+        var updated = project
+        guard (try? updated.setTitleTemplate(id: id, template)) != nil else { return }
+        undo.record(project)
+        project = updated
+    }
+
+    func setTitleAlignment(_ id: TitleClipID, alignment: TitleAlignment) {
+        guard let title = project.timeline.titleClip(id), title.alignment != alignment
+        else { return }
+        var updated = project
+        guard (try? updated.setTitleAlignment(id: id, alignment)) != nil else { return }
+        undo.record(project)
+        project = updated
+    }
+
+    /// Editace textu titulku z řeči (splátka fáze 8). Prázdný text úsek
+    /// maže — výběr pak zaniká s ním.
+    func setSpeechText(assetID: AssetID, segmentIndex: Int, text: String) {
+        var updated = project
+        guard (try? updated.setTranscriptText(assetID: assetID,
+                                              segmentIndex: segmentIndex,
+                                              text: text)) != nil else { return }
+        undo.record(project)
+        project = updated
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            selectedSpeech = nil
+        }
+    }
+
+    // MARK: Vzájemné vylučování výběrů
+
+    /// Inspektor ukazuje jednu věc — kdo vybírá, ruší ostatní druhy výběru.
+    func selectTitle(_ id: TitleClipID?) {
+        if selectedTitle != id { selectedTitle = id }
+        if id != nil {
+            if !selection.isEmpty { selection = [] }
+            if selectedSpeech != nil { selectedSpeech = nil }
+        }
+    }
+
+    func selectSpeech(_ speech: SpeechSelection?) {
+        if selectedSpeech != speech { selectedSpeech = speech }
+        if speech != nil {
+            if !selection.isEmpty { selection = [] }
+            if selectedTitle != nil { selectedTitle = nil }
+        }
+    }
+
+    func selectClips(_ ids: Set<ClipID>) {
+        if selection != ids { selection = ids }
+        if !ids.isEmpty {
+            if selectedTitle != nil { selectedTitle = nil }
+            if selectedSpeech != nil { selectedSpeech = nil }
+        }
+    }
+
     // MARK: - Synchronizace externího zvuku (fáze 7, modul 5)
 
     /// Kontextové menu klipu žádá synchronizaci — obslouží `AppModel`
@@ -241,7 +393,7 @@ final class TimelineController: ObservableObject {
         guard (try? updated.insert(clip, onTrack: a2.id)) != nil else { return false }
         undo.record(project)
         project = updated
-        selection = [clip.id]
+        selectClips([clip.id])
         return true
     }
 

@@ -435,3 +435,181 @@ extension TimelineLayout {
         return out
     }
 }
+
+// MARK: - Hit testing (modul 3)
+
+/// Titulek pod myší.
+public struct TitleHit: Hashable, Sendable {
+    public enum Zone: Hashable, Sendable {
+        /// Tělo — tažení celého titulku.
+        case body
+        /// Levý okraj — trim začátku.
+        case leadingEdge
+        /// Pravý okraj — trim konce.
+        case trailingEdge
+    }
+
+    public let titleID: TitleClipID
+    public let trackID: TrackID
+    public let zone: Zone
+    /// Kolik snímků od začátku titulku se kliklo — aby při tažení
+    /// neskočil počátkem pod kurzor, stejně jako klip.
+    public let offsetInTitle: Frames
+
+    public init(titleID: TitleClipID, trackID: TrackID, zone: Zone, offsetInTitle: Frames) {
+        self.titleID = titleID
+        self.trackID = trackID
+        self.zone = zone
+        self.offsetInTitle = offsetInTitle
+    }
+}
+
+extension TimelineGeometry {
+
+    /// Titulek pod bodem. Stejné vzorce jako `hitTest` klipů: okraje mají
+    /// přednost před tělem, úchopy jsou v BODECH (zásadní pravidlo souboru
+    /// `Geometry.swift`) a u titěrného titulku se plocha dělí napůl.
+    public func titleHitTest(x: Double, y: Double, in timeline: Timeline) -> TitleHit? {
+        guard let ti = trackIndex(atY: y, in: timeline) else { return nil }
+        let track = timeline.tracks[ti]
+        guard track.kind == .title else { return nil }
+        let frame = self.frame(atX: x)
+
+        for title in track.titles {
+            let startX = self.x(for: title.timelineStart)
+            let endX = self.x(for: title.timelineEnd)
+            guard x >= startX - edgeGrabWidth / 2, x <= endX + edgeGrabWidth / 2 else { continue }
+
+            let offset = Frames(Swift.max(0, frame.count - title.timelineStart.count))
+            let grab = Swift.min(edgeGrabWidth, (endX - startX) / 2)
+
+            if x <= startX + grab {
+                return TitleHit(titleID: title.id, trackID: track.id,
+                                zone: .leadingEdge, offsetInTitle: offset)
+            }
+            if x >= endX - grab {
+                return TitleHit(titleID: title.id, trackID: track.id,
+                                zone: .trailingEdge, offsetInTitle: offset)
+            }
+            return TitleHit(titleID: title.id, trackID: track.id,
+                            zone: .body, offsetInTitle: offset)
+        }
+        return nil
+    }
+}
+
+// MARK: - Tažení (modul 3)
+
+/// Výsledek náhledu tažení titulku — co má duch nakreslit a co se při
+/// puštění zapíše. Stejná dělba jako `DragPreview` u klipů, jen bez stop
+/// (titulek se drží na své) a bez partnera (roll u titulků neexistuje).
+public struct TitleDragResult: Hashable, Sendable {
+    public let start: Frames
+    public let duration: Frames
+    /// `false` = cíl je neplatný (překryv) — duch červeně, commit nic.
+    /// Trimy jsou vždy platné, meze se zařezávají.
+    public let isValid: Bool
+    public let snappedTo: SnapCandidate?
+
+    public init(start: Frames, duration: Frames, isValid: Bool, snappedTo: SnapCandidate?) {
+        self.start = start
+        self.duration = duration
+        self.isValid = isValid
+        self.snappedTo = snappedTo
+    }
+}
+
+extension Project {
+
+    /// Náhled tažení celého titulku. Přichytává se ZAČÁTEK i KONEC (bližší
+    /// vyhrává — týž vzorec jako `movePreview` klipů); neplatný cíl se
+    /// hlásí, nezařezává — zařezání by titulek tahalo po ose za myší.
+    public func titleMovePreview(id: TitleClipID, pointerFrame: Frames,
+                                 grabOffset: Frames,
+                                 candidates: [SnapCandidate],
+                                 geometry: TimelineGeometry,
+                                 snapping: Bool = true) -> TitleDragResult? {
+        guard let at = timeline.locateTitle(id) else { return nil }
+        let track = timeline.tracks[at.trackIndex]
+        let title = track.titles[at.titleIndex]
+
+        var start = pointerFrame - grabOffset
+        var snapped: SnapCandidate?
+        if snapping {
+            let byStart = geometry.snap(start, to: candidates)
+            let byEnd = geometry.snap(start + title.duration, to: candidates)
+            let dStart = byStart.candidate.map {
+                abs(geometry.x(for: $0.frame) - geometry.x(for: start)) } ?? .infinity
+            let dEnd = byEnd.candidate.map {
+                abs(geometry.x(for: $0.frame) - geometry.x(for: start + title.duration)) } ?? .infinity
+            if dStart <= dEnd, let c = byStart.candidate {
+                start = c.frame; snapped = c
+            } else if let c = byEnd.candidate {
+                start = c.frame - title.duration; snapped = c
+            }
+        }
+        if start.count < 0 { start = .zero }
+
+        let end = start + title.duration
+        let valid = !track.titles.contains {
+            $0.id != id && start < $0.timelineEnd && $0.timelineStart < end
+        }
+        return TitleDragResult(start: start, duration: title.duration,
+                               isValid: valid, snappedTo: snapped)
+    }
+
+    /// Náhled trimu začátku: zaražený o levého souseda, nulu osy a
+    /// minimální délku 1 snímek. Vždy platný — meze jsou už zaříznuté.
+    public func titleTrimStartPreview(id: TitleClipID, frame: Frames,
+                                      candidates: [SnapCandidate],
+                                      geometry: TimelineGeometry,
+                                      snapping: Bool = true) -> TitleDragResult? {
+        guard let at = timeline.locateTitle(id) else { return nil }
+        let track = timeline.tracks[at.trackIndex]
+        let title = track.titles[at.titleIndex]
+
+        let snapResult = snapping ? geometry.snap(frame, to: candidates)
+                                  : (frame: frame, candidate: nil)
+        let neighbour = at.titleIndex > 0
+            ? track.titles[at.titleIndex - 1].timelineEnd : Frames.zero
+        let lowest = Frames(Swift.max(0, neighbour.count))
+        let highest = title.timelineEnd - Frames(1)
+        let start = Frames(Swift.min(Swift.max(snapResult.frame.count, lowest.count),
+                                     highest.count))
+        return TitleDragResult(start: start, duration: title.timelineEnd - start,
+                               isValid: true, snappedTo: snapResult.candidate)
+    }
+
+    /// Náhled trimu konce: zaražený o pravého souseda a minimální délku.
+    public func titleTrimEndPreview(id: TitleClipID, frame: Frames,
+                                    candidates: [SnapCandidate],
+                                    geometry: TimelineGeometry,
+                                    snapping: Bool = true) -> TitleDragResult? {
+        guard let at = timeline.locateTitle(id) else { return nil }
+        let track = timeline.tracks[at.trackIndex]
+        let title = track.titles[at.titleIndex]
+
+        let snapResult = snapping ? geometry.snap(frame, to: candidates)
+                                  : (frame: frame, candidate: nil)
+        let neighbour = at.titleIndex + 1 < track.titles.count
+            ? track.titles[at.titleIndex + 1].timelineStart : Frames(Int.max / 2)
+        let lowest = title.timelineStart + Frames(1)
+        let end = Frames(Swift.min(Swift.max(snapResult.frame.count, lowest.count),
+                                   neighbour.count))
+        return TitleDragResult(start: title.timelineStart,
+                               duration: end - title.timelineStart,
+                               isValid: true, snappedTo: snapResult.candidate)
+    }
+
+    /// Kolik snímků má nový titulek k dispozici od `frame` do nejbližšího
+    /// dalšího titulku. Nula = místo je obsazené (menu položku vypne).
+    public func maxNewTitleDuration(at frame: Frames, onTrack trackID: TrackID) -> Frames {
+        guard frame.count >= 0,
+              let track = timeline.track(id: trackID), track.kind == .title
+        else { return .zero }
+        if track.titles.contains(where: { $0.contains(frame: frame) }) { return .zero }
+        let next = track.titles.first { $0.timelineStart >= frame }
+        guard let next else { return Frames(Int.max / 2) }
+        return next.timelineStart - frame
+    }
+}

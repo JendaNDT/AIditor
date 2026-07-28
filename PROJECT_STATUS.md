@@ -13,9 +13,9 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): přechody → texty/T1 → fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 10 — přechody, modul 3 (UI: přechod z kontextového menu střihu, lichoběžník přes hranu na ose, délka tažením okraje se zarážkou z `maxTransitionDuration`).** Moduly 1 a 2 hotové, viz sekce fáze 10 níže. Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 11 — texty, titulky a stopa T1, modul 1 (model: druh stopy `.title` a titulkový klip + testy).** Fáze 10 je hotová celá, viz níže. Detail v `IMPLEMENTACNI_PLAN.md`.
 
-## 🔄 FÁZE 10 — přechody (rozjetá 28. 07. 2026)
+## ✅ FÁZE 10 — přechody (HOTOVÁ 28. 07. 2026)
 
 ✅ **Modul 1 — model `Transition` v `TimelineModelu` (28. 07. 2026).** Čistý Swift, **+30 testů, celkem 284, 0 selhání**; aplikace se s novým modelem překládá beze změn.
 
@@ -38,7 +38,16 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
   - Dvě pasti do sbírky: **① stdout CLI běhu se do roury bufferuje až do konce procesu** (i pod `script` pty na macOS) — synchronizace vnějšího měření jde přes markerový soubor v kontejneru, ne přes print; **② konec itemu poznávej ze `timeControlStatus == .paused`**, ne z času hlavy — periodický pozorovatel nemusí poslední snímek tiknout a smyčka čekající na `currentTime ≥ konec` se nikdy nedočká.
   - *Koukanec rukou zatím neproběhl (odloženo autorem): prolínačka/zatmívačka v náhledu okem, plynulost přehrávání přes přechod.*
 
-  **Zbývá z fáze 10:** modul 3 — UI (přechod z kontextového menu střihu, lichoběžník přes hranu na ose, délka tažením okraje se zarážkou z `maxTransitionDuration`, hlášky `blockedByTransition` v interakcích).
+✅ **Modul 3 — UI přechodů (28. 07. 2026): FÁZE 10 JE TÍM HOTOVÁ.** Rozložení opět „logika do modelu":
+
+  - **`TransitionGeometry` v `TimelineModelu` (+9 testů, celkem 301):** `transitionPlacements` (kde leží lichoběžník, viditelnostní filtr), `transitionHitTest` (tělo/okraje, úchopy v BODECH podle zásadního pravidla geometrie), `cutHit` (nejbližší střih do tolerance 2× úchopu — cíl kontextového menu) a `transitionDraggedDuration` — tažení okraje drží délku SYMETRICKY kolem střihu (2× vzdálenost), zaraženou o `maxTransitionDuration` a zdola o 2 snímky.
+  - **Kreslení:** `TransitionLayer` (`CAShapeLayer`, žádné `draw` — past `ContentLayer` platí) nad klipy: horní hrana přes celou oblast, spodní se sbíhá ke střihu. Fialová — jediná na ose, neplete se s modrou/zelenou/žlutou/červenou. Recyklace ručně (přechodů jsou jednotky, diff aparát netřeba), obnovuje se uvnitř `refreshClips`.
+  - **Interakce:** lichoběžník má přednost před klipy (události, kurzory, menu) — jinak by se pod ním naslepo trimovalo. Tažení okraje = duch + JEDEN zápis při puštění (vzorec `move`: mezistav při tažení by 60×/s přestavoval kompozici), Escape ruší, ⌘Z vrací. Tělo zatím nic nedělá — akce jsou v menu.
+  - **Kontextové menu:** pravý klik poblíž střihu → „Prolínačka / Zatmívačka do černé / do bílé na střihu" (zvuková stopa: „Prolnutí zvuku"), výchozí délka 1 s zaražená o mez; na lichoběžníku nebo u obsazeného střihu „Odebrat přechod". **Nedosažitelný druh zůstává v menu VYPNUTÝ s vysvětlením v tooltipu** (chybí přesahy / není místo) — přiznané meze, ne zmizelá položka.
+  - **Ověřeno screenshotem běžící aplikace** (`--transition-gpu on`): oba lichoběžníky sedí na střizích 2,0 s a 4,0 s, sbíhají se ke střihu, čitelné přes okraje klipů.
+  - Vědomé drobnosti do vymazlení (F16): trim/roll zaražený přechodem (`blockedByTransition`) dnes tažení tiše nepustí — duch nezčervená, jen se nic nestane; přechod nejde vybrat klikem do těla (menu stačí).
+
+  *Koukanec rukou celé fáze (odloženo autorem, v seznamu před kill-gate): menu na střihu přidá přechod, lichoběžník jde roztáhnout se zarážkou, Odebrat funguje, prolínačka v náhledu měkce prolne, zatmívačka projde barvou, zvukový crossfade je slyšet, export zní i vypadá stejně jako náhled.*
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -65,6 +74,7 @@ Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou p�
 
 **Seznam koukanců (odškrtávat po projití):**
 
+- [ ] **Přechody (F10):** pravý klik poblíž střihu → prolínačka/zatmívačka (na zvukové stopě prolnutí zvuku); lichoběžník na ose jde roztáhnout tažením okraje se zarážkou; „Odebrat přechod" funguje; nedosažitelná prolínačka je v menu vypnutá s vysvětlením; prolínačka v náhledu měkce prolne, zatmívačka projde černou/bílou, crossfade je slyšet; export vypadá i zní jako náhled.
 - [ ] **Dotaz při zavírání (F5):** změna v projektu → ⌘Q ukáže Uložit/Neukládat/Zrušit (Escape ruší); týž dotaz po výběru souboru při ⌘O a importu; „Uložit" u neuloženého projektu přes „Uložit jako" — zrušení panelu ruší i zavírání.
 - [ ] **Hlasitost stop (F7):** posuvník v hlavičce A1/A2 mění hlasitost ZA BĚHU přehrávání bez zastavení; M ztlumí a vrátí; ⌘Z vrací tažení jedním krokem; hodnoty přežijí uložení a otevření projektu.
 - [ ] **Normalizace exportu (F7):** volba profilu u tlačítka exportu; po exportu status hlásí „Hlasitost X → cíl (gain ±Y dB)", případně poctivé omezení špičkami.

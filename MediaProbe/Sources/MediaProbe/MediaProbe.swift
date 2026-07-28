@@ -8,7 +8,8 @@
 //      swift run MediaProbe [složka] [--results cesta/RESULTS.md]
 //
 //  Bez argumentů projde ../TestClips relativně k balíčku a zapíše RESULTS.md
-//  vedle sebe.
+//  vedle sebe. Při měření JINÉ složky se bez --results žádný soubor nezapisuje
+//  — RESULTS.md je kanonický záznam o TestClips a nesmí ho přepsat cizí běh.
 //
 
 import AVFoundation
@@ -43,10 +44,23 @@ struct MediaProbe {
             .deletingLastPathComponent()  // MediaProbe
             .deletingLastPathComponent()  // Sources
             .deletingLastPathComponent()  // balíček
-        let folder = folderArgument.map { URL(fileURLWithPath: $0) }
-            ?? packageRoot.deletingLastPathComponent().appendingPathComponent("TestClips")
-        let resultsURL = resultsArgument.map { URL(fileURLWithPath: $0) }
-            ?? packageRoot.appendingPathComponent("RESULTS.md")
+        let testClipsFolder = packageRoot.deletingLastPathComponent()
+            .appendingPathComponent("TestClips")
+        let folder = folderArgument.map { URL(fileURLWithPath: $0) } ?? testClipsFolder
+
+        // RESULTS.md je kanonický záznam o TestClips — klipy samotné jsou
+        // v .gitignore, takže přepsat ho výsledkem cizí složky znamená ten
+        // záznam ZTRATIT (stalo se ve fázi 5, všimlo si to až ve fázi 10).
+        // Bez --results se proto zapisuje jen při měření právě TestClips;
+        // u jiné složky zůstane výsledek v konzoli.
+        let resultsURL: URL?
+        if let resultsArgument {
+            resultsURL = URL(fileURLWithPath: resultsArgument)
+        } else if canonicalPath(folder) == canonicalPath(testClipsFolder) {
+            resultsURL = packageRoot.appendingPathComponent("RESULTS.md")
+        } else {
+            resultsURL = nil
+        }
 
         guard let files = mediaFiles(in: folder) else {
             FileHandle.standardError.write(
@@ -77,10 +91,26 @@ struct MediaProbe {
         }
 
         printConsole(reports: reports)
-        writeResults(reports: reports, to: resultsURL, folder: folder)
+        if let resultsURL {
+            writeResults(reports: reports, to: resultsURL, folder: folder,
+                         canonical: canonicalPath(folder) == canonicalPath(testClipsFolder))
+        } else {
+            print("""
+
+              Markdown se nezapsal: měřila se jiná složka než TestClips a RESULTS.md
+              je kanonický záznam právě o TestClips. Chceš-li výsledek do souboru,
+              přidej --results cesta/k/souboru.md.
+            """)
+        }
     }
 
     // MARK: - Vstup
+
+    /// Táž složka se dá zadat mnoha zápisy (relativně, s `..`, přes symlink).
+    /// Porovnávat se proto musí až vyžehlená absolutní cesta.
+    static func canonicalPath(_ url: URL) -> String {
+        url.standardizedFileURL.resolvingSymlinksInPath().path
+    }
 
     static func mediaFiles(in folder: URL) -> [URL]? {
         guard let contents = try? FileManager.default.contentsOfDirectory(
@@ -123,7 +153,7 @@ struct MediaProbe {
 
     // MARK: - Zápis RESULTS.md
 
-    static func writeResults(reports: [ClipReport], to url: URL, folder: URL) {
+    static func writeResults(reports: [ClipReport], to url: URL, folder: URL, canonical: Bool) {
         let stamp = ISO8601DateFormatter().string(from: Date())
         var lines: [String] = []
 
@@ -131,9 +161,15 @@ struct MediaProbe {
         lines.append("")
         lines.append("*Vygenerováno \(stamp) nástrojem `MediaProbe`.*")
         lines.append("")
-        lines.append("Klipy samotné jsou v `.gitignore` (jsou to gigabajty videa), takže tenhle")
-        lines.append("soubor je jediný záznam o tom, na čem se měřilo. Negeneruj ho ručně —")
-        lines.append("spusť `swift run MediaProbe` a commitni výsledek.")
+        if canonical {
+            lines.append("Klipy samotné jsou v `.gitignore` (jsou to gigabajty videa), takže tenhle")
+            lines.append("soubor je jediný záznam o tom, na čem se měřilo. Negeneruj ho ručně —")
+            lines.append("spusť `swift run MediaProbe` a commitni výsledek.")
+        } else {
+            lines.append("⚠ Jednorázové měření jiné složky než `TestClips` (vyžádané přes")
+            lines.append("`--results`). Kanonický záznam o testovacích klipech je")
+            lines.append("`MediaProbe/RESULTS.md` — tenhle soubor ho nenahrazuje.")
+        }
         lines.append("")
         lines.append("- **Zdrojová složka:** `\(folder.path)`")
         lines.append("- **Souborů:** \(reports.count)")
@@ -215,7 +251,12 @@ struct MediaProbe {
           swift run MediaProbe [složka] [--results cesta/RESULTS.md]
 
           složka     kde hledat klipy (výchozí: ../TestClips vedle balíčku)
-          --results  kam zapsat markdown (výchozí: MediaProbe/RESULTS.md)
+          --results  kam zapsat markdown
+
+        Bez --results se markdown zapíše do MediaProbe/RESULTS.md, ale JEN
+        při měření složky TestClips — RESULTS.md je kanonický záznam právě
+        o ní. U jiné složky zůstane výsledek v konzoli, dokud neřekneš
+        --results.
 
         Čte rozlišení, orientaci, kodeky, snímkovou frekvenci, edit list a
         skutečné délky vzorků. Nic nedekóduje ani nemění.

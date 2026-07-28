@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor: svatební asistent škrtnut 28. 07. 2026 na pokyn autora** (AI analýza scén a obličejů zůstává podmíněná za v1.0).
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. FÁZE 8 (titulky) HOTOVÁ: přepis WhisperKitem, titulky v náhledu, export SRT. FÁZE 9 (distribuce) ROZJETÁ: migrace na Configuration hotová; podpis a notarizace ČEKAJÍ NA APPLE DEVELOPER ÚČET AUTORA.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. FÁZE 8 (titulky) HOTOVÁ: přepis WhisperKitem, titulky v náhledu, export SRT. FÁZE 9 uzavřená v rozsahu OSOBNÍ appky (28. 07. 2026): distribuce, podpis i licence odloženy — appka je free a jen pro autora. **STAVBA JE KOMPLETNÍ — před námi koukance a KILL-GATE 1.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -15,7 +15,23 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 
 **Poslední otevřené kritérium je zavřené.** Plynulost náhledu 4K/60 se ve spiku změřit nedala (přehrávač neexistoval) — fáze 1 ji zodpověděla a **27. 07. 2026 byla přeměřena po opravě metodiky: náhled běží přesně na stropu 60Hz displeje, bez sekání.**
 
-## ⏭️ Příští krok
+## ⏭️ Příští krok: KOUKANCE a KILL-GATE 1
+
+**Appka je podle ořezaného plánu KOMPLETNÍ (28. 07. 2026).** Autor odkládal ruční testy, dokud nebude celá — teď je. Konsolidovaný seznam neproběhlých koukanců (odškrtávat po projití):
+
+- [ ] **Dotaz při zavírání (F5):** změna v projektu → ⌘Q ukáže Uložit/Neukládat/Zrušit (Escape ruší); týž dotaz po výběru souboru při ⌘O a importu; „Uložit" u neuloženého projektu přes „Uložit jako" — zrušení panelu ruší i zavírání.
+- [ ] **Hlasitost stop (F7):** posuvník v hlavičce A1/A2 mění hlasitost ZA BĚHU přehrávání bez zastavení; M ztlumí a vrátí; ⌘Z vrací tažení jedním krokem; hodnoty přežijí uložení a otevření projektu.
+- [ ] **Normalizace exportu (F7):** volba profilu u tlačítka exportu; po exportu status hlásí „Hlasitost X → cíl (gain ±Y dB)", případně poctivé omezení špičkami.
+- [ ] **Sync klopáku (F7):** pravý klik na klip → Synchronizovat externí zvuk… → výběr nahrávky → zvuk na A2 sedí s obrazem; u nesouvisející nahrávky dialog s nízkou jistotou (nepoloží mlčky).
+- [ ] **Titulky (F8):** pravý klik → Vytvořit titulky z řeči (poprvé stahuje model ~1,5 GB — chce síť a trpělivost); titulek se ukazuje při přehrávání i scrubbování; Soubor → Exportovat titulky (.srt) a soubor jde otevřít.
+- [ ] **Offline scénář (F5, formálně neověřený):** přejmenovat složku s klipy, otevřít projekt — klipy zůstávají, assety offline, po vrácení složky se chytí.
+- [ ] Drobnosti z F4: „Smazat proxy" a start s odpojeným externím diskem.
+
+Pak: 🚧 **KILL-GATE 1 — sestříhat touhle appkou celou reálnou svatbu.** Při něm se přirozeně ověří i kritérium F4 (plynulost střihu na 200GB reálném materiálu) a přepis na reálné řeči.
+
+**Vědomě odložené vymazlovací drobnosti** (kdyby po kill-gate zbyla chuť): editace textu titulků, titulkový pruh T1 na ose, dotažení stropu normalizace na true peak (dBTP), správa místa modelu Whisperu.
+
+## ⏭️ Původní zápis příštího kroku (historie)
 
 ✅ **Blokátor vyřešen: „černý náhled" nebyl vada přehrávače, video překrývala vadná kreslicí vrstva časové osy (27. 07. 2026 pozdě večer).** Rozhodovací experiment ze včerejšího zápisu proběhl a vyšel OBRÁCENĚ, než napovídal hlavní podezřelý: pipeline benchmarku (b) obraz nespustila — spouštěčem bylo skrytí chrome (a), protože s ním z hierarchie odchází osa. Bisekce po vrstvách a nakonec diff stromu vrstev černého a funkčního běhu ukázaly příčinu: **`TimelinePane` měl override `draw(_:)` a jeho kreslicí `ContentLayer` dostala na macOS 26 rámec přes celé okno** (0,-454 640×718 při vlastních 640×220) — tmavá výplň rohu osy se kreslila přes video. Detaily a poučení v sekci rizik.
 
@@ -64,9 +80,9 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   ⚠️ K tomu past do sbírky: **zakryté okno pozastaví display link z `NSView.displayLink`** — benchmark pak visí na prvním tiku a nikdy nezačne. Proto si okno před měřením říká o popředí (`makeKeyAndOrderFront`) a čas se počítá až od prvního tiku. Stejná třída pasti jako „měření náhledu je platné, jen když bylo na co koukat".
 
-## 🔄 FÁZE 9 — distribuce (rozjetá 28. 07. 2026)
+## ✅ FÁZE 9 — uzavřená v rozsahu osobní aplikace (28. 07. 2026)
 
-Rozvrh: **1)** migrace na `AVVideoComposition.Configuration` (hotová, níže), **2)** ~~licencování + freemium~~ **VYNECHÁNO — rozhodnutí autora 28. 07. 2026: aplikace bude zatím free** (odloženo, ne škrtnuto; kill-gate 2 přeformulován v plánu z „prodat deseti lidem" na „ať ji deset cizích lidí použije"), **3)** Sparkle aktualizace, **4)** Developer ID podpis + notarizace — **BLOKOVÁNO na autorovi:** vyžaduje Apple Developer Program účet (99 USD/rok); založení a přihlášení jsou jeho kroky, zapojení certifikátů do buildu pak moje.
+**Rozhodnutí autora: Developer účet se neplatí, appka je zatím jen pro něj.** Tím z fáze 9 odpadá podpis, notarizace i Sparkle (bez šíření nemají smysl) — celá distribuce je odložená a zapsaná v plánu jako návod pro případ, že by se někdy šířila. Licencování bylo vynecháno už dřív týž den (appka bude free). Z fáze zůstala a udělala se jen migrace na `Configuration` (modul 1 níže). **Tím je postavené všechno, co ořezaný plán pro osobní v1.0 předepisuje — před námi je už jen KILL-GATE 1 a koukance.**
 
 ✅ **Modul 1 — migrace škálovací kompozice na `AVVideoComposition.Configuration` (28. 07. 2026).** Přesně podle plánu fáze 9: dvojí implementace za jedním rozhraním (`ScalingVideoComposition.make` v ProbeKitu) — na macOS 26+ nové API přes `Configuration` (má `frameDuration` i `renderSize`; **API ověřeno proti swiftinterface SDK 26.5**, ne odhadem), na macOS 14–25 dosavadní `AVMutableVideoComposition`. Stará větev NESMÍ zmizet, dokud je deployment target 14.
 
@@ -354,8 +370,8 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 ### Cesta k v1.0 (+~3 měsíce)
 - **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — ✅ **HOTOVO 28. 07. 2026, pět modulů za jeden den: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm), per-track hlasitost/mute (`--mix-check`), LUFS normalizace exportu se stropem špiček (`--normalize-check`), jádro cross-korelačního syncu a sync v UI (`--sync-check`: položení na vzorek přesně). Koukance rukou odložené autorem — seznam u modulů.**
 - **F8** Titulky přes WhisperKit *(2 týdny)* — ✅ **HOTOVO 28. 07. 2026: model přepisu kotvený ve zdroji (+14 testů), WhisperKit přepis ověřený na české větě, overlay v náhledu a export SRT. Odloženo: editace textu, pruh T1 na ose.**
-- **F9** Distribuce, notarizace, Sparkle *(3 týdny)* — 🔄 **modul 1 hotový 28. 07. 2026: migrace na `AVVideoComposition.Configuration` (dvojí větev, ověřeno exportem na 0,0 % kolísání); licencování VYNECHÁNO (appka zatím free); zbývá Sparkle a podpis (blokováno na Developer účtu autora)**
-- 🚧 **KILL-GATE 2:** prodat deseti lidem, kteří tě neznají
+- **F9** ~~Distribuce, notarizace, Sparkle~~ — ✅ **uzavřená 28. 07. 2026 v rozsahu osobní appky: hotová jen migrace na `Configuration` (ověřeno exportem, 0,0 % kolísání); podpis, notarizace, Sparkle i licencování ODLOŽENY — appka je free a jen pro autora**
+- 🚧 ~~KILL-GATE 2~~ — odložen s distribucí (není komu prodávat/rozdávat)
 
 ### Za v1.0 — podmíněné
 - **F10** AI analýza scén a kvality záběrů *(2 týdny)* — bezpečná AI, žádné právní riziko

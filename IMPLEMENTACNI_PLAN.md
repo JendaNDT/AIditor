@@ -313,7 +313,9 @@ Nepoužívej `SwiftWhisper` — je zamrzlý na whisper.cpp z jara 2023 a nemá M
 
 ### FÁZE 9 — Distribuce (3 týdny) → **v1.0**
 
-Developer ID, hardened runtime, `notarytool`, `stapler`, Sparkle, licencování, freemium limit 3 minuty.
+Developer ID, hardened runtime, `notarytool`, `stapler`, Sparkle.
+
+**Licencování a freemium limit VYNECHÁNY — rozhodnutí autora 28. 07. 2026: aplikace bude zatím free.** „Zatím" = odloženo, ne škrtnuto; kdyby se někdy vracelo, je to samostatná fáze, ne příloha téhle. Cena 1 490 Kč ze specifikace (sekce o monetizaci) tím pádem neplatí.
 
 **+ Migrace kompozice na `AVVideoComposition.Configuration`.** Tohle je jediné místo, kam ten úkol patří — ne dřív.
 
@@ -335,11 +337,13 @@ Apple Developer Program: 99 USD/rok, pokrývá obojí.
 
 ## 🚧 KILL-GATE 2 — po v1.0
 
-> **Prodej to. Deseti lidem, kteří tě neznají.**
+> ~~Prodej to. Deseti lidem, kteří tě neznají.~~ **Po rozhodnutí „appka je free" (28. 07. 2026) přeformulováno: dostaň ji k deseti lidem, kteří tě neznají, a ať s ní sestříhají vlastní video.**
 
-- **Prodáš** → fáze 10.
-- **Neprodáš, ale máš zpětnou vazbu proč** → oprav to, ne stavěj AI.
-- **Neprodáš a nikdo neví proč** → problém je v pozicování, ne ve funkcích. Žádná AI to nespraví.
+- **Používají ji** → fáze 10.
+- **Nepoužívají, ale máš zpětnou vazbu proč** → oprav to, ne stavěj AI.
+- **Nepoužívají a nikdo neví proč** → problém je v pozicování, ne ve funkcích. Žádná AI to nespraví.
+
+Smysl gate se nemění: ověřit, že produkt chce někdo cizí. Prodej byl jen měřítko — free appka měří ochotou instalovat a doopravdy použít.
 
 ---
 

@@ -66,7 +66,7 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
 ## 🔄 FÁZE 9 — distribuce (rozjetá 28. 07. 2026)
 
-Rozvrh: **1)** migrace na `AVVideoComposition.Configuration` (hotová, níže), **2)** licencování + freemium limit 3 minuty, **3)** Sparkle aktualizace, **4)** Developer ID podpis + notarizace — **BLOKOVÁNO na autorovi:** vyžaduje Apple Developer Program účet (99 USD/rok); založení a přihlášení jsou jeho kroky, zapojení certifikátů do buildu pak moje.
+Rozvrh: **1)** migrace na `AVVideoComposition.Configuration` (hotová, níže), **2)** ~~licencování + freemium~~ **VYNECHÁNO — rozhodnutí autora 28. 07. 2026: aplikace bude zatím free** (odloženo, ne škrtnuto; kill-gate 2 přeformulován v plánu z „prodat deseti lidem" na „ať ji deset cizích lidí použije"), **3)** Sparkle aktualizace, **4)** Developer ID podpis + notarizace — **BLOKOVÁNO na autorovi:** vyžaduje Apple Developer Program účet (99 USD/rok); založení a přihlášení jsou jeho kroky, zapojení certifikátů do buildu pak moje.
 
 ✅ **Modul 1 — migrace škálovací kompozice na `AVVideoComposition.Configuration` (28. 07. 2026).** Přesně podle plánu fáze 9: dvojí implementace za jedním rozhraním (`ScalingVideoComposition.make` v ProbeKitu) — na macOS 26+ nové API přes `Configuration` (má `frameDuration` i `renderSize`; **API ověřeno proti swiftinterface SDK 26.5**, ne odhadem), na macOS 14–25 dosavadní `AVMutableVideoComposition`. Stará větev NESMÍ zmizet, dokud je deployment target 14.
 
@@ -334,7 +334,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **Implementační plán** — 12 fází, 3 kill-gates, modulová mapa, session protokol (`IMPLEMENTACNI_PLAN.md`)
 - **Interaktivní tracker** — odškrtávací postup s progress barem (`krasa-tracker.html`)
 - Rešerše tří rizikových oblastí: Whisper na macOS, face clustering, timeline UI a compositor
-- Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
+- Vyřešeno pozicování, distribuce, datový model `.projektkrasa` *(cena 1 490 Kč zrušena — 28. 07. 2026 rozhodnuto, že appka bude zatím free)*
 
 ## 🔄 Rozjeté (nedodělané)
 - **Fáze 4 — proxy.** Hotová a potvrzená rukou; otevřené zůstává jen kritérium plynulosti na reálném 200GB materiálu (přirozeně u Kill-gate 1).
@@ -354,7 +354,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 ### Cesta k v1.0 (+~3 měsíce)
 - **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — ✅ **HOTOVO 28. 07. 2026, pět modulů za jeden den: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm), per-track hlasitost/mute (`--mix-check`), LUFS normalizace exportu se stropem špiček (`--normalize-check`), jádro cross-korelačního syncu a sync v UI (`--sync-check`: položení na vzorek přesně). Koukance rukou odložené autorem — seznam u modulů.**
 - **F8** Titulky přes WhisperKit *(2 týdny)* — ✅ **HOTOVO 28. 07. 2026: model přepisu kotvený ve zdroji (+14 testů), WhisperKit přepis ověřený na české větě, overlay v náhledu a export SRT. Odloženo: editace textu, pruh T1 na ose.**
-- **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — 🔄 **modul 1 hotový 28. 07. 2026: migrace na `AVVideoComposition.Configuration` (dvojí větev, ověřeno exportem na 0,0 % kolísání); zbývá licence+freemium, Sparkle a podpis (blokováno na Developer účtu autora)**
+- **F9** Distribuce, notarizace, Sparkle *(3 týdny)* — 🔄 **modul 1 hotový 28. 07. 2026: migrace na `AVVideoComposition.Configuration` (dvojí větev, ověřeno exportem na 0,0 % kolísání); licencování VYNECHÁNO (appka zatím free); zbývá Sparkle a podpis (blokováno na Developer účtu autora)**
 - 🚧 **KILL-GATE 2:** prodat deseti lidem, kteří tě neznají
 
 ### Za v1.0 — podmíněné

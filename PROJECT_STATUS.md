@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), fáze 3 rozjetá — přehrávač hraje celou osu VČETNĚ rychlostních křivek.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (208 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. Kroky 6–9 čekají na ověření interakcí rukou; vlna na klipu je ověřená screenshotem.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), fáze 3 rozjetá — přehrávač hraje celou osu VČETNĚ rychlostních křivek.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (208 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. Interakce kroků 6–10 potvrzené rukou 28. 07. 2026; zbývá jen výkonový test s 1000 klipy.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -27,35 +27,35 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   ⚠️ **Nová past do sbírky: SwiftUI `updateNSView` se přeskočí, když se hodnoty representable nezměnily** — a reference na controller se nemění nikdy. Osa proto po importu zůstala prázdná: projekt se naplnil (debug log: V1=5, A1=5), ale `reload()` nikdo nezavolal. Oprava: `TimelinePane` odebírá `controller.objectWillChange` přes Combine (s `receive(on:)`, protože notifikace chodí PŘED změnou). Je to bratranec pasti „SwiftUI nesleduje vnořené ObservableObjecty" z fáze 1.
 
-  👀 **Zbývá koukanec na plynulost scrollu** (kritérium kroku: „scroll je plynulý") — recyklace je otestovaná množinově, ale ruka na trackpadu se automatizovaně nahradit nedá.
+  ✅ **Koukanec plynulosti scrollu potvrzen rukou (28. 07. 2026)** — scroll přes celou osu bez zadrhnutí.
 
-🔄 **Krok 6 — playhead + seek do přehrávače: NAPSANÝ, čeká na koukanec (28. 07. 2026).** Červená `playheadLayer` přes celou výšku dokumentu (kreslí se, ověřeno screenshotem — stojí na nule). Klik/tažení v pravítku → `setPlayheadFromUser` → `AppModel.seekPlayer`: najde obrazový klip pod hlavou, případně vymění asset v přehrávači a seekne na `sourceOffset` (převod počítá model). Zpětný směr: při přehrávání jede hlava za `currentTime`; smyčce brání `isUserScrubbing` (hlavu táhne uživatel) a podmínka `isPlaying`, přesně podle `FAZE_2_VIEW.md` sekce 5. Hlava v mezeře/za koncem: posunout se smí, seekovat není kam — přehrávač zůstává.
+✅ **Krok 6 — playhead + seek do přehrávače: HOTOVÝ, potvrzeno rukou (28. 07. 2026).** Červená `playheadLayer` přes celou výšku dokumentu (kreslí se, ověřeno screenshotem — stojí na nule). Klik/tažení v pravítku → `setPlayheadFromUser` → `AppModel.seekPlayer`: najde obrazový klip pod hlavou, případně vymění asset v přehrávači a seekne na `sourceOffset` (převod počítá model). Zpětný směr: při přehrávání jede hlava za `currentTime`; smyčce brání `isUserScrubbing` (hlavu táhne uživatel) a podmínka `isPlaying`, přesně podle `FAZE_2_VIEW.md` sekce 5. Hlava v mezeře/za koncem: posunout se smí, seekovat není kam — přehrávač zůstává.
 
   Odběry v `TimelinePane` zúžené z plošného `objectWillChange` na cílené publishery (`$project`/geometrie → reload, `$selection` → refresh klipů, `$playhead` → jen přepis rámce jedné vrstvy) — hlava se při přehrávání hýbe 30×/s a plošná reakce by třicetkrát za sekundu přestavovala pruhy a překreslovala pravítko.
 
-  👀 **„Hotovo když" kroku 6 („klikneš do pravítka a monitor skočí") zbývá ověřit rukou.** Syntetický klik při automatickém ověřování narazil na oprávnění zpřístupnění (macOS ukázal dialog — klidně Zakázat, pro vývoj není potřeba). Zkontroluj: klik do pravítka skočí monitorem na správný snímek, tažení scrubuje, mezerník přehrává a hlava jede s obrazem, klik za posledním klipem hlavu posune a obraz nechá.
+  ✅ **„Hotovo když" kroku 6 potvrzeno rukou (28. 07. 2026):** klik do pravítka skáče monitorem, tažení scrubuje, mezerník přehrává s hlavou v synchronu, klik za posledním klipem posune jen hlavu.
 
-🔄 **Krok 7 — tažení klipů: NAPSANÝ, čeká na koukanec (28. 07. 2026).** Cesta události přesně podle `FAZE_2_VIEW.md` sekce 4: `mouseDown` = `hitTest` + `interaction.begin` (a výběr klipu), `mouseDragged` = `preview` **jen do overlay vrstvy** (duch s poloprůhlednou výplní, při neplatném cíli červeně, vodicí čára na kandidátovi přichycení), `mouseUp` = `commit` do modelu. Do modelu se během tažení nezapisuje — to hlídá otestovaná `TimelineInteraction`, view jen předává souřadnice a kreslí.
+✅ **Krok 7 — tažení klipů: HOTOVÝ, potvrzeno rukou (28. 07. 2026).** Cesta události přesně podle `FAZE_2_VIEW.md` sekce 4: `mouseDown` = `hitTest` + `interaction.begin` (a výběr klipu), `mouseDragged` = `preview` **jen do overlay vrstvy** (duch s poloprůhlednou výplní, při neplatném cíli červeně, vodicí čára na kandidátovi přichycení), `mouseUp` = `commit` do modelu. Do modelu se během tažení nezapisuje — to hlídá otestovaná `TimelineInteraction`, view jen předává souřadnice a kreslí.
 
   Undo dvěma způsoby a je to schválně (zapsáno i v návrhu): u `move` neexistuje legální mezistav → jeden `record()` před zápisem; u trimu a rollu jsou mezistavy legální → `beginInteraction`/`endInteraction`, a když se nic nezmění, krok nevznikne. Escape tažení ruší (model se nesahal), ⌘Z/⇧⌘Z jde přes `keyDown` — appka nemá `NSUndoManager`, undo drží vlastní snapshot stack z modelu. Shift při tažení vypíná přichytávání. Roll/slip modifikátory jsou krok 9.
 
-  👀 **„Hotovo když" kroku 7 („přetáhneš klip, zkrátíš ho, ⌘Z to vrátí") čeká na ruku** — syntetická myš bez oprávnění zpřístupnění nejde (viz krok 6). Zkontroluj: tažení těla klipu ukazuje ducha a pustí klip na nové místo (přes souseda červeně a nepustí), tažení okraje trimuje, duch se přichytává na hrany/nulu/hlavu (Shift vypne), Escape tažení zruší, ⌘Z vrátí, klik vybírá (žlutý okraj) a klik do prázdna výběr zruší. Smoke test prošel: klipy i hlava se po změně kreslí stejně.
+  ✅ **„Hotovo když" kroku 7 potvrzeno rukou (28. 07. 2026):** duch při tažení, červená přes souseda a nepustí, trim okrajem, přichytávání (Shift vypíná), Escape ruší, ⌘Z vrací, výběr klikem funguje.
 
-🔄 **Krok 8 — zoom: NAPSANÝ, kotvení čeká na gesto (28. 07. 2026).** Pinch (`magnify`) a ⌘+kolečko na dokumentu osy; bez ⌘ jde kolečko dál a scroll view normálně scrolluje. Kotvení na kurzoru: nová geometrie → **synchronně** přerozměřit dokument → scroll tak, aby snímek pod kurzorem zůstal pod kurzorem; kotva se drží ve zlomkových snímcích (celé by při pinchi posouvaly obsah). Během tažení se zoom ignoruje (`FAZE_2_VIEW.md` 2.6). Meze 0,02–120 bodů/snímek zařezává `TimelineGeometry.setZoom` — otestovaná.
+✅ **Krok 8 — zoom: HOTOVÝ, kotvení potvrzeno rukou (28. 07. 2026).** Pinch (`magnify`) a ⌘+kolečko na dokumentu osy; bez ⌘ jde kolečko dál a scroll view normálně scrolluje. Kotvení na kurzoru: nová geometrie → **synchronně** přerozměřit dokument → scroll tak, aby snímek pod kurzorem zůstal pod kurzorem; kotva se drží ve zlomkových snímcích (celé by při pinchi posouvaly obsah). Během tažení se zoom ignoruje (`FAZE_2_VIEW.md` 2.6). Meze 0,02–120 bodů/snímek zařezává `TimelineGeometry.setZoom` — otestovaná.
 
-  Cesta geometrie → přerozměření → překreslení **ověřena screenshotem** (dočasná sonda `setZoom(0,15)`, po ověření smazaná): čtyři klipy vedle sebe, pravítko samo zhrublo na 30s rozteč, úzký klip zkracuje jméno. 👀 **Kotvení na kurzoru a plynulost pinche chce ruku** — gesto se syntetizovat nedá: pinchni nad konkrétním klipem a zkontroluj, že zůstane pod prsty; ⌘+kolečko totéž; při rozjetém tažení nesmí zoom nic dělat.
+  Cesta geometrie → přerozměření → překreslení **ověřena screenshotem** (dočasná sonda `setZoom(0,15)`, po ověření smazaná): čtyři klipy vedle sebe, pravítko samo zhrublo na 30s rozteč, úzký klip zkracuje jméno. ✅ **Kotvení na kurzoru i plynulost pinche potvrzeny rukou (28. 07. 2026):** klip zůstává pod prsty, ⌘+kolečko též, při rozjetém tažení zoom nic nedělá.
 
-🔄 **Krok 9 — roll/slip, menu, zkratky, kurzory: NAPSANÝ, čeká na koukanec (28. 07. 2026).** ⌥ na okraji vynutí roll, ⌘ v těle slip (návrh sekce 4; bez souseda spadne roll na trim — hlídá interakce). Kurzory přes `NSTrackingArea` s `.cursorUpdate` (`columnResize` gatovaný na macOS 15+, fallback deprecated `resizeLeftRight` — přesně vzorec z návrhu). Kontextové menu: Rozdělit v hlavě (aktivní jen když hlava vede vnitřkem klipu) / Smazat / Smazat s dosunutím. Zkratky: Delete maže výběr, ⌘B řeže vybrané v hlavě. Mazání bere svázaná dvojčata; všechno píše undo.
+✅ **Krok 9 — roll/slip, menu, zkratky, kurzory: HOTOVÝ, potvrzeno rukou (28. 07. 2026).** ⌥ na okraji vynutí roll, ⌘ v těle slip (návrh sekce 4; bez souseda spadne roll na trim — hlídá interakce). Kurzory přes `NSTrackingArea` s `.cursorUpdate` (`columnResize` gatovaný na macOS 15+, fallback deprecated `resizeLeftRight` — přesně vzorec z návrhu). Kontextové menu: Rozdělit v hlavě (aktivní jen když hlava vede vnitřkem klipu) / Smazat / Smazat s dosunutím. Zkratky: Delete maže výběr, ⌘B řeže vybrané v hlavě. Mazání bere svázaná dvojčata; všechno píše undo.
 
   **Mezera nalezená v návrhu a opravená v modelu: split svázaného páru.** Dosavadní `split` nechal oběma polovinám `linkID` originálu — u páru V+A by po řezu sdílely jednu vazbu tři klipy a `validate()` by hlásil `brokenLink`. Teď je `split` link-aware: řeže i dvojče a poloviny přepojuje po dvojicích (levé sdílí původní vazbu, pravé čerstvou); u nesouosého dvojčete (vzniká trimem jednoho z páru) zůstává vazba polovině s překryvem. **+6 testů, celkem 188, 0 selhání.** Vedlejší zjištění: `move` je link-aware odjakživa — dvojče jde s klipem, nesouosost vyrobí jen trim.
 
-  👀 Koukanec kroku 9: ⌥-tažení hranice mezi sousedy roluje (oba duchy), ⌘-tažení v těle slipuje, kurzor se mění na okraji, pravé tlačítko ukazuje menu a položky dělají, co říkají, Delete a ⌘B fungují.
+  ✅ Koukanec kroku 9 potvrzen rukou (28. 07. 2026): roll ⌥, slip ⌘, kurzory, kontextové menu, Delete i ⌘B fungují.
 
 ✅ **Krok 10 — vlnové průběhy (28. 07. 2026): NAPSANÝ a vlna ověřená screenshotem.** Přesně dvě vrstvy mezipaměti z návrhu 2.7: **špičky** (min/max na okno 256 vzorků, `AVAssetReader` nad `AVCompozicí` — kompozice ctí edit list, takže vlna není o 44 ms vedle zvuku; disková cache s otiskem cesta+velikost+mtime v Application Support/Waveforms) a **dlaždice** (`CGImage` klíčem asset + mocnina dvou zoomu + index, líně na pozadí; mezi úrovněmi se natahují, takže pinch mezipaměť nezahazuje). Žádný `CATiledLayer` — jeho úrovně detailu jsou vázané na měřítko vrstvy. Dlaždice se skládají jen pro viditelný výřez klipu a jsou assetové: trim ani slip je nezahazuje. U titěrných klipů se vlna i titulek schovávají úplně, nezmenšují (návrh, sekce 6). Špičky jdou z originálu, ale přes `Asset.url(usingProxies:)` — jediné místo rozhodující o souboru. Render černou s alfou → dlaždice nezávisí na světlém/tmavém režimu. **Ověřeno okem: obálka s transienty (rány sekerou) na zvukovém klipu A1 hned při prvním spuštění.**
 
-  👀 Koukanec kroku 10: pinch nad zvukovým klipem — vlna se během gesta smí lehce rozmazat, po ustálení ostrá, a hlavně NIC nesmí sekat. A výkonový test z návrhu (sekce 6): scroll přes celou osu bez vypadlého tiku.
+  ✅ Koukanec kroku 10 potvrzen rukou (28. 07. 2026): vlna se při pinchi jen lehce rozmaže a po ustálení je ostrá, nic neseká; scroll přes osu plynulý. Výkonový test s 1000 klipy zůstává otevřený.
 
-**Fáze 2 tím má napsaných všech deset kroků.** Zbývá souhrnný koukanec na interakce (checklist u kroků 6–9) a pak výkonový rozpočet: 1000 klipů, scroll přes celou osu, žádný vypadlý tik.
+**Fáze 2 má všech deset kroků napsaných a interakce potvrzené rukou (28. 07. 2026).** Zbývá jediné kritérium: výkonový rozpočet — 1000 klipů, scroll přes celou osu, žádný vypadlý tik.
 
 ## 🔄 FÁZE 3 — speed ramping ostrý (rozjetá 28. 07. 2026)
 
@@ -72,11 +72,11 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
   - **Ověřeno skriptem na reálném klipu** (dva klipy na stopě, první s rampou): délka kompozice na tick přesná (240 snímků = 720 000 ticků), 150 úseků navazuje beze zbytku, druhý klip začíná přesně na 5 s se správným zdrojem — škálování pozpátku ho neposunulo — a uprostřed zpomalení je rychlost 0,2500×.
   - **Dočasný ovladač pro koukanec:** kontextové menu klipu → „Zpomalit 0,25× (testovací rampa)" / „Zrušit zpomalení". Křivka se natáhne tak, aby klip zůstal stejně dlouhý (kotví se přes 62,5 % spotřeby). Zmizí, až modul 3 přinese editor.
 
-  👀 **Koukanec modulu 2:** na importovaném klipu vyvolej testovací rampu (pravé tlačítko), pusť přehrávání přes klip — má být vidět plynulé zpomalení do 0,25× a zpět, **zvuk bez lupanců a bez „mickey-mouse" výšky** (`.timeDomain` drží formanty; na 1× úsecích nedělá nic). ⌘Z rampu vrátí. Pozor: obraz se zpomalí i tam, kde zdroj nemá dost snímků (60fps zdroj na 0,25× při 30fps výstupu duplikuje ~13,5 % snímků — viz pravidlo o hloubce zpomalení); žlutá zóna v UI je až modul 3.
+  ✅ **Koukanec modulu 2 potvrzen rukou a uchem (28. 07. 2026):** plynulé zpomalení do 0,25× a zpět, klip stejně dlouhý, zvuk bez lupanců i bez „mickey-mouse" výšky, hlava v synchronu, ⌘Z/menu rampu ruší, split rampovaného klipu navazuje. Trvá: 60fps zdroj na 0,25× duplikuje ~13,5 % snímků — žlutá zóna v UI je až modul 3.
 
   **Zbývá modul 3:** `SpeedRampEditor` UI se žlutou zónou pod `výstupFps / zdrojFps` (limit per klip ze změřené frekvence) a zobrazením `limitedByFrameRate`. „Hotovo když: nakreslíš křivku myší, náhled ji ukáže, zvuk drží."
 
-👀 **Kroky 2 a 3 chtějí koukanec.** Krok 2 potvrzený (27. 07. 2026, 21:08). U kroku 3 se očima ověřuje, že při vodorovném scrollu jede timecode s obsahem a jména stop stojí, a při svislém naopak.
+✅ **Kroky 2 a 3 potvrzené.** Krok 2 rukou 27. 07. 2026 (21:08); krok 3 v rámci ručního průchodu 28. 07. 2026 — checklist zahrnoval scrubování v pravítku a scroll přes celou osu, rozjetý timecode nebo ujíždějící hlavičky by nešly přehlédnout.
 
 ✅ **Krok 1 — `TimelineModel` napojený na `Krasa.xcodeproj`** (commit `3f5f9cb`). Lokální balíček stejným vzorcem jako `ProbeKit` a `SpeedRampEngine`. Přibyl `TimelineController` — vlastník stavu podle `FAZE_2_VIEW.md` 2.1, kde má **geometrie jediné úložiště** (`interaction.geometry`) a controller ji vystavuje jen průchodem.
 
@@ -170,14 +170,14 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 2 — timeline.** `TimelineModel` hotový (208 testů), view má napsaných všech deset kroků. Zbývá koukanec na interakce 6–10 a výkonový test (1000 klipů, scroll bez vypadlého tiku).
+- **Fáze 2 — timeline.** `TimelineModel` hotový (208 testů), view napsané a interakce potvrzené rukou. Zbývá výkonový test (1000 klipů, scroll bez vypadlého tiku).
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
 ### Cesta k v0.5 „MVP nula" (~6 měsíců při 30 h/týdně)
 - **F0** Spike 0 — ověření speed rampingu — ✅ **HOTOVO 26. 07. 2026**, hlavní riziko zavřené
 - **F1** Kostra, import, přehrávač, VFRDetector — ✅ **HOTOVO 26. 07. 2026**
-- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (208 testů), všech deset kroků view napsaných; zbývá koukanec interakcí a výkonový test**
+- **F2** Timeline v AppKitu — nejtěžší UI v projektu *(4–5 týdnů)* — 🔄 **model hotový (208 testů), view napsané, interakce potvrzené rukou; zbývá výkonový test s 1000 klipy**
 - **F3** Speed ramping ostrý *(3 týdny)*
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)*
 - **F5** Projekt, autosave, undo, export *(3 týdny)*

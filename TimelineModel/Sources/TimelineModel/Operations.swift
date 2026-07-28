@@ -32,6 +32,8 @@ public enum TimelineError: Error, Hashable, Sendable {
     case notJoinable(reason: String)
     /// Rychlostní křivka s neplatnými uzly (nerostoucí časy, nulová rychlost).
     case invalidSpeedRamp
+    /// Úsek přepisu s koncem před začátkem (fáze 8).
+    case invalidTranscriptSegment
 }
 
 // MARK: - Assety

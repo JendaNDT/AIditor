@@ -89,6 +89,11 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
     /// známou délku — smazat cizí práci kvůli přejmenované složce je horší
     /// chyba než prázdné místo v náhledu.
     public var isOffline: Bool
+    /// Přepis řeči (fáze 8), kotvený ve ZDROJOVÉM čase — trim a přesun
+    /// klipů s ním nehnou. Volitelné pole: starší projektové soubory ho
+    /// nemají a formát kvůli němu verzi nezvedá. Zapisuj přes
+    /// `Project.setTranscript`, ta data zvaliduje a seřadí.
+    public var transcript: [TranscriptSegment]?
 
     public init(id: AssetID = AssetID(),
                 originalURL: URL,
@@ -98,7 +103,8 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
                 measuredFrameRate: Double,
                 hasVideo: Bool = true,
                 hasAudio: Bool = true,
-                isOffline: Bool = false) {
+                isOffline: Bool = false,
+                transcript: [TranscriptSegment]? = nil) {
         self.id = id
         self.originalURL = originalURL
         self.proxyURL = proxyURL
@@ -108,6 +114,7 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
         self.hasVideo = hasVideo
         self.hasAudio = hasAudio
         self.isOffline = isOffline
+        self.transcript = transcript
     }
 
     /// Jediné místo v celém projektu, kde se rozhoduje, se kterým souborem

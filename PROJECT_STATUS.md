@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor: svatební asistent škrtnut 28. 07. 2026 na pokyn autora** (AI analýza scén a obličejů zůstává podmíněná za v1.0).
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. Příští krok: FÁZE 8 — titulky přes WhisperKit.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. FÁZE 8 (titulky) ROZJETÁ: model přepisu a SRT hotové, na řadě WhisperKit.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -63,6 +63,17 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
   3. **Zpětná smyčka dlaždic vln.** Každá na pozadí dokončená dlaždice bumpla `version` a spustila CELÝ `refreshClips` navíc k tomu scrollovacímu. → throttle odběru na 100 ms.
 
   ⚠️ K tomu past do sbírky: **zakryté okno pozastaví display link z `NSView.displayLink`** — benchmark pak visí na prvním tiku a nikdy nezačne. Proto si okno před měřením říká o popředí (`makeKeyAndOrderFront`) a čas se počítá až od prvního tiku. Stejná třída pasti jako „měření náhledu je platné, jen když bylo na co koukat".
+
+## 🔄 FÁZE 8 — titulky (rozjetá 28. 07. 2026)
+
+Rozvrh: **1)** model přepisu + promítnutí na osu + SRT (hotový, níže), **2)** WhisperKit — závislost, stažení modelu `large-v3-turbo`, přepis assetu na pozadí, **3)** zobrazení na ose/v náhledu + export SRT v UI + editace textu.
+
+✅ **Modul 1 — model přepisu, promítnutí na osu, SRT (28. 07. 2026).** Čistý Swift v `TimelineModelu`, **+14 testů, celkem 254.**
+
+  - **Přepis patří ASSETU a je kotvený ve ZDROJOVÉM čase** (`Asset.transcript`, `setTranscript` validuje a řadí) — totéž rozhodnutí jako u uzlů ramp: střih, trim ani přesun s titulky nehnou, drží se na slovech. Test: split klipu uprostřed titulku → dvě poloviny navazují beze spáry. Volitelné pole, verze formátu souboru se nezvedá — staré projekty se dál načtou (test).
+  - **`subtitleCues()` promítá přepisy na osu** přes kliky JEN zvukových stop (svázaný pár sdílí asset — jinak by byl každý titulek dvakrát). Mapování zdroj→osa inverzí `sourceOffset` binárním půlením, takže **funguje i pod rychlostní křivkou** — titulek na zpomaleném úseku se natáhne s řečí (test: hranice sedí s vlastním mapováním střihu na snímek přesně).
+  - **`SRT.serialize`** — SubRip s čárkou v časech, číslování bez děr, prázdné texty se přeskakují, LF konce. Formát času otestovaný na hodinových hodnotách.
+  - Kdo přepis vyrobí, je téhle vrstvě jedno — WhisperKit je modul 2; model je hotový a otestovaný dřív, než se stáhl jediný bajt závislosti.
 
 ## ✅ FÁZE 7 — audio engine (HOTOVÁ 28. 07. 2026)
 
@@ -314,7 +325,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 
 ### Cesta k v1.0 (+~3 měsíce)
 - **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — ✅ **HOTOVO 28. 07. 2026, pět modulů za jeden den: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm), per-track hlasitost/mute (`--mix-check`), LUFS normalizace exportu se stropem špiček (`--normalize-check`), jádro cross-korelačního syncu a sync v UI (`--sync-check`: položení na vzorek přesně). Koukance rukou odložené autorem — seznam u modulů.**
-- **F8** Titulky přes WhisperKit *(2 týdny)*
+- **F8** Titulky přes WhisperKit *(2 týdny)* — 🔄 **modul 1 hotový 28. 07. 2026: model přepisu kotvený ve zdroji, promítnutí na osu (i pod rampou) a SRT, +14 testů; zbývá WhisperKit samotný a UI**
 - **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — **+ migrace na `AVVideoComposition.Configuration`** jako druhá větev pod `if #available(macOS 26.0, *)`. Ne dřív.
 - 🚧 **KILL-GATE 2:** prodat deseti lidem, kteří tě neznají
 

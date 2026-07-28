@@ -129,7 +129,7 @@ Testy pustíš přes `cd SpeedRampEngine && swift test`.
 ### `TimelineModel/`
 Logika, geometrie a interakce časové osy. Čistý Swift, jediná závislost
 `SpeedRampEngine` (také čistý Swift), **žádné AVFoundation ani AppKit** —
-přeloží se a otestuje i na Linuxu. **240 testů, ověřeno.** Od fáze 3 umí
+přeloží se a otestuje i na Linuxu. **254 testů, ověřeno.** Od fáze 3 umí
 `sourceConsumption`/`sourceOffset` rychlostní křivku (uzly kotvené ve
 zdrojovém čase) a `rampPlaybackPlan` vydává segmentaci v celých tickách
 pro `scaleTimeRange`.

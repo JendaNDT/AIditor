@@ -54,6 +54,7 @@ struct KrasaApp: App {
                 Divider()
                 Button("Exportovat film…") { model.exportMovie() }
                     .keyboardShortcut("e")
+                Button("Exportovat titulky (.srt)…") { model.exportSubtitles() }
             }
         }
     }

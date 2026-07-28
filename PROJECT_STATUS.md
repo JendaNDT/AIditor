@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor: svatební asistent škrtnut 28. 07. 2026 na pokyn autora** (AI analýza scén a obličejů zůstává podmíněná za v1.0).
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. FÁZE 8 (titulky) ROZJETÁ: model přepisu, SRT i WhisperKit přepis hotové — zbývá zobrazení a export v UI.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR + dotaz při zavírání neuloženého projektu (dialog čeká na koukanec rukou). Před námi KILL-GATE 1 (koukance autor odkládá, až bude appka celá — stavíme dál). FÁZE 7 (audio) HOTOVÁ: hlasitosti stop, LUFS normalizace exportu i sync klopáku. FÁZE 8 (titulky) HOTOVÁ: přepis WhisperKitem, titulky v náhledu, export SRT. Příští krok: FÁZE 9 — distribuce (notarizace, Sparkle, licence, migrace na Configuration).**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -64,7 +64,7 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   ⚠️ K tomu past do sbírky: **zakryté okno pozastaví display link z `NSView.displayLink`** — benchmark pak visí na prvním tiku a nikdy nezačne. Proto si okno před měřením říká o popředí (`makeKeyAndOrderFront`) a čas se počítá až od prvního tiku. Stejná třída pasti jako „měření náhledu je platné, jen když bylo na co koukat".
 
-## 🔄 FÁZE 8 — titulky (rozjetá 28. 07. 2026)
+## ✅ FÁZE 8 — titulky (HOTOVÁ 28. 07. 2026)
 
 Rozvrh: **1)** model přepisu + promítnutí na osu + SRT (hotový, níže), **2)** WhisperKit — závislost, stažení modelu `large-v3-turbo`, přepis assetu na pozadí, **3)** zobrazení na ose/v náhledu + export SRT v UI + editace textu.
 
@@ -83,6 +83,14 @@ Rozvrh: **1)** model přepisu + promítnutí na osu + SRT (hotový, níže), **2
   - ⚠️ **Past v názvosloví modelů:** OpenAI „large-v3-turbo" se v repozitáři `whisperkit-coreml` jmenuje **`openai_whisper-large-v3-v20240930`** (podle data vydání). Přípona `_turbo` tam značí komprimované varianty WhisperKitu — jiná věc. S "large-v3-turbo" stažení spadne na `modelsUnavailable`; zapsáno i v kódu.
   - **Ověřeno CLI `--transcribe-check`** na české větě syntetizované hlasem Zuzana (10,4 s): tři úseky se správnými časy a přesným textem („svadbě" místo „svatbě" je artefakt syntetického hlasu, ne přepisu). Ověření na reálné řeči přirozeně přijde s Kill-gate 1.
   - *Koukanec rukou zatím neproběhl (odloženo autorem): menu na klipu, průběh ve statusu, přepis reálného klipu.*
+
+✅ **Modul 3 — titulky v náhledu a export SRT (28. 07. 2026): FÁZE 8 JE TÍM HOTOVÁ.**
+
+  - **`SubtitleOverlay`:** titulek pod hlavou osy, přes spodek náhledu. Vlastní malé view (vzorec `TransportBar` — hlava tiká 30×/s a překreslovat se smí jen proužek). Promítnuté titulky se přepočítávají jen při změně projektu (debounce 150 ms), na tik hlavy se jen hledá v hotovém poli; překrývající se titulky z více stop se skládají pod sebe. **Kreslí se JEN když má co říct** — prázdný overlay by přepnul WindowServer do skládání a zkazil GPU baseline z fáze 1; při měřeních je schovaný, benchmarky měří totéž co dřív.
+  - **Export SRT:** menu Soubor → „Exportovat titulky (.srt)…" — `subtitleCues()` z osy → `SRT.serialize` → soubor vedle filmu. Bez titulků poradí, co udělat dřív.
+  - **Ověřeno CLI `--srt-check`:** syntetický přepis na asset → promítnutí přes klipy osy → korektní SRT výstup (2 titulky, časy sedí s pozicí klipu).
+  - **Vědomě odloženo (ne zapomenuto):** editace textu titulků (zatím = pustit přepis znovu; přijde s inspektorem), titulkový pruh T1 na ose ze spec 4.1 (overlay v náhledu je funkční jádro; pruh je kreslení navíc) a vypalování titulků do videa (spec s ním nepočítá, SRT je standard dodávky).
+  - *Koukanec rukou zatím neproběhl (odloženo autorem): titulek se ukazuje při přehrávání i scrubbování, export SRT jde otevřít v přehrávači.*
 
 ## ✅ FÁZE 7 — audio engine (HOTOVÁ 28. 07. 2026)
 
@@ -334,7 +342,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 
 ### Cesta k v1.0 (+~3 měsíce)
 - **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — ✅ **HOTOVO 28. 07. 2026, pět modulů za jeden den: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm), per-track hlasitost/mute (`--mix-check`), LUFS normalizace exportu se stropem špiček (`--normalize-check`), jádro cross-korelačního syncu a sync v UI (`--sync-check`: položení na vzorek přesně). Koukance rukou odložené autorem — seznam u modulů.**
-- **F8** Titulky přes WhisperKit *(2 týdny)* — 🔄 **moduly 1+2 hotové 28. 07. 2026: model přepisu + SRT (14 testů) a WhisperKit přepis ověřený na české větě; zbývá modul 3 — zobrazení titulků a export SRT v UI**
+- **F8** Titulky přes WhisperKit *(2 týdny)* — ✅ **HOTOVO 28. 07. 2026: model přepisu kotvený ve zdroji (+14 testů), WhisperKit přepis ověřený na české větě, overlay v náhledu a export SRT. Odloženo: editace textu, pruh T1 na ose.**
 - **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — **+ migrace na `AVVideoComposition.Configuration`** jako druhá větev pod `if #available(macOS 26.0, *)`. Ne dřív.
 - 🚧 **KILL-GATE 2:** prodat deseti lidem, kteří tě neznají
 

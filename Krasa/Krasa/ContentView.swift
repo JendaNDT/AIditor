@@ -567,6 +567,47 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Export titulků do SubRip souboru vedle filmu (fáze 8, modul 3).
+    func exportSubtitles() {
+        let cues = timeline.project.subtitleCues()
+        guard !cues.isEmpty else {
+            status = "Na ose nejsou žádné titulky — nejdřív „Vytvořit titulky z řeči“ na klipu."
+            return
+        }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "srt",
+                                            conformingTo: .plainText) ?? .plainText]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue =
+            (projectStore.fileURL?.deletingPathExtension().lastPathComponent ?? "Svatba") + ".srt"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let srt = SRT.serialize(cues: cues, frameRate: timeline.project.timeline.frameRate)
+            try srt.write(to: url, atomically: true, encoding: .utf8)
+            status = "Titulky uloženy: \(url.lastPathComponent) (\(cues.count) titulků)."
+        } catch {
+            status = "Uložení titulků selhalo: \(error.localizedDescription)"
+        }
+    }
+
+    /// CLI ověření SRT cesty: syntetický přepis na první asset → titulky
+    /// promítnuté přes klipy osy → hotový SRT výstup. Formát samotný
+    /// drží testy modelu; tohle cvičí skládání appky od assetu po soubor.
+    func verifySRTExport() {
+        guard let asset = timeline.project.assets.first else {
+            print("❌ projekt nemá asset"); return
+        }
+        timeline.setTranscript(assetID: asset.id, segments: [
+            TranscriptSegment(start: SourceTime(seconds: 1), end: SourceTime(seconds: 2.5),
+                              text: "Zkušební titulek"),
+            TranscriptSegment(start: SourceTime(seconds: 4), end: SourceTime(seconds: 5),
+                              text: "Druhý úsek"),
+        ])
+        let cues = timeline.project.subtitleCues()
+        print("titulků na ose: \(cues.count)")
+        print(SRT.serialize(cues: cues, frameRate: timeline.project.timeline.frameRate))
+    }
+
     /// CLI ověření přepisu: soubor se známou českou větou (say/nahrávka),
     /// vytiskne úseky s časy — správnost textu se posoudí proti předloze.
     func verifyTranscription(path: String?) async {
@@ -1222,6 +1263,8 @@ struct ContentView: View {
                     await model.verifySyncedAudio(path: explicit.first)
                 } else if arguments.contains("--transcribe-check") {
                     await model.verifyTranscription(path: explicit.first)
+                } else if arguments.contains("--srt-check") {
+                    model.verifySRTExport()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
@@ -1360,8 +1403,18 @@ struct ContentView: View {
 
     private var playerPane: some View {
         VStack(spacing: 0) {
-            PlayerView(player: model.controller.player) { view in
-                model.attach(view)
+            // Titulkový overlay (fáze 8): kreslí se JEN když má co říct.
+            // Prázdný overlay by přepnul WindowServer do skládání a
+            // zkazil GPU baseline z fáze 1; při měření je schovaný celý
+            // (chromeHidden/isMeasuring), takže benchmarky měří totéž
+            // co dřív.
+            ZStack(alignment: .bottom) {
+                PlayerView(player: model.controller.player) { view in
+                    model.attach(view)
+                }
+                if !model.chromeHidden && !model.isMeasuring {
+                    SubtitleOverlay(timeline: model.timeline)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -1393,6 +1446,48 @@ struct ContentView: View {
 
             TransportBar(controller: model.controller, hidden: model.chromeHidden)
         }
+    }
+}
+
+/// Titulek pod hlavou osy (fáze 8, modul 3). Vlastní malé view ze
+/// stejného důvodu jako `TransportBar`: hlava se při přehrávání hýbe
+/// 30×/s a překreslovat se smí jen tenhle proužek, ne celé okno.
+///
+/// Promítnuté titulky (`subtitleCues`) se přepočítávají jen při změně
+/// projektu; na tik hlavy se jen hledá v hotovém seřazeném poli.
+private struct SubtitleOverlay: View {
+    @ObservedObject var timeline: TimelineController
+    @State private var cues: [SubtitleCue] = []
+
+    var body: some View {
+        Group {
+            if let text = currentText {
+                Text(text)
+                    .font(.system(size: 21, weight: .semibold))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(.black.opacity(0.55),
+                                in: RoundedRectangle(cornerRadius: 6))
+                    .padding(.bottom, 20)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onAppear { cues = timeline.project.subtitleCues() }
+        .onReceive(timeline.$project
+            .removeDuplicates()
+            .debounce(for: .milliseconds(150), scheduler: DispatchQueue.main)) { project in
+            cues = project.subtitleCues()
+        }
+    }
+
+    private var currentText: String? {
+        let playhead = timeline.playhead
+        // Překrývající se titulky (víc stop) se skládají pod sebe.
+        let active = cues.filter { $0.start <= playhead && playhead < $0.end }
+        guard !active.isEmpty else { return nil }
+        return active.map(\.text).joined(separator: "\n")
     }
 }
 

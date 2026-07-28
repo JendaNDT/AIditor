@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (228 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. FÁZE 2 HOTOVÁ, FÁZE 4 ROZJETÁ: proxy se generují, stříhá se z nich a scrubování je znatelně svižnější (potvrzeno rukou).**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. FÁZE 4 v praxi HOTOVÁ (proxy + externí disk, potvrzeno rukou), FÁZE 5 ROZJETÁ: projekt se ukládá do .projektkrasa a po startu se sám obnoví.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -64,7 +64,21 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
 
   ⚠️ K tomu past do sbírky: **zakryté okno pozastaví display link z `NSView.displayLink`** — benchmark pak visí na prvním tiku a nikdy nezačne. Proto si okno před měřením říká o popředí (`makeKeyAndOrderFront`) a čas se počítá až od prvního tiku. Stejná třída pasti jako „měření náhledu je platné, jen když bylo na co koukat".
 
-## 🔄 FÁZE 4 — proxy a výkon (rozjetá 28. 07. 2026)
+## 🔄 FÁZE 5 — projekt a export (rozjetá 28. 07. 2026)
+
+✅ **Modul 1 — projektový soubor `.projektkrasa`: uložit, otevřít, obnovit po startu.**
+
+  - **`ProjectFile` v TimelineModelu (+4 testy, celkem 232):** verze formátu, metadata a projekt v jeho VLASTNÍ Codable podobě — celé ticky a zdrojově kotvené uzly. Kde se spec 6.2 rozchází s pozdějšími rozhodnutími (sekundy s čárkou, výstupně kotvené uzly), platí rozhodnutí. Zápis je deterministický (`sortedKeys`) — stejný projekt = stejné bajty. Verze se čte a schvaluje PŘED obsahem: soubor z novější aplikace se odmítne srozumitelně, ne dekódovací chybou.
+  - **`ProjectStore` v appce:** uložit/otevřít přes panely (⌘S, ⇧⌘S, ⌘O v menu — model se kvůli tomu přestěhoval z `ContentView` do `KrasaApp`), zapamatování posledního projektu bookmarkem a obnova při startu. **Security-scoped bookmark per asset se ukládá do souboru** — bez něj by sandbox po restartu nepustil projekt k vlastním klipům. `resolveAssets` při otevření opraví přesunuté cesty, označí nedostupné assety offline (jejich klipy ZŮSTÁVAJÍ — smazat cizí práci kvůli přejmenované složce je horší chyba než díra v náhledu) a zahodí proxy, jejichž soubor zmizel.
+  - **Jeden soubor, ne balíček ze spec 6.1** — proxy jsou centrální cache s vlastním umístěním (fáze 4; spec 6.3 to sama doporučuje) a autosavy patří do Application Support, aby přežily přesun souboru. Zdůvodněná odchylka, ne opomenutí.
+  - Import klipů = **nový neuložený projekt** (sken dál přepisuje celou osu — přírůstkový import je samostatná kapitola). Sidebar ukazuje jméno projektu a čas uložení. **`usesProxies` tím konečně přežívá restart** — dluh z fáze 4 splacen.
+  - **Ověřeno:** CLI `--roundtrip-project` (uložit → načíst → porovnat: 5 assetů, 10 klipů, rampa přežila do posledního ticku) a **obnova napříč procesy** screenshotem — po restartu se projekt otevřel sám, bookmarky assetů se vyřešily, sidebar se přeměřil, osa i přehrávač naložené.
+
+  👀 **Koukanec modulu:** ulož projekt přes ⌘S (vlastní jméno a místo), něco sestříhej, ⌘S, zavři appku, otevři — všechno včetně ramp a přepínače proxy má být tam, kde bylo. Bonus: přejmenuj složku s klipy a otevři projekt — assety mají být offline, ale klipy na ose nesmí zmizet; po vrácení jména se zase chytí.
+
+  **Zbývá z fáze 5:** autosave (+ obnova po pádu), export přes `AVAssetWriter` (s povinným `mediaTimeScale`), a drobnosti: dirty indikátor, dotaz při zavírání neuloženého projektu.
+
+## ✅ FÁZE 4 — proxy a výkon (HOTOVÁ až na kritérium reálného materiálu, 28. 07. 2026)
 
 ✅ **Modul 1 — `ProxyStore`: generování proxy a přepínač „stříhat z proxy".** ProRes 422 Proxy v polovičním rozlišení, VFR zploštěné na CFR, zvuk LPCM — přesně rozhodnutí z plánu, render dělá sdílený `CFRRenderer` (tentýž kód jako ověřený `Flatten`). Rozložení:
 
@@ -194,7 +208,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
   **GPU baseline pro fáze 2–3.** Holý náhled 4K/60 na popředí, ať v okně nebo na celé obrazovce, stojí **pod 0,3 % GPU rezidence** — video jde na displej jako samostatná vrstva a GPU se skoro nezapojí. S aplikací na pozadí, kdy se skládat musí, to skočí na ~10 %. Až se ve fázi 3 přidá vlastní compositor nebo efekty, přepne se to natrvalo do té dražší cesty; tohle jsou hodnoty, proti kterým se to pozná. Podrobnosti v sekci rizik.
 
   Dřívější zápis „okno 1280×1192 px" byla plocha **vrstvy** v backing pixelech, ne okna ani obrazu. Samotný obraz měl 1280×720 px.
-- **`TimelineModel` — logika, geometrie a interakce časové osy.** **228 testů, 0 selhání.** Čistý Swift bez AVFoundation a bez AppKitu (jediná závislost: `SpeedRampEngine`, také čistý Swift), takže se přeloží a otestuje i na Linuxu — díky tomu byl ověřený dřív, než se sáhlo na UI.
+- **`TimelineModel` — logika, geometrie a interakce časové osy.** **232 testů, 0 selhání.** Čistý Swift bez AVFoundation a bez AppKitu (jediná závislost: `SpeedRampEngine`, také čistý Swift), takže se přeloží a otestuje i na Linuxu — díky tomu byl ověřený dřív, než se sáhlo na UI.
   - **Datový model:** dvě časové soustavy s jedinou hranicí mezi nimi (`Frames` na ose, `SourceTime` ve zdroji), deset invariantů kontrolovaných po každé operaci, kompletní sada operací (vložení, přepis, ripple, split, join, trim, slip, roll, vazba obrazu na zvuk), dotazy na meze tažení a snapshot undo nad celým projektem.
   - **`TimelineGeometry`:** mapování čas↔pixel při zoomu, viditelný rozsah binárním půlením, rozvržení stop, hit testing s okraji klipů, přichytávání s pořadím síly kandidátů. Šířka úchopu a tolerance přichytávání jsou v **bodech**, ne ve snímcích — jinak by po odzoomování nešel chytit okraj klipu a po přiblížení by přichytávání skákalo přes půl obrazovky.
   - **`TimelineInteraction`:** stavový automat tažení. Určení druhu podle toho, co je pod myší, průběžný náhled s přichytáváním a kontrolou legálnosti, meze trimu a rollu, výsledná operace na modelu. Během tažení se do modelu nezapisuje.
@@ -208,7 +222,8 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - Vyřešeno pozicování, cena (1 490 Kč jednorázově), distribuce, datový model `.projektkrasa`
 
 ## 🔄 Rozjeté (nedodělané)
-- **Fáze 4 — proxy.** `ProxyStore` i správa úložiště hotové; zbývá kritérium plynulosti na reálném 200GB materiálu (a koukanec externího disku).
+- **Fáze 4 — proxy.** Hotová a potvrzená rukou; otevřené zůstává jen kritérium plynulosti na reálném 200GB materiálu (přirozeně u Kill-gate 1).
+- **Fáze 5 — projekt a export.** Projektový soubor hotový; zbývá autosave a export.
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
@@ -218,7 +233,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu — ✅ **HOTOVO 28. 07. 2026** (228 testů modelu, interakce rukou, výkonový test 2000 klipů bez vypadlého tiku)
 - **F3** Speed ramping ostrý — ✅ **HOTOVO 28. 07. 2026** (tři moduly, potvrzeno rukou; reálný čas: dva dny místo tří týdnů)
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)* — 🔄 **ProxyStore + správa úložiště hotové a potvrzené rukou (externí disk funguje); zbývá kritérium plynulosti na reálném materiálu**
-- **F5** Projekt, autosave, undo, export *(3 týdny)*
+- **F5** Projekt, autosave, undo, export *(3 týdny)* — 🔄 **projektový soubor hotový (232 testů modelu, roundtrip i obnova ověřené); zbývá autosave a export**
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
 ### Cesta k v1.0 (+~4 měsíce)
@@ -352,7 +367,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
   - `Sources/TimelineModel/Interaction.swift` – stavový automat tažení: náhled, meze, výsledná operace
   - `Sources/TimelineModel/Timecode.swift` – popisky pravítka: `HH:MM:SS:FF` a volba rozteče rysek
   - `Sources/TimelineModel/Layout.swift` – rozvržení viditelných klipů (`Placement`) a recyklační diff vrstev
-  - `Tests/TimelineModelTests/` – **228 testů**
+  - `Tests/TimelineModelTests/` – **232 testů**
   - `README.md` – API, dvě časové soustavy, co se snadno rozbije
 - `Krasa/Krasa/Timeline/` – **timeline v appce**
   - `TimelineController.swift` – vlastník stavu: projekt, undo, interakce (a v ní **jediná kopie geometrie**), playhead, výběr

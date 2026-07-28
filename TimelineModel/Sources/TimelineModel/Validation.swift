@@ -33,6 +33,19 @@ public enum Violation: Hashable, Sendable {
     /// 11. Rychlostní křivka s neplatnými uzly. Výpočty ji ignorují (klip
     /// hraje 1×), ale mlčky by se ztratit neměla.
     case invalidSpeedRamp(ClipID)
+    /// 12. Přechod bez střihu — klip chybí, nebo dvojice nesousedí.
+    case transitionWithoutCut(TransitionID)
+    /// 13. Oblast přechodu se nevejde do dvojice klipů (nebo délka < 1).
+    case transitionOutOfBounds(TransitionID)
+    /// 14. Prolínačce/crossfadu chybí zdrojový přesah za hranou střihu.
+    case transitionExceedsSource(TransitionID)
+    /// 15. Přechod na rampovaném střihu — v první verzi zakázaná kombinace.
+    case transitionOnRampedCut(TransitionID)
+    /// 16. Druh přechodu nesedí na druh stopy (crossfade na obraze apod.).
+    case transitionKindMismatch(TransitionID)
+    /// 17. Oblasti dvou přechodů na téže stopě se překrývají
+    /// (dva na jednom střihu se překrývají vždy).
+    case overlappingTransitions(TransitionID, TransitionID)
 }
 
 extension Project {
@@ -106,6 +119,19 @@ extension Project {
             let kinds = Set(members.map(\.1))
             if members.count > 2 || (members.count == 2 && kinds.count != 2) {
                 out.append(.brokenLink(link))
+            }
+        }
+
+        // 12.–17. přechody — pravidla vyhodnocuje jediné místo
+        // (`transitionDefects` v Transitions.swift), tady se jen překládají.
+        for (id, defect) in transitionDefects() {
+            switch defect {
+            case .withoutCut: out.append(.transitionWithoutCut(id))
+            case .outOfBounds: out.append(.transitionOutOfBounds(id))
+            case .exceedsSource: out.append(.transitionExceedsSource(id))
+            case .rampedCut: out.append(.transitionOnRampedCut(id))
+            case .kindMismatch: out.append(.transitionKindMismatch(id))
+            case .overlapping(let other): out.append(.overlappingTransitions(id, other))
             }
         }
 

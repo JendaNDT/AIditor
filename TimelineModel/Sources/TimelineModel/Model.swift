@@ -206,17 +206,39 @@ public struct Track: Identifiable, Hashable, Codable, Sendable {
     public var audio: AudioSettings?
     /// Vždy seřazené podle `timelineStart` a nepřekrývající se.
     public internal(set) var clips: [Clip]
+    /// Přechody na střihách téhle stopy (fáze 10). Zapisuj jen přes
+    /// `Project.setTransition` a spol. — operace hlídají meze.
+    public internal(set) var transitions: [Transition]
 
     public init(id: TrackID = TrackID(),
                 kind: TrackKind,
                 name: String,
                 audio: AudioSettings? = nil,
-                clips: [Clip] = []) {
+                clips: [Clip] = [],
+                transitions: [Transition] = []) {
         self.id = id
         self.kind = kind
         self.name = name
         self.audio = audio ?? (kind == .audio ? AudioSettings() : nil)
         self.clips = clips
+        self.transitions = transitions
+    }
+
+    /// Starší projektové soubory pole `transitions` nemají — čte se jako
+    /// prázdné a verze formátu se kvůli němu nezvedá (týž vzorec jako
+    /// `Asset.transcript`). Zápis zůstává syntetizovaný.
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, name, audio, clips, transitions
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(TrackID.self, forKey: .id)
+        kind = try c.decode(TrackKind.self, forKey: .kind)
+        name = try c.decode(String.self, forKey: .name)
+        audio = try c.decodeIfPresent(AudioSettings.self, forKey: .audio)
+        clips = try c.decode([Clip].self, forKey: .clips)
+        transitions = try c.decodeIfPresent([Transition].self, forKey: .transitions) ?? []
     }
 
     public func clip(id: ClipID) -> Clip? { clips.first { $0.id == id } }

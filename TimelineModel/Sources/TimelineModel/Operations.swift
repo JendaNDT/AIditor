@@ -34,6 +34,15 @@ public enum TimelineError: Error, Hashable, Sendable {
     case invalidSpeedRamp
     /// Úsek přepisu s koncem před začátkem (fáze 8).
     case invalidTranscriptSegment
+    /// Přechod je delší, než střih unese — nese největší legální délku,
+    /// na které UI zarazí tažení (vzorec `wouldOverlap.nearestLegal`).
+    case transitionTooLong(maxDuration: Frames)
+    case transitionNotFound(TransitionID)
+    /// Přechod na rampovaném střihu je v první verzi zakázaný (plán fáze 10).
+    case transitionOnRampedCut
+    /// Operaci brání přechod na dotčeném střihu — napřed ho zkrať nebo smaž.
+    /// Hází se místo tichého zkracování: střih žije, přechod by se rozbil.
+    case blockedByTransition(TransitionID)
 }
 
 // MARK: - Assety
@@ -191,6 +200,8 @@ extension Project {
         var tracks = timeline.tracks
         tracks[at.trackIndex].clips.remove(at: at.clipIndex)
         timeline.tracks = tracks
+        // Střihy smazaného klipu zanikly — přechody na nich jdou s ním.
+        reconcileTransitions(pruneConflicts: true)
     }
 
     /// Smaže a posune vše za ním.
@@ -229,6 +240,9 @@ extension Project {
             }
         }
         copy.timeline.tracks = tracks
+        // Posun je rovnoměrný, takže přechody mezi posunutými sousedy přežijí;
+        // pohřbít je třeba jen ty na střihách smazaného klipu (udělal remove).
+        copy.reconcileTransitions(pruneConflicts: true)
         self = copy
     }
 
@@ -242,6 +256,8 @@ extension Project {
         }
         copy.timeline.tracks = tracks
         try copy.insert(clip, onTrack: trackID)
+        // Dvojice rozťatá místem vložení už nesousedí — její přechod zaniká.
+        copy.reconcileTransitions(pruneConflicts: true)
         self = copy
     }
 
@@ -285,6 +301,9 @@ extension Project {
         tracks[ti].resort()
         copy.timeline.tracks = tracks
         try copy.insert(clip, onTrack: trackID)
+        // Přepis je destrukce z podstaty — i konfliktní přechody se mažou,
+        // ne odmítají (ocásky mají nová ID, hlavy nové délky).
+        copy.reconcileTransitions(pruneConflicts: true)
         self = copy
     }
 }
@@ -332,6 +351,8 @@ extension Project {
                 copy.timeline.tracks = t2
             }
         }
+        // Odsunutý klip opustil své střihy — přechody na nich zanikají.
+        copy.reconcileTransitions(pruneConflicts: true)
         self = copy
     }
 
@@ -345,6 +366,8 @@ extension Project {
         var tracks = copy.timeline.tracks
         tracks[at.trackIndex].clips[at.clipIndex + 1].timelineStart = clip.timelineEnd
         copy.timeline.tracks = tracks
+        // Přitažený klip se utrhl od svého PRAVÉHO souseda — přechod tam zaniká.
+        copy.reconcileTransitions(pruneConflicts: true)
         self = copy
     }
 }
@@ -395,6 +418,10 @@ extension Project {
             }
         }
 
+        // Řez vedený OBLASTÍ přechodu by přechod rozbil (polovina by byla
+        // kratší než jeho rameno) — takový split se odmítá, projekt se nemění.
+        try copy.reconcileTransitionsOrThrow()
+
         self = copy
         return (leftID, rightID)
     }
@@ -424,6 +451,13 @@ extension Project {
         var tracks = timeline.tracks
         tracks[at.trackIndex].clips[at.clipIndex] = left
         tracks[at.trackIndex].clips.insert(right, at: at.clipIndex + 1)
+        // Levá polovina dědí ID originálu, takže přechod na LEVÉM střihu drží
+        // sám. Přechod na PRAVÉM střihu teď sousedí s pravou polovinou —
+        // přepojit, jinak by odkazoval na klip, který už u střihu neleží.
+        for (k, t) in tracks[at.trackIndex].transitions.enumerated()
+        where t.leftClipID == clip.id {
+            tracks[at.trackIndex].transitions[k].leftClipID = right.id
+        }
         timeline.tracks = tracks
         return (left.id, right.id)
     }
@@ -461,7 +495,17 @@ extension Project {
         var tracks = copy.timeline.tracks
         tracks[la.trackIndex].clips[la.clipIndex].duration = left.duration + right.duration
         tracks[la.trackIndex].clips.remove(at: ra.clipIndex)
+        // Vnitřní střih zanikl — přechod na něm jde s ním. Přechod na pravém
+        // střihu pravého klipu se přepojuje na slepenec (dědí levé ID).
+        tracks[la.trackIndex].transitions.removeAll {
+            $0.leftClipID == leftID && $0.rightClipID == rightID
+        }
+        for (k, t) in tracks[la.trackIndex].transitions.enumerated()
+        where t.leftClipID == rightID {
+            tracks[la.trackIndex].transitions[k].leftClipID = leftID
+        }
         copy.timeline.tracks = tracks
+        try copy.reconcileTransitionsOrThrow()
         self = copy
     }
 }
@@ -505,6 +549,10 @@ extension Project {
         tracks = copy.timeline.tracks
         tracks[at.trackIndex].insertSorted(trimmed)
         copy.timeline.tracks = tracks
+        // Trim od LEVÉHO souseda odtrhne (přechod tam zaniká — pravidlo 1);
+        // přechod na PRAVÉM střihu žije dál a trim, který by mu vzal místo
+        // (klip kratší než rameno oblasti), se odmítá — pravidlo 2.
+        try copy.reconcileTransitionsOrThrow()
         self = copy
     }
 
@@ -534,6 +582,9 @@ extension Project {
         tracks = copy.timeline.tracks
         tracks[at.trackIndex].insertSorted(trimmed)
         copy.timeline.tracks = tracks
+        // Zkrácení odtrhne od PRAVÉHO souseda (přechod zaniká); přechod na
+        // LEVÉM střihu žije a trim pod jeho rameno se odmítá.
+        try copy.reconcileTransitionsOrThrow()
         self = copy
     }
 
@@ -564,6 +615,9 @@ extension Project {
         tracks[at.trackIndex].clips[at.clipIndex].sourceStart =
             sourceOffset(in: clip, atFrame: delta)
         copy.timeline.tracks = tracks
+        // Slip hýbe zdrojovými přesahy: prolínačka na střihu potřebuje
+        // materiál za hranou a slip, který by jí ho vzal, se odmítá.
+        try copy.reconcileTransitionsOrThrow()
         self = copy
     }
 
@@ -606,6 +660,10 @@ extension Project {
         tracks[ra.trackIndex].clips[ra.clipIndex].sourceStart =
             copy.sourceOffset(in: right, atFrame: delta)
         copy.timeline.tracks = tracks
+        // Roll střih zachovává, ale hýbe s ním: přechod na něm jede s hranicí
+        // a roll, po kterém by se nevešel (do klipů, do zdroje nebo do oblasti
+        // sousedního přechodu), se odmítá.
+        try copy.reconcileTransitionsOrThrow()
         self = copy
     }
 }

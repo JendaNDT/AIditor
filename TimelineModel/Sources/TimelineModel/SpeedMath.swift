@@ -172,6 +172,11 @@ extension Project {
             }
         }
 
+        // Rampovaný střih je v první verzi zakázaný oběma směry (fáze 10):
+        // rampa na klipu, jehož střihu sedí přechod, se odmítá — smaž nebo
+        // přesuň přechod, pak zpomaluj.
+        try copy.reconcileTransitionsOrThrow()
+
         self = copy
     }
 }

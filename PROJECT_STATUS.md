@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 28. 07. 2026 (v noci — fáze 11, modul 2)*
+*Naposled aktualizováno: 28. 07. 2026 (v noci — fáze 11, modul 3)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,7 +13,7 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): přechody → texty/T1 → fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 11, modul 3 — interakce titulků a inspektor.** Přidání titulku z menu na pruhu T1, tažení/trim/výběr titulkového klipu, inspektor s editací textu (splácí i editaci titulků z přepisu). Pak modul 4: vypálení do exportu přes `AVVideoCompositionCoreAnimationTool`. Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 11, modul 4 — titulky v exportu přes `AVVideoCompositionCoreAnimationTool` (jen pro export, do přehrávání nepatří — dokumentovaný limit API).** Tím bude fáze 11 hotová: co vidíš v náhledu (grafické titulky), to dostaneš v souboru. Řečové titulky zůstávají SRT (spec s vypalováním nepočítá). Detail v `IMPLEMENTACNI_PLAN.md`.
 
 ## 🔄 FÁZE 11 — texty, titulky a stopa T1 (rozjetá 28. 07. 2026)
 
@@ -33,6 +33,15 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
   - **Pruh T1 v `TimelineDocumentView`:** `TitleLayer` (CALayer + CATextLayer, žádné `draw` — past `ContentLayer` platí), terakotová výplň (nová v paletě: neplete se s modrou/zelenou/fialovou/žlutou), recyklace ručně jako u přechodů, text přepisovaný jen při změně. **Pásky titulků z řeči**: tenké zelené proužky při spodní hraně pruhu (zvuková zelená s průhledností — řeč žije ve zvuku a pásek je projekce, ne uchopitelný objekt), pod titulkovými klipy, recyklované indexem (nemají identitu). Cues v mezipaměti obnovované v `rebuildClipInfo`.
   - **Ověřeno screenshoty běžící aplikace (`--title-demo`):** jména patkovým písmem uprostřed náhledu SOUČASNĚ s řečovým titulkem na desce dole; na ose tři terakotové titulky na T1 a zelený pásek řeči viditelný v mezeře mezi nimi. Demo staví osu s titulky a syntetickým přepisem, postaví hlavu do jmen a drží okno ~25 s v popředí.
   - Interakce s titulky na ose zatím ŽÁDNÁ (tažení, menu, výběr) — modul 3; overlay i pruh jsou čistě kreslení.
+
+✅ **Modul 3 — interakce titulků a inspektor (28. 07. 2026).** Logika v modelu (**+6 testů, celkem 336**), view jen předává souřadnice a kreslí duchy:
+
+  - **Model:** `titleHitTest` (tělo/okraje, úchopy v BODECH — zásadní pravidlo geometrie), náhledy tažení `titleMovePreview` (přichytává začátek i konec, bližší vyhrává; neplatný cíl HLÁSÍ, nezařezává) a `titleTrimStart/EndPreview` (zaražené o sousedy, nulu a minimální délku 1 snímek), `maxNewTitleDuration` (mezera pro nový titulek — menu z ní bere výchozí délku i vypnutí položky), `snapCandidates` umí vyloučit tažený titulek.
+  - **Splátka fáze 8 — editace titulků z řeči:** `speechCueRef(at:)` vrací úsek přepisu POD snímkem osy i s adresou (asset + index) — `subtitleCues` provenienci zahazuje, inspektor ji potřebuje; `setTranscriptText` edituje text úseku, **prázdný text úsek maže** (oprava artefaktu i odstranění jednou cestou). Jde přes `setTranscript`, takže platí jeho validace.
+  - **Interakce na ose:** klik vybírá titulek (žlutý rámeček), tažení těla = přesun, okrajů = trim — duch + JEDEN zápis při puštění (vzorec `move`/přechodů), Escape ruší, Shift vypíná přichytávání, Delete maže vybraný titulek, kurzory na okrajích. Klik na pásek řeči vybírá úsek přepisu. **Výběry se navzájem vylučují** (`selectClips`/`selectTitle`/`selectSpeech` na controlleru) — inspektor ukazuje právě jednu věc.
+  - **Kontextové menu pruhu T1:** na volném místě „Přidat titulek: Jména / Datum a místo / Kapitola / Poděkování / Prostý text" (výchozí délka 4 s zaražená o mezeru; obsazené místo = vypnutá položka s vysvětlením), na titulku „Smazat titulek". Nový titulek se rovnou vybere — inspektor se otevře a uživatel hned píše.
+  - **Inspektor v pásu pod přehrávačem** (`InspectorStrip` přepíná: editor křivky ↔ inspektor titulku ↔ inspektor řeči — vlastní malé view kvůli pasti s vnořeným `ObservableObject`). Titulek: text ŽIVĚ (v náhledu se mění při psaní; undo krok se skládá kolem fokusu — vzorec posuvníku hlasitosti), šablona a zarovnání jako pickery, Smazat. Řeč: koncept zapisovaný při odchodu z pole/Enterem — živě to nejde, prázdno je při psaní legální mezistav, ale prázdný text maže úsek.
+  - **Ověřeno screenshotem** (`--title-demo` teď první titulek rovnou vybírá): žlutý rámeček na „Anna a Petr" na T1 a inspektor s textem, šablonou „Jména", zarovnáním a Smazat. Tažení/menu/editace jsou kryté testy modelu + vzorci z přechodů; ruční koukanec v seznamu níže.
 
 ## ✅ FÁZE 10 — přechody (HOTOVÁ 28. 07. 2026)
 
@@ -94,6 +103,7 @@ Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou p�
 **Seznam koukanců (odškrtávat po projití):**
 
 - [ ] **Přechody (F10):** pravý klik poblíž střihu → prolínačka/zatmívačka (na zvukové stopě prolnutí zvuku); lichoběžník na ose jde roztáhnout tažením okraje se zarážkou; „Odebrat přechod" funguje; nedosažitelná prolínačka je v menu vypnutá s vysvětlením; prolínačka v náhledu měkce prolne, zatmívačka projde černou/bílou, crossfade je slyšet; export vypadá i zní jako náhled.
+- [ ] **Texty a T1 (F11):** pravý klik na volné místo T1 → Přidat titulek (obsazené místo vypnuté s vysvětlením); nový titulek se vybere a v inspektoru jde hned psát — text se mění v náhledu při psaní; šablony mění vzhled (jména velká patková přes střed), zarovnání funguje; tažení těla přesouvá se zarážkou o sousedy, okraje trimují, Shift vypíná přichytávání, Escape ruší, Delete maže, ⌘Z vrací; klik na zelený pásek řeči → inspektor přepisu, úprava textu se propíše do titulku v náhledu, prázdný text úsek smaže; titulek za posledním klipem prodlouží film (přes černou).
 - [ ] **Dotaz při zavírání (F5):** změna v projektu → ⌘Q ukáže Uložit/Neukládat/Zrušit (Escape ruší); týž dotaz po výběru souboru při ⌘O a importu; „Uložit" u neuloženého projektu přes „Uložit jako" — zrušení panelu ruší i zavírání.
 - [ ] **Hlasitost stop (F7):** posuvník v hlavičce A1/A2 mění hlasitost ZA BĚHU přehrávání bez zastavení; M ztlumí a vrátí; ⌘Z vrací tažení jedním krokem; hodnoty přežijí uložení a otevření projektu.
 - [ ] **Normalizace exportu (F7):** volba profilu u tlačítka exportu; po exportu status hlásí „Hlasitost X → cíl (gain ±Y dB)", případně poctivé omezení špičkami.

@@ -82,7 +82,8 @@ final class PlaybackController: ObservableObject {
 
     /// Nahraje kompozici celé osy. Krok po snímku jde po snímcích ZÁKLADNY
     /// projektu — kompozice žádnou vlastní frekvenci nemá.
-    func loadComposition(_ composition: AVComposition, frameRate: Int) {
+    func loadComposition(_ composition: AVComposition, frameRate: Int,
+                         audioMix: AVAudioMix? = nil) {
         pause()
         let item = AVPlayerItem(asset: composition)
         // Korekce výšky pro škálované zvukové úseky rampy. `.timeDomain`
@@ -90,11 +91,20 @@ final class PlaybackController: ObservableObject {
         // rozmazává do plechovosti); na úsecích 1× nedělá nic.
         // <https://developer.apple.com/documentation/avfoundation/avplayeritem/audiotimepitchalgorithm-swift.property>
         item.audioTimePitchAlgorithm = .timeDomain
+        // Per-track hlasitost a mute (fáze 7, modul 2).
+        // <https://developer.apple.com/documentation/avfoundation/avplayeritem/audiomix>
+        item.audioMix = audioMix
         player.replaceCurrentItem(with: item)
         duration = composition.duration
         frameDuration = CMTime(value: CMTimeValue(Int64(SourceTime.projectTimescale) / Int64(frameRate)),
                                timescale: SourceTime.projectTimescale)
         currentTime = .zero
+    }
+
+    /// Vymění mix na BĚŽÍCÍM itemu — změna hlasitosti stopy nesmí zastavit
+    /// přehrávání, uživatel míchá poslechem. Kompozice se nesahá.
+    func applyAudioMix(_ audioMix: AVAudioMix?) {
+        player.currentItem?.audioMix = audioMix
     }
 
     // MARK: - Přehrávání

@@ -77,6 +77,16 @@ Rozvrh fáze: **1)** `LoudnessMeter` (hotový, níže), **2)** per-track hlasito
   - **Nezávisle ověřeno proti `pyloudnorm`** (zavedená python implementace téhož standardu) na čtyřech signálech: sinus, „program" se segmenty úrovní −18 až −70 a tichem, stereo s různým obsahem kanálů, šum na 44,1 kHz. **Shoda do 0,05 LU** — hluboko pod tolerancí EBU ±0,5 LU. Na analytické kotvě (sinus −20 dBFS → −23,0103) sedí náš metr přesně; pyloudnorm je o 0,04 vedle.
   - Poučný detail z testů: bloky na rozhraní signál→ticho (75/50/25 % tónu) gate právem přežijí a integrovanou hlasitost o ~0,13 LU zředí — chování podle standardu, test to dokumentuje tolerancí, ne obcházením.
 
+✅ **Modul 2 — per-track hlasitost a mute do přehrávání i exportu (28. 07. 2026).** Mix je vlastnost STOPY, ne klipu — Alena míchá „řeč (A1) proti hudbě (A2)". Rozložení práce:
+
+  - **Model (+8 testů, celkem 240):** `setTrackVolume` (zařezává do 0–2, tedy do +6 dB), `setTrackMuted` (mute hlasitost NEPŘEPISUJE — po odmutování se vrací), `effectiveVolume` — jediné místo skládající mute+volume, a `Timeline.withDefaultAudioSettings()` — porovnání „změnilo se něco KROMĚ mixu?". Mix se veze v `Track.audio`, takže projektový soubor i undo snapshoty ho nesou zadarmo (test to hlídá).
+  - **`CompositionBuilder` vrací `BuiltTimeline`** — kompozici + mapu „stopa kompozice → stopa osy". `audioMix(project:)` z ní staví `AVAudioMix` z AKTUÁLNÍCH hlasitostí; když všechny stopy hrají naplno, vrací `nil` a přehrávací cesta je bajt po bajtu ta ověřená z fází 3–5.
+  - **Změna hlasitosti NEVYMĚNÍ player item.** Živý mix jde na běžící item (`applyAudioMix`) odběrem BEZ debounce — uživatel míchá poslechem a čtvrtsekundové zpoždění přestavby by z posuvníku udělalo loterii. Kompozice se přestavuje jen když se změní něco jiného než mix (porovnání přes `withDefaultAudioSettings`). Výměna itemu by navíc zastavila přehrávání.
+  - **Export:** tentýž mix jde do `CFRRendereru` — s mixem se čte přes `AVAssetReaderAudioMixOutput` i u jediné stopy. Co slyšíš při střihu, to dostaneš v souboru.
+  - **UI:** hlavičky zvukových stop mají tlačítko M (mute) a mini posuvník 0–200 % (jméno stopy se posunulo nahoru). Tažení posuvníku = jeden undo krok (vzorec trimu: `volumeDragBegan/Changed/Ended`); posuvník se během tažení nepřepisuje z modelu, poskakoval by pod myší.
+  - **Ověřeno CLI `--mix-check`:** dvojí export téže osy, plná hlasitost proti A1 na 0,25×. Rozdíl integrované hlasitosti **11,99 LU proti očekávaným 12,04** (přeměřeno pyloudnorm přes afconvert) — mix jde exportní cestou správně. Druhý export zároveň cvičí `AVAssetReaderAudioMixOutput` s mixem, dosud reálně neprošlapaný.
+  - *Koukanec rukou zatím neproběhl (odloženo autorem): posuvník při přehrávání mění hlasitost bez zastavení, M ztlumí, ⌘Z vrací, hodnoty přežijí uložení projektu.*
+
 ## 🔄 FÁZE 5 — projekt a export (rozjetá 28. 07. 2026)
 
 ✅ **Modul 1 — projektový soubor `.projektkrasa`: uložit, otevřít, obnovit po startu.**
@@ -272,7 +282,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
 ### Cesta k v1.0 (+~3 měsíce)
-- **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — 🔄 **modul 1 hotový 28. 07. 2026: `LoudnessMeter` (BS.1770-4), 20 testů, ověřeno proti pyloudnorm; zbývá mix per stopu, normalizace exportu a sync klopáku**
+- **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — 🔄 **moduly 1+2 hotové 28. 07. 2026: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm) a per-track hlasitost/mute v přehrávání i exportu (ověřeno `--mix-check`: rozdíl 11,99 LU); zbývá normalizace exportu a sync klopáku**
 - **F8** Titulky přes WhisperKit *(2 týdny)*
 - **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — **+ migrace na `AVVideoComposition.Configuration`** jako druhá větev pod `if #available(macOS 26.0, *)`. Ne dřív.
 - 🚧 **KILL-GATE 2:** prodat deseti lidem, kteří tě neznají

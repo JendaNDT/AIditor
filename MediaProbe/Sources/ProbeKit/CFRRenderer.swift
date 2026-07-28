@@ -59,6 +59,10 @@ public enum CFRRenderer {
     ///   - outputSize: pevný cílový rozměr (plátno projektu při exportu) —
     ///     sjednotí mix rozlišení a rotací přes video kompozici.
     ///   - format: mezisoubor (ProRes+LPCM), nebo dodávka (HEVC+AAC).
+    ///   - audioMix: per-track hlasitosti (fáze 7). S mixem se čte přes
+    ///     `AVAssetReaderAudioMixOutput` i u jediné stopy — hlasitost musí
+    ///     do exportu stejnou cestou jako do přehrávače.
+    ///     <https://developer.apple.com/documentation/avfoundation/avassetreaderaudiomixoutput/audiomix>
     ///   - onProgress: zlomek hotových snímků; chodí z fronty zapisovače.
     public static func render(asset: AVAsset,
                               videoTrack: AVAssetTrack,
@@ -68,6 +72,7 @@ public enum CFRRenderer {
                               outputScale: Double = 1.0,
                               outputSize: CGSize? = nil,
                               format: OutputFormat = .proResProxyLPCM,
+                              audioMix: AVAudioMix? = nil,
                               onProgress: (@Sendable (Double) -> Void)? = nil,
                               to outputURL: URL) async throws -> CFRRenderResult {
         let started = Date()
@@ -147,7 +152,7 @@ public enum CFRRenderer {
             }
             let settings = pcmSettings(channels: audioChannels, sampleRate: audioSampleRate)
 
-            if audioTracks.count == 1 {
+            if audioTracks.count == 1, audioMix == nil {
                 let output = AVAssetReaderTrackOutput(track: firstAudio, outputSettings: settings)
                 output.alwaysCopiesSampleData = false
                 // Korekce výšky hlasu se nastavuje TADY. AVAssetExportSession má
@@ -162,12 +167,13 @@ public enum CFRRenderer {
                 }
             } else {
                 // Víc zvukových stop (A1 + A2 při exportu) → smíchat do jedné.
-                // Bez `audioMix` míchá plnou hlasitostí — per-track hlasitost
-                // je věc audio enginu (fáze 7).
+                // A per-track hlasitost (fáze 7) jde touhle cestou i u jediné
+                // stopy — `audioMix` umí jen tenhle výstup.
                 // <https://developer.apple.com/documentation/avfoundation/avassetreaderaudiomixoutput>
                 let output = AVAssetReaderAudioMixOutput(audioTracks: audioTracks,
                                                          audioSettings: settings)
                 output.alwaysCopiesSampleData = false
+                output.audioMix = audioMix
                 if let audioTimePitchAlgorithm {
                     output.audioTimePitchAlgorithm = audioTimePitchAlgorithm
                 }

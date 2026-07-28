@@ -284,6 +284,7 @@ final class TimelinePane: NSView {
         documentView.refreshClips()
         rulerView.needsDisplay = true
         headersView.needsDisplay = true
+        headersView.reloadControls()   // mute a hlasitost (fáze 7)
         needsLayout = true
     }
 }

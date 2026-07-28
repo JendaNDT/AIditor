@@ -50,8 +50,13 @@ final class AppModel: ObservableObject {
     enum PlayerContent { case timeline, solo }
     private(set) var playerContent: PlayerContent = .solo
 
-    /// Kompozice postavená z aktuálního projektu (fáze 3, modul 1).
-    private var timelineComposition: AVMutableComposition?
+    /// Kompozice postavená z aktuálního projektu (fáze 3, modul 1; od
+    /// fáze 7 i s mapou zvukových stop pro `AVAudioMix`).
+    private var builtTimeline: BuiltTimeline?
+    /// Tvar osy BEZ mixu, ze kterého je kompozice postavená. Když se nový
+    /// projekt liší jen mixem, kompozice se nepřestavuje — vymění se jen
+    /// `audioMix` na běžícím itemu a přehrávání jede dál.
+    private var builtTimelineShape: Timeline?
     private var compositionRebuild: Task<Void, Never>?
     private var subscriptions: [AnyCancellable] = []
 
@@ -74,6 +79,13 @@ final class AppModel: ObservableObject {
                 .removeDuplicates()
                 .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
                 .sink { [weak self] _ in self?.rebuildTimelineComposition() },
+            // Hlasitost stopy se do běžícího přehrávání promítá HNED, ne
+            // přes debounce přestavby — uživatel míchá poslechem a čtvrt
+            // sekundy zpoždění by z posuvníku udělalo loterii.
+            timeline.$project
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] project in self?.applyLiveAudioMix(project) },
             // Proxy se k assetům přišívají znovu po KAŽDÉ změně projektu:
             // undo vrací snapshoty z doby, kdy proxy ještě neexistovaly,
             // a bez tohohle by ⌘Z tiše přepnul přehrávání na originály.
@@ -372,12 +384,13 @@ final class AppModel: ObservableObject {
 
         do {
             let project = timeline.project
-            guard let composition = try await CompositionBuilder.build(project: project,
-                                                                       usingProxies: false),
-                  let video = composition.tracks(withMediaType: .video).first else {
+            guard let built = try await CompositionBuilder.build(project: project,
+                                                                 usingProxies: false),
+                  let video = built.composition.tracks(withMediaType: .video).first else {
                 status = "Není co exportovat — na ose nejsou žádné klipy."
                 return
             }
+            let composition = built.composition
             let canvas = project.timeline.canvasSize
             let ticksPerFrame = Int64(SourceTime.projectTimescale)
                 / Int64(project.timeline.frameRate)
@@ -391,6 +404,9 @@ final class AppModel: ObservableObject {
                 audioTimePitchAlgorithm: .timeDomain,
                 outputSize: CGSize(width: canvas.width, height: canvas.height),
                 format: .hevcAAC(videoBitRate: 50_000_000, audioBitRate: 256_000),
+                // Hlasitosti stop do exportu STEJNOU cestou jako do
+                // přehrávače — co slyšíš při střihu, to dostaneš v souboru.
+                audioMix: built.audioMix(project: project),
                 onProgress: { fraction in
                     Task { @MainActor [weak self] in
                         guard let self, self.exportProgress != nil else { return }
@@ -426,6 +442,30 @@ final class AppModel: ObservableObject {
         print(status)
         print(String(format: "očekávaná délka osy: %.3f s", expected))
         print("EXPORT_PATH=\(directory.path)")
+    }
+
+    /// CLI ověření mixu (fáze 7, modul 2): dvojí export téže osy — plná
+    /// hlasitost a pak A1 na 0,25 (−12,04 dB). Rozdíl hlasitostí souborů
+    /// přeměří externí skript; musí vyjít ~12 LU. Druhý export zároveň
+    /// cvičí cestu `AVAssetReaderAudioMixOutput` s mixem.
+    func verifyAudioMixExport() async {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaMixCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+
+        await export(to: directory.appendingPathComponent("mix_full.mp4"))
+        print("plná hlasitost: \(status)")
+
+        guard let a1 = timeline.project.timeline.tracks.first(where: { $0.kind == .audio })
+        else { print("❌ osa nemá zvukovou stopu"); return }
+        timeline.volumeDragBegan()
+        timeline.volumeDragChanged(a1.id, volume: 0.25)
+        timeline.volumeDragEnded()
+
+        await export(to: directory.appendingPathComponent("mix_quarter.mp4"))
+        print("A1 na 0,25×: \(status)")
+        print("MIX_CHECK_PATH=\(directory.path)")
     }
 
     // MARK: Správa proxy úložiště (fáze 4)
@@ -547,19 +587,35 @@ final class AppModel: ObservableObject {
     /// pravítka i mezerník jedou nad CELOU osou, ne nad jedním souborem.
     private func rebuildTimelineComposition() {
         guard !skipsCompositionRebuild else { return }
-        compositionRebuild?.cancel()
         let project = timeline.project
+        // Změna jen v mixu: kompozice platí, stačil živý mix (viz odběr).
+        if builtTimeline != nil,
+           builtTimelineShape == project.timeline.withDefaultAudioSettings() {
+            return
+        }
+        compositionRebuild?.cancel()
         compositionRebuild = Task { [weak self] in
-            guard let composition = try? await CompositionBuilder.build(
+            guard let built = try? await CompositionBuilder.build(
                     project: project, usingProxies: project.usesProxies),
                   let self, !Task.isCancelled else { return }
             let frameRate = project.timeline.frameRate
-            self.timelineComposition = composition
+            self.builtTimeline = built
+            self.builtTimelineShape = project.timeline.withDefaultAudioSettings()
             self.playerContent = .timeline
-            self.controller.loadComposition(composition, frameRate: frameRate)
+            self.controller.loadComposition(built.composition, frameRate: frameRate,
+                                            audioMix: built.audioMix(project: project))
             self.controller.seek(to: CompositionBuilder.time(of: self.timeline.playhead,
                                                              frameRate: frameRate))
         }
+    }
+
+    /// Změna hlasitosti za běhu: vymění mix na aktuálním itemu, přehrávání
+    /// nezastaví. Jen když je kompozice platná a přehrává se osa.
+    private func applyLiveAudioMix(_ project: Project) {
+        guard let built = builtTimeline, playerContent == .timeline,
+              builtTimelineShape == project.timeline.withDefaultAudioSettings()
+        else { return }
+        controller.applyAudioMix(built.audioMix(project: project))
     }
 
     // MARK: Hlava osy ↔ přehrávač (krok 6, od fáze 3 nad kompozicí)
@@ -569,9 +625,10 @@ final class AppModel: ObservableObject {
     private func seekPlayer(toTimelineFrame frame: Frames) {
         let frameRate = timeline.project.timeline.frameRate
         if playerContent != .timeline {
-            guard let composition = timelineComposition else { return }
+            guard let built = builtTimeline else { return }
             playerContent = .timeline
-            controller.loadComposition(composition, frameRate: frameRate)
+            controller.loadComposition(built.composition, frameRate: frameRate,
+                                       audioMix: built.audioMix(project: timeline.project))
         }
         controller.seek(to: CompositionBuilder.time(of: frame, frameRate: frameRate))
     }
@@ -898,6 +955,8 @@ struct ContentView: View {
                     model.verifyAutosave()
                 } else if arguments.contains("--export-check") {
                     await model.verifyExport()
+                } else if arguments.contains("--mix-check") {
+                    await model.verifyAudioMixExport()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

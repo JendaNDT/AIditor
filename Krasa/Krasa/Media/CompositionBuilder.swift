@@ -24,16 +24,52 @@
 //  <https://developer.apple.com/documentation/avfoundation/avmutablecompositiontrack/inserttimerange(_:of:at:)>
 //  <https://developer.apple.com/documentation/avfoundation/avmutablecompositiontrack/scaletimerange(_:toduration:)>
 //
+//  Fáze 7, modul 2: per-track hlasitost a mute přes `AVAudioMix`. Kompozice
+//  si pamatuje, která její zvuková stopa patří které stopě osy, a mix se
+//  z aktuálních hlasitostí staví ZVLÁŠŤ (`audioMix(project:)`) — díky tomu
+//  jde při změně hlasitosti vyměnit jen mix na běžícím player itemu,
+//  bez přestavby kompozice a bez zastavení přehrávání.
+//  <https://developer.apple.com/documentation/avfoundation/avmutableaudiomix>
+//  <https://developer.apple.com/documentation/avfoundation/avmutableaudiomixinputparameters>
+//
 
 import AVFoundation
 import Foundation
 import TimelineModel
 
+/// Kompozice + mapování zvukových stop (stopa kompozice → stopa osy),
+/// ze kterého se staví `AVAudioMix`.
+struct BuiltTimeline {
+    let composition: AVMutableComposition
+    let audioTrackMap: [(compositionTrackID: CMPersistentTrackID, timelineTrackID: TrackID)]
+
+    /// Mix z AKTUÁLNÍCH hlasitostí projektu. `nil`, když všechny stopy
+    /// hrají naplno — chování je pak k nerozeznání od doby před fází 7
+    /// a přehrávací cesta ověřená ve fázích 3–5 se nemění.
+    func audioMix(project: Project) -> AVAudioMix? {
+        var parameters: [AVMutableAudioMixInputParameters] = []
+        var anyAdjusted = false
+        for entry in audioTrackMap {
+            guard let track = project.timeline.track(id: entry.timelineTrackID) else { continue }
+            let volume = project.effectiveVolume(of: track)
+            if volume != 1.0 { anyAdjusted = true }
+            let input = AVMutableAudioMixInputParameters()
+            input.trackID = entry.compositionTrackID
+            input.setVolume(Float(volume), at: .zero)
+            parameters.append(input)
+        }
+        guard anyAdjusted else { return nil }
+        let mix = AVMutableAudioMix()
+        mix.inputParameters = parameters
+        return mix
+    }
+}
+
 enum CompositionBuilder {
 
     /// Postaví kompozici z projektu. Vrací `nil`, když na ose není žádný
     /// klip — prázdnou kompozici nemá smysl dávat přehrávači.
-    static func build(project: Project, usingProxies: Bool = false) async throws -> AVMutableComposition? {
+    static func build(project: Project, usingProxies: Bool = false) async throws -> BuiltTimeline? {
         let timeline = project.timeline
         guard timeline.tracks.contains(where: { !$0.clips.isEmpty }) else { return nil }
 
@@ -50,6 +86,8 @@ enum CompositionBuilder {
             return created
         }
 
+        var audioTrackMap: [(CMPersistentTrackID, TrackID)] = []
+
         for track in timeline.tracks {
             guard !track.clips.isEmpty else { continue }
 
@@ -57,6 +95,9 @@ enum CompositionBuilder {
             guard let compositionTrack = composition.addMutableTrack(
                 withMediaType: mediaType,
                 preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
+            if track.kind == .audio {
+                audioTrackMap.append((compositionTrack.trackID, track.id))
+            }
 
             for clip in track.clips {
                 guard let source = project.asset(clip.assetID) else { continue }
@@ -97,7 +138,7 @@ enum CompositionBuilder {
             }
         }
 
-        return composition
+        return BuiltTimeline(composition: composition, audioTrackMap: audioTrackMap)
     }
 
     /// Snímek osy → čas kompozice. Celé ticky, žádné sekundy s čárkou.

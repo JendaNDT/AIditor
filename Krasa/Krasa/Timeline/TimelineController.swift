@@ -184,6 +184,30 @@ final class TimelineController: ObservableObject {
         project = updated
     }
 
+    // MARK: - Hlasitost stop (fáze 7, modul 2)
+
+    func setTrackMuted(_ trackID: TrackID, muted: Bool) {
+        var updated = project
+        guard (try? updated.setTrackMuted(trackID: trackID, isMuted: muted)) != nil
+        else { return }
+        undo.record(project)
+        project = updated
+    }
+
+    /// Tažení posuvníku hlasitosti — vzorec trimu: mezistavy jsou legální,
+    /// zapisují se průběžně a `beginInteraction`/`endInteraction` z nich
+    /// složí jeden undo krok.
+    func volumeDragBegan() { undo.beginInteraction(project) }
+
+    func volumeDragChanged(_ trackID: TrackID, volume: Double) {
+        var updated = project
+        guard (try? updated.setTrackVolume(trackID: trackID, volume: volume)) != nil
+        else { return }
+        project = updated
+    }
+
+    func volumeDragEnded() { undo.endInteraction(project) }
+
     // MARK: - Undo (krok 7)
 
     func undoStep() {

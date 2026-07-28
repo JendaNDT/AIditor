@@ -4,7 +4,7 @@
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping, 100 % lokální AI (obličeje, scény, český přepis) a integrovaný svatební asistent.
 Stack (plán): Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
-**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. FÁZE 5 TÉMĚŘ HOTOVÁ: projekt se ukládá a obnovuje (i po pádu) a export píše HEVC 4K/30 CFR — MVP nula je na dohled.**
+**Stav: Spike 0, fáze 1 i stavba fáze 2 hotové (čeká koukanec), FÁZE 3 HOTOVÁ — přehrávač hraje rychlostní křivky a editor je kreslí myší, potvrzeno rukou.** Aplikace `Krasa` se spouští, importuje klipy, měří jim časování a přehrává 4K. Pod ní šest ověřených modulů (`SpeedRampEngine`, `TimelineModel`, `ProbeKit`, `MediaProbe`, `Flatten`, `Ramp`). **Fáze 2 má NAPSANÝCH všech deset kroků (232 testů modelu): osa, pravítko, hlavičky, rozvržení s recyklací, klipy, playhead + seek, tažení s undo, zoom na kurzoru, roll/slip + menu + zkratky + kurzory, vlnové průběhy. v0.5 „MVP NULA“ JE FUNKČNĚ KOMPLETNÍ: import → střih s rampami → proxy → projekt s autosave → export HEVC 4K/30 CFR, všechno potvrzené rukou. Před námi KILL-GATE 1.**
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 
@@ -90,7 +90,7 @@ Oprava: roh mezi pravítkem a hlavičkami kreslí samostatné `CornerView` bez `
   - **Export v appce:** vždy Z ORIGINÁLŮ (proxy je poloviční a jen na střih), kompozici staví tentýž `CompositionBuilder` jako náhled (včetně ramp), `.timeDomain` na zvuku, HEVC 50 Mbit + AAC 256k do `.mp4`, ukazatel průběhu v sidebaru, ⌘E v menu.
   - **Ověřeno CLI exportem s rampou a sondou MediaProbe:** 3840×2160 HEVC, přesně 30,00 fps, **CFR s kolísáním 0,0 %** (past s timescale 600 nezafungovala — `mediaTimeScale` je nastavená), **4739 snímků = přesně 157,967 s osy**, AAC 2ch 48 kHz, ~48 Mbit; kódování 2× rychleji než reálný čas. Pozn.: cesta mixu více stop (A2 s hudbou) zatím reálně necvičená — A2 je v testovacím projektu prázdná a kompozice ji vynechává.
 
-  👀 **Koukanec modulu 3:** ⌘E, exportuj osu s rampou, pusť si výsledný .mp4 v QuickTimeru — zpomalení má být plynulé, zvuk v synchronu a bez mickey-mouse výšky, obraz 4K/30.
+  ✅ **Koukanec modulu 3 potvrzen rukou a uchem (28. 07. 2026): export funguje, video je plynulé i se zvukem.**
 
   **Zbývá z fáze 5:** drobnost — dotaz při zavírání neuloženého projektu (autosave ale práci chrání i bez něj). Pak je **v0.5 „MVP nula" KOMPLETNÍ** a před námi KILL-GATE 1: sestříhat touhle appkou celou reálnou svatbu.
 
@@ -239,7 +239,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 
 ## 🔄 Rozjeté (nedodělané)
 - **Fáze 4 — proxy.** Hotová a potvrzená rukou; otevřené zůstává jen kritérium plynulosti na reálném 200GB materiálu (přirozeně u Kill-gate 1).
-- **Fáze 5 — projekt a export.** Projektový soubor, autosave i export hotové; zbývá jen dotaz při zavírání neuloženého projektu a koukanec exportu.
+- **Fáze 5 — projekt a export.** Hotová až na drobnost (dotaz při zavírání neuloženého projektu). MVP nula je funkčně kompletní — na řadě je KILL-GATE 1: sestříhat reálnou svatbu.
 - **Pozor:** v sekci 8.1 specifikace jsou položky MVP odškrtnuté `[x]`. Je to seznam *rozsahu*, ne stav.
 
 ## 📝 TODO
@@ -249,7 +249,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **F2** Timeline v AppKitu — nejtěžší UI v projektu — ✅ **HOTOVO 28. 07. 2026** (228 testů modelu, interakce rukou, výkonový test 2000 klipů bez vypadlého tiku)
 - **F3** Speed ramping ostrý — ✅ **HOTOVO 28. 07. 2026** (tři moduly, potvrzeno rukou; reálný čas: dva dny místo tří týdnů)
 - **F4** Proxy + zploštění VFR→CFR *(2 týdny)* — 🔄 **ProxyStore + správa úložiště hotové a potvrzené rukou (externí disk funguje); zbývá kritérium plynulosti na reálném materiálu**
-- **F5** Projekt, autosave, undo, export *(3 týdny)* — 🔄 **projektový soubor, autosave i export hotové (export potvrzen sondou; čeká koukanec)**
+- **F5** Projekt, autosave, undo, export *(3 týdny)* — ✅ **HOTOVO 28. 07. 2026 až na drobnost (dotaz při zavírání neuloženého projektu) — projektový soubor, autosave s obnovou po pádu i export, vše potvrzeno rukou**
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
 ### Cesta k v1.0 (+~4 měsíce)

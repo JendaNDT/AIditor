@@ -193,6 +193,12 @@ public struct Clip: Identifiable, Hashable, Codable, Sendable {
     /// klipu fotky — zapisuj přes `Project.setKenBurns`, operace to hlídá.
     public var kenBurns: KenBurns?
 
+    /// Barevný preset (fáze 13). Jen na klipu obrazové stopy — zapisuj
+    /// přes `Project.setColorGrade`. Volitelné pole: starší soubory ho
+    /// nemají a syntetizovaný dekodér ho čte jako `nil`, verze formátu
+    /// se nezvedá (vzorec `speedRamp`/`kenBurns`).
+    public var colorGrade: ColorGrade?
+
     public init(id: ClipID = ClipID(),
                 assetID: AssetID,
                 linkID: LinkID? = nil,
@@ -200,7 +206,8 @@ public struct Clip: Identifiable, Hashable, Codable, Sendable {
                 duration: Frames,
                 sourceStart: SourceTime,
                 speedRamp: SpeedRamp? = nil,
-                kenBurns: KenBurns? = nil) {
+                kenBurns: KenBurns? = nil,
+                colorGrade: ColorGrade? = nil) {
         self.id = id
         self.assetID = assetID
         self.linkID = linkID
@@ -209,6 +216,7 @@ public struct Clip: Identifiable, Hashable, Codable, Sendable {
         self.sourceStart = sourceStart
         self.speedRamp = speedRamp
         self.kenBurns = kenBurns
+        self.colorGrade = colorGrade
     }
 
     /// Exkluzivní konec.

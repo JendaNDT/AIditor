@@ -2,7 +2,7 @@
 //  Validation.swift
 //  TimelineModel — Projekt Krása
 //
-//  Invarianty (26), které musí platit po KAŽDÉ operaci. Testy je kontrolují
+//  Invarianty (28), které musí platit po KAŽDÉ operaci. Testy je kontrolují
 //  po každém volání, takže chytí i chyby, na které test přímo necílil.
 //
 
@@ -65,6 +65,10 @@ public enum Violation: Hashable, Sendable {
     case kenBurnsOnNonStill(ClipID)
     /// 26. Výřez Ken Burns mimo obraz nebo degenerovaně malý.
     case invalidKenBurns(ClipID)
+    /// 27. Barevný preset na klipu mimo obrazovou stopu (fáze 13).
+    case colorGradeOnWrongTrack(ClipID)
+    /// 28. Intenzita barevného presetu mimo 0–1.
+    case invalidColorGrade(ClipID)
 }
 
 extension Project {
@@ -114,6 +118,15 @@ extension Project {
                 // 11. použitelná rychlostní křivka
                 if let ramp = clip.speedRamp, !ramp.isUsable {
                     out.append(.invalidSpeedRamp(clip.id))
+                }
+                // 27. + 28. barevný preset (fáze 13) — nepotřebuje asset,
+                // váže se na druh STOPY: fotka i video ano, zvuk ne.
+                if let grade = clip.colorGrade {
+                    if track.kind != .video {
+                        out.append(.colorGradeOnWrongTrack(clip.id))
+                    } else if !grade.isUsable {
+                        out.append(.invalidColorGrade(clip.id))
+                    }
                 }
                 // 2. překryv — stačí porovnat se sousedem, pole je seřazené
                 if i + 1 < track.clips.count, clip.overlaps(track.clips[i + 1]) {

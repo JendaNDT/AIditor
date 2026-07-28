@@ -54,6 +54,10 @@ public enum TimelineError: Error, Hashable, Sendable {
     case kenBurnsNeedsStill
     /// Výřez Ken Burns mimo obraz nebo degenerovaně malý.
     case invalidKenBurns
+    /// Barevný preset patří jen na klip obrazové stopy (fáze 13).
+    case colorGradeNeedsVideoTrack
+    /// Intenzita presetu mimo 0–1.
+    case invalidColorGrade
 }
 
 // MARK: - Assety
@@ -134,7 +138,8 @@ extension Project {
                         duration: original.duration,
                         sourceStart: original.sourceStart,
                         speedRamp: original.speedRamp,
-                        kenBurns: original.kenBurns)
+                        kenBurns: original.kenBurns,
+                        colorGrade: original.colorGrade)
         copy.linkID = nil
         try insert(copy, onTrack: trackID)
         return copy.id
@@ -326,7 +331,7 @@ extension Project {
                 tail = Clip(assetID: tail.assetID, linkID: nil,
                             timelineStart: tail.timelineStart, duration: tail.duration,
                             sourceStart: tail.sourceStart, speedRamp: tail.speedRamp,
-                            kenBurns: tail.kenBurns)
+                            kenBurns: tail.kenBurns, colorGrade: tail.colorGrade)
                 survivors.append(tail)
             }
         }
@@ -476,14 +481,16 @@ extension Project {
         // Druhá polovina musí navázat ve zdroji. Kdo sem dá clip.sourceStart,
         // dostane opakující se záběr a nevšimne si toho, dokud to nepustí.
         // Ken Burns dědí obě poloviny — je vztažený k délce klipu, každá
-        // polovina pak hraje celý pohyb ve svém trvání.
+        // polovina pak hraje celý pohyb ve svém trvání. Barevný preset
+        // dědí obě poloviny taky — řez nemá měnit vzhled obrazu.
         let right = Clip(assetID: clip.assetID,
                          linkID: clip.linkID,
                          timelineStart: frame,
                          duration: clip.duration - offset,
                          sourceStart: sourceOffset(in: clip, atFrame: offset),
                          speedRamp: clip.speedRamp,
-                         kenBurns: clip.kenBurns)
+                         kenBurns: clip.kenBurns,
+                         colorGrade: clip.colorGrade)
 
         var tracks = timeline.tracks
         tracks[at.trackIndex].clips[at.clipIndex] = left

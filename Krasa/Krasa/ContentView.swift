@@ -8,6 +8,7 @@
 
 import AVFoundation
 import AppKit
+import AudioEngine
 import Combine
 import ProbeKit
 import SwiftUI
@@ -61,6 +62,7 @@ final class AppModel: ObservableObject {
     private var subscriptions: [AnyCancellable] = []
 
     init() {
+        loudnessProfile = Self.storedLoudnessProfile()
         // Osa → přehrávač: uživatel posunul hlavu, přehrávač skočí.
         timeline.onUserSeek = { [weak self] frame in
             self?.seekPlayer(toTimelineFrame: frame)
@@ -363,6 +365,26 @@ final class AppModel: ObservableObject {
     /// Zlomek hotových snímků; `nil` = žádný export neběží.
     @Published var exportProgress: Double?
 
+    /// Profil LUFS normalizace exportu (fáze 7, modul 3). `nil` = bez
+    /// normalizace. Výchozí Web −14 podle spec 7.1. Nastavení aplikace
+    /// (UserDefaults), ne projektu — je to vlastnost DODÁVKY, ne střihu;
+    /// per-projekt volba by chtěla změnu formátu souboru a zatím není
+    /// důvod.
+    @Published var loudnessProfile: LoudnessProfile? {
+        didSet {
+            UserDefaults.standard.set(loudnessProfile?.rawValue ?? "none",
+                                      forKey: Self.loudnessProfileKey)
+        }
+    }
+    private static let loudnessProfileKey = "cz.projektkrasa.loudnessProfile"
+
+    static func storedLoudnessProfile() -> LoudnessProfile? {
+        guard let raw = UserDefaults.standard.string(forKey: loudnessProfileKey) else {
+            return .web   // první spuštění: výchozí podle spec
+        }
+        return LoudnessProfile(rawValue: raw)   // „none" → nil
+    }
+
     func exportMovie() {
         guard exportProgress == nil else { return }
         let panel = NSSavePanel()
@@ -394,6 +416,40 @@ final class AppModel: ObservableObject {
             let canvas = project.timeline.canvasSize
             let ticksPerFrame = Int64(SourceTime.projectTimescale)
                 / Int64(project.timeline.frameRate)
+            let mix = built.audioMix(project: project)
+
+            // LUFS normalizace (fáze 7, modul 3): změřit budoucí mix,
+            // dopočítat gain na cíl profilu, zastropovat špičkou.
+            var audioGain = 1.0
+            var loudnessNote = ""
+            if let profile = loudnessProfile {
+                status = "Měřím hlasitost… (\(profile.displayName))"
+                if let scan = try await LoudnessScanner.scan(asset: composition, audioMix: mix),
+                   let measured = scan.integratedLUFS {
+                    var gainDB = LoudnessNormalization.gainDecibels(
+                        measured: measured, target: profile.targetLUFS)
+                    // Strop: špička po zesílení ≤ −1 dBFS. Bez limiteru je
+                    // tohle jediná poctivá ochrana proti clippingu — a když
+                    // zasáhne, řekne se to, nezamlčí.
+                    if scan.samplePeak > 0 {
+                        let capDB = -1.0 - 20.0 * log10(Double(scan.samplePeak))
+                        if gainDB > capDB {
+                            gainDB = capDB
+                            loudnessNote = String(
+                                format: " Hlasitost %.1f LUFS, gain omezen špičkami na %+.1f dB"
+                                    + " — na cíl %.0f LUFS nedosáhl.",
+                                measured, gainDB, profile.targetLUFS)
+                        }
+                    }
+                    if loudnessNote.isEmpty {
+                        loudnessNote = String(
+                            format: " Hlasitost %.1f → %.0f LUFS (gain %+.1f dB).",
+                            measured, profile.targetLUFS, gainDB)
+                    }
+                    audioGain = LoudnessNormalization.linearGain(decibels: gainDB)
+                }
+                status = "Exportuju… (HEVC z originálů)"
+            }
 
             let result = try await CFRRenderer.render(
                 asset: composition,
@@ -406,7 +462,8 @@ final class AppModel: ObservableObject {
                 format: .hevcAAC(videoBitRate: 50_000_000, audioBitRate: 256_000),
                 // Hlasitosti stop do exportu STEJNOU cestou jako do
                 // přehrávače — co slyšíš při střihu, to dostaneš v souboru.
-                audioMix: built.audioMix(project: project),
+                audioMix: mix,
+                audioGainLinear: audioGain,
                 onProgress: { fraction in
                     Task { @MainActor [weak self] in
                         guard let self, self.exportProgress != nil else { return }
@@ -418,6 +475,7 @@ final class AppModel: ObservableObject {
             status = "Export hotový: \(url.lastPathComponent) — "
                 + "\(result.writtenFrameCount) snímků za "
                 + String(format: "%.1f s.", result.elapsedSeconds)
+                + loudnessNote
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } catch {
             status = "Export selhal: \(error.localizedDescription)"
@@ -449,6 +507,7 @@ final class AppModel: ObservableObject {
     /// přeměří externí skript; musí vyjít ~12 LU. Druhý export zároveň
     /// cvičí cestu `AVAssetReaderAudioMixOutput` s mixem.
     func verifyAudioMixExport() async {
+        loudnessProfile = nil   // normalizace by rozdíl hlasitostí dorovnala
         let directory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("KrasaMixCheck", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory,
@@ -466,6 +525,28 @@ final class AppModel: ObservableObject {
         await export(to: directory.appendingPathComponent("mix_quarter.mp4"))
         print("A1 na 0,25×: \(status)")
         print("MIX_CHECK_PATH=\(directory.path)")
+    }
+
+    /// CLI ověření normalizace (fáze 7, modul 3): export s profilem Web
+    /// a s A1 ztišenou na 0,5× — normalizace musí ztišení dorovnat a
+    /// výsledný soubor musí měřit −14 LUFS. Přeměří externí skript.
+    func verifyNormalizedExport() async {
+        // `--broadcast` přepne cíl na −23: s testovacím materiálem je gain
+        // +5,9 dB těsně POD stropem špiček, takže se ověří i cesta, kdy se
+        // cíle skutečně dosáhne (web −14 na tomhle materiálu strop utne).
+        loudnessProfile = CommandLine.arguments.contains("--broadcast") ? .broadcast : .web
+        if let a1 = timeline.project.timeline.tracks.first(where: { $0.kind == .audio }) {
+            timeline.volumeDragBegan()
+            timeline.volumeDragChanged(a1.id, volume: 0.5)
+            timeline.volumeDragEnded()
+        }
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaNormalizeCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        await export(to: directory.appendingPathComponent("normalized.mp4"))
+        print(status)
+        print("NORM_CHECK_PATH=\(directory.path)")
     }
 
     // MARK: Správa proxy úložiště (fáze 4)
@@ -957,6 +1038,8 @@ struct ContentView: View {
                     await model.verifyExport()
                 } else if arguments.contains("--mix-check") {
                     await model.verifyAudioMixExport()
+                } else if arguments.contains("--normalize-check") {
+                    await model.verifyNormalizedExport()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
@@ -1032,8 +1115,22 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Button("Exportovat film…") { model.exportMovie() }
-                    .disabled(model.clips.isEmpty || model.isMeasuring)
+                VStack(alignment: .leading, spacing: 4) {
+                    Button("Exportovat film…") { model.exportMovie() }
+                        .disabled(model.clips.isEmpty || model.isMeasuring)
+                    // Hlasitost dodávky (fáze 7): normalizace na cílový
+                    // profil, nebo nechat mix, jak je.
+                    Picker("Hlasitost", selection: Binding(
+                        get: { model.loudnessProfile?.rawValue ?? "none" },
+                        set: { model.loudnessProfile = LoudnessProfile(rawValue: $0) })) {
+                        Text("Bez normalizace").tag("none")
+                        Text("Web / sociální sítě (−14 LUFS)").tag(LoudnessProfile.web.rawValue)
+                        Text("Vysílání EBU R128 (−23 LUFS)").tag(LoudnessProfile.broadcast.rawValue)
+                    }
+                    .controlSize(.small)
+                    .help("Export změří hlasitost celého filmu a dorovná ji na cíl. "
+                        + "Zesílení je omezené špičkami (−1 dBFS) — bez limiteru se přes ně nejde dostat poctivě.")
+                }
             }
 
             Button(model.isMeasuring ? "Měřím…" : "Změřit náhled v okně") {

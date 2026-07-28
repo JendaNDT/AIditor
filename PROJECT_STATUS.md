@@ -87,6 +87,16 @@ Rozvrh fáze: **1)** `LoudnessMeter` (hotový, níže), **2)** per-track hlasito
   - **Ověřeno CLI `--mix-check`:** dvojí export téže osy, plná hlasitost proti A1 na 0,25×. Rozdíl integrované hlasitosti **11,99 LU proti očekávaným 12,04** (přeměřeno pyloudnorm přes afconvert) — mix jde exportní cestou správně. Druhý export zároveň cvičí `AVAssetReaderAudioMixOutput` s mixem, dosud reálně neprošlapaný.
   - *Koukanec rukou zatím neproběhl (odloženo autorem): posuvník při přehrávání mění hlasitost bez zastavení, M ztlumí, ⌘Z vrací, hodnoty přežijí uložení projektu.*
 
+✅ **Modul 3 — LUFS normalizace exportu (28. 07. 2026).** Před exportem se změří budoucí mix a zvuk se dorovná na cílový profil. Volba v sidebaru u exportu: Bez normalizace / **Web −14 (výchozí, spec 7.1)** / Vysílání EBU R128 −23. Nastavení aplikace (UserDefaults), ne projektu — je to vlastnost dodávky, ne střihu.
+
+  - **`LoudnessScanner` (appka):** přečte zvuk kompozice TÝMŽ aparátem jako export (`AVAssetReaderAudioMixOutput` s mixem, `.timeDomain`) a prožene ho `LoudnessMeterem` → integrovaná hlasitost + špička vzorků. Měří se výsledek, ne zdroj.
+  - **Gain se násobí do vzorků v `CFRRendereru`** (`audioGainLinear`, float32 dekódování, `vDSP_vsmul` po segmentech blokového bufferu). Záměrně NE přes `AVAudioMix.volume` — dokumentace mu dovoluje jen 0,0–1,0 a normalizace potřebuje i zesilovat; stavět na nedokumentovaném rozsahu je přesně chyba z pravidla 6. S gainem se čte s `alwaysCopiesSampleData = true` (do sdílené paměti čtečky se zapisovat nesmí) a dekóduje ve float32, aby zesílení nemělo strop v celočíselném mezikroku.
+  - **Strop proti clippingu: špička po zesílení ≤ −1 dBFS.** Bez limiteru je to jediná poctivá ochrana; když zasáhne, export to řekne ve statusu („gain omezen špičkami… na cíl nedosáhl"), nezamlčí. Vědomé zjednodušení: měří se špička vzorků, ne true peak — a AAC kodér smí strop o desetinky přestřelit (naměřeno −0,87 dBFS při stropu −1); dotažení na dBTP je případná budoucí práce, ne vada.
+  - **Ověřeno CLI `--normalize-check` (A1 ztišená na 0,5× → materiál −28,9 LUFS) nezávislým přeměřením pyloudnorm:**
+    - profil Web −14: gain by chtěl +14,9 dB, špičky povolily **+6,0 dB** → výstup −23,03 LUFS a poctivá hláška o omezení. Sedí: −28,9 + 6,0 = −22,9 (rozdíl 0,1 = gatování).
+    - profil Vysílání −23 (`--broadcast`): gain +5,9 dB POD stropem → **výstup −23,11 LUFS, cíl dosažen**, špička −1,03 dBFS pod stropem.
+  - *Koukanec rukou zatím neproběhl (odloženo autorem): volba profilu u exportu, hláška o hlasitosti po exportu.*
+
 ## 🔄 FÁZE 5 — projekt a export (rozjetá 28. 07. 2026)
 
 ✅ **Modul 1 — projektový soubor `.projektkrasa`: uložit, otevřít, obnovit po startu.**
@@ -282,7 +292,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
 ### Cesta k v1.0 (+~3 měsíce)
-- **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — 🔄 **moduly 1+2 hotové 28. 07. 2026: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm) a per-track hlasitost/mute v přehrávání i exportu (ověřeno `--mix-check`: rozdíl 11,99 LU); zbývá normalizace exportu a sync klopáku**
+- **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — 🔄 **moduly 1–3 hotové 28. 07. 2026: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm), per-track hlasitost/mute (ověřeno `--mix-check`) a LUFS normalizace exportu se stropem špiček (ověřeno `--normalize-check`: cíl −23 dosažen na 0,11 LU, strop poctivě hlášen); zbývá cross-korelační sync klopáku**
 - **F8** Titulky přes WhisperKit *(2 týdny)*
 - **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — **+ migrace na `AVVideoComposition.Configuration`** jako druhá větev pod `if #available(macOS 26.0, *)`. Ne dřív.
 - 🚧 **KILL-GATE 2:** prodat deseti lidem, kteří tě neznají

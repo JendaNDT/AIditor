@@ -13,6 +13,7 @@
 //
 
 import AVFoundation
+import Accelerate
 import CoreMedia
 import Foundation
 
@@ -63,6 +64,12 @@ public enum CFRRenderer {
     ///     `AVAssetReaderAudioMixOutput` i u jediné stopy — hlasitost musí
     ///     do exportu stejnou cestou jako do přehrávače.
     ///     <https://developer.apple.com/documentation/avfoundation/avassetreaderaudiomixoutput/audiomix>
+    ///   - audioGainLinear: normalizační gain (fáze 7, modul 3), lineárně.
+    ///     Násobí se přímo do vzorků — přes `AVAudioMix.volume` to nejde,
+    ///     dokumentace mu dovoluje jen 0,0–1,0 a normalizace potřebuje
+    ///     i zesilovat. S gainem se zvuk dekóduje ve float32, aby zesílení
+    ///     nemělo strop v celočíselném mezikroku; strop proti clippingu
+    ///     (špička ≤ −1 dBFS) hlídá VOLAJÍCÍ, renderer násobí.
     ///   - onProgress: zlomek hotových snímků; chodí z fronty zapisovače.
     public static func render(asset: AVAsset,
                               videoTrack: AVAssetTrack,
@@ -73,6 +80,7 @@ public enum CFRRenderer {
                               outputSize: CGSize? = nil,
                               format: OutputFormat = .proResProxyLPCM,
                               audioMix: AVAudioMix? = nil,
+                              audioGainLinear: Double = 1.0,
                               onProgress: (@Sendable (Double) -> Void)? = nil,
                               to outputURL: URL) async throws -> CFRRenderResult {
         let started = Date()
@@ -144,17 +152,25 @@ public enum CFRRenderer {
         var audioOutput: AVAssetReaderOutput?
         var audioChannels: UInt32 = 0
         var audioSampleRate: Double = 0
+        let hasGain = audioGainLinear != 1.0
         if let firstAudio = audioTracks.first {
             let audioFormats = try await firstAudio.load(.formatDescriptions)
             if let asbd = audioFormats.first.flatMap({ CMAudioFormatDescriptionGetStreamBasicDescription($0) }) {
                 audioChannels = asbd.pointee.mChannelsPerFrame
                 audioSampleRate = asbd.pointee.mSampleRate
             }
-            let settings = pcmSettings(channels: audioChannels, sampleRate: audioSampleRate)
+            // S normalizačním gainem se dekóduje ve float32 — násobit se
+            // bude do vzorků a celočíselný mezikrok by zesílení ořezal
+            // dřív, než by na něj došlo.
+            let settings = hasGain
+                ? pcmFloatSettings(channels: audioChannels, sampleRate: audioSampleRate)
+                : pcmSettings(channels: audioChannels, sampleRate: audioSampleRate)
 
             if audioTracks.count == 1, audioMix == nil {
                 let output = AVAssetReaderTrackOutput(track: firstAudio, outputSettings: settings)
-                output.alwaysCopiesSampleData = false
+                // S gainem se do bufferů zapisuje — nesmí to být sdílená
+                // paměť čtečky, proto kopie.
+                output.alwaysCopiesSampleData = hasGain
                 // Korekce výšky hlasu se nastavuje TADY. AVAssetExportSession má
                 // vlastní `audioTimePitchAlgorithm`, ale tu cestu nepoužíváme —
                 // u AVAssetReaderu to sedí přímo na výstupu stopy.
@@ -172,7 +188,7 @@ public enum CFRRenderer {
                 // <https://developer.apple.com/documentation/avfoundation/avassetreaderaudiomixoutput>
                 let output = AVAssetReaderAudioMixOutput(audioTracks: audioTracks,
                                                          audioSettings: settings)
-                output.alwaysCopiesSampleData = false
+                output.alwaysCopiesSampleData = hasGain
                 output.audioMix = audioMix
                 if let audioTimePitchAlgorithm {
                     output.audioTimePitchAlgorithm = audioTimePitchAlgorithm
@@ -297,6 +313,7 @@ public enum CFRRenderer {
 
         if let audioInput, let audioOutput {
             group.enter()
+            let gain = Float(audioGainLinear)
             audioInput.requestMediaDataWhenReady(on: DispatchQueue(label: "cfr.audio")) {
                 while audioInput.isReadyForMoreMediaData {
                     guard let buffer = audioOutput.copyNextSampleBuffer() else {
@@ -304,6 +321,7 @@ public enum CFRRenderer {
                         group.leave()
                         return
                     }
+                    if hasGain { applyGain(gain, to: buffer) }
                     if !audioInput.append(buffer) {
                         audioInput.markAsFinished()
                         group.leave()
@@ -394,6 +412,50 @@ public enum CFRRenderer {
             AVLinearPCMIsBigEndianKey: false,
             AVLinearPCMIsNonInterleaved: false,
         ]
+    }
+
+    /// Float32 LPCM — dekódovací formát pro cesty, které do vzorků
+    /// zapisují (normalizační gain) nebo je měří (LoudnessScanner).
+    /// Float nemá strop na 0 dBFS, takže zesílení ani 32-bit float
+    /// zdroje s hodnotami přes ±1 se v mezikroku neořežou.
+    public static func pcmFloatSettings(channels: UInt32, sampleRate: Double) -> [String: Any] {
+        [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: sampleRate > 0 ? sampleRate : 48000,
+            AVNumberOfChannelsKey: channels > 0 ? Int(channels) : 2,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+    }
+
+    /// Vynásobí vzorky bufferu gainem, na místě. Buffer musí být float32
+    /// (zajišťuje `pcmFloatSettings`) a vlastní kopie
+    /// (`alwaysCopiesSampleData = true`) — do sdílené paměti čtečky se
+    /// zapisovat nesmí. Blokový buffer nemusí být souvislý, proto se jde
+    /// po segmentech.
+    /// <https://developer.apple.com/documentation/coremedia/cmblockbuffergetdatapointer(_:atoffset:lengthatoffsetout:totallengthout:datapointerout:)>
+    /// <https://developer.apple.com/documentation/accelerate/1450020-vdsp_vsmul>
+    private static func applyGain(_ gain: Float, to buffer: CMSampleBuffer) {
+        guard let block = CMSampleBufferGetDataBuffer(buffer) else { return }
+        let total = CMBlockBufferGetDataLength(block)
+        var offset = 0
+        var gainValue = gain
+        while offset < total {
+            var lengthAtOffset = 0
+            var pointer: UnsafeMutablePointer<CChar>?
+            guard CMBlockBufferGetDataPointer(block, atOffset: offset,
+                                              lengthAtOffsetOut: &lengthAtOffset,
+                                              totalLengthOut: nil,
+                                              dataPointerOut: &pointer) == kCMBlockBufferNoErr,
+                  let pointer, lengthAtOffset > 0 else { return }
+            let count = lengthAtOffset / MemoryLayout<Float>.size
+            UnsafeMutableRawPointer(pointer).withMemoryRebound(to: Float.self, capacity: count) {
+                vDSP_vsmul($0, 1, &gainValue, $0, 1, vDSP_Length(count))
+            }
+            offset += lengthAtOffset
+        }
     }
 
     public static func fourCC(_ code: OSType) -> String {

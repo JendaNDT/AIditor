@@ -81,6 +81,7 @@ public enum CFRRenderer {
                               format: OutputFormat = .proResProxyLPCM,
                               audioMix: AVAudioMix? = nil,
                               audioGainLinear: Double = 1.0,
+                              videoComposition: AVVideoComposition? = nil,
                               onProgress: (@Sendable (Double) -> Void)? = nil,
                               to outputURL: URL) async throws -> CFRRenderResult {
         let started = Date()
@@ -124,7 +125,19 @@ public enum CFRRenderer {
         let readerSettings = [kCVPixelBufferPixelFormatTypeKey as String: pixelFormat]
         let videoOutput: AVAssetReaderOutput
 
-        if let targetSize {
+        if let videoComposition {
+            // Vlastní kompozice volajícího (fáze 10: přechody — instrukce
+            // s opacity rampami přes VÍC obrazových stop). Musí mít samá
+            // `renderSize` i `frameDuration` na cílové mřížce; renderer
+            // ji nechává být a čte přes všechny obrazové stopy assetu —
+            // co vidíš v přehrávači, to dostaneš v souboru.
+            let allVideoTracks = try await asset.loadTracks(withMediaType: .video)
+            let output = AVAssetReaderVideoCompositionOutput(videoTracks: allVideoTracks,
+                                                             videoSettings: readerSettings)
+            output.videoComposition = videoComposition
+            output.alwaysCopiesSampleData = false
+            videoOutput = output
+        } else if let targetSize {
             // Cadence kompozice = cílová mřížka: výstup čtečky je pak už CFR
             // a zero-order hold resampleru jím projde 1:1. Výběr snímku pro
             // daný čas dělá kompozitor stejně — poslední platný snímek.

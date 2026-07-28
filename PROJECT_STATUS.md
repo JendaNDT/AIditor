@@ -13,7 +13,7 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): přechody → texty/T1 → fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 10 — přechody, modul 2 (kompozice: A/B roll + opacity rampy + audio crossfade; ⚠️ HNED změřit GPU skok — první video kompozice v přehrávání).** Modul 1 (model) je hotový, viz sekce fáze 10 níže. Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 10 — přechody, modul 3 (UI: přechod z kontextového menu střihu, lichoběžník přes hranu na ose, délka tažením okraje se zarážkou z `maxTransitionDuration`).** Moduly 1 a 2 hotové, viz sekce fáze 10 níže. Detail v `IMPLEMENTACNI_PLAN.md`.
 
 ## 🔄 FÁZE 10 — přechody (rozjetá 28. 07. 2026)
 
@@ -27,7 +27,18 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (254), `
   - **Rampovaný střih zakázán OBĚMA směry** (v1 dle plánu): přechod na rampu nejde přidat (`transitionOnRampedCut`) a rampa na klip s přechodem taky ne (`blockedByTransition`) — UI řekne „napřed smaž přechod".
   - **Starší projektové soubory se dál načtou:** pole `Track.transitions` se čte jako prázdné, verze formátu se nezvedá (týž vzorec jako `Asset.transcript`); test dekóduje stopu z JSON bez toho pole.
 
-  **Zbývá z fáze 10:** modul 2 — kompozice (A/B roll dvě obrazové stopy, `AVVideoComposition` opacity rampy přes překryv, zvukový crossfade přes `AVAudioMix.setVolumeRamp`; ⚠️ první video kompozice v přehrávání = očekávaný GPU skok, změřit HNED a zapsat čísla) a modul 3 — UI (přechod z kontextového menu střihu, lichoběžník přes hranu, délka tažením okraje se zarážkou z `maxTransitionDuration`).
+✅ **Modul 2 — přechody hrají v kompozici i exportu (28. 07. 2026).** Rozložení práce podle pravidla „logika do modelu":
+
+  - **`TrackCompositionPlan` v `TimelineModelu` (+8 testů, celkem 292):** čistá logika A/B rozkladu stopy — prolínačka/crossfade posílá sousedy na dvě dráhy kompozice s rameny přes hranu střihu (levému se prodlouží konec, pravému PŘEDSADÍ začátek s posunutým zdrojem), zatmívačka zůstává na jedné dráze bez ramen. Vydává vklady (`Placement`: dráha, rozsah, zdrojový výřez) a předpisy oblastí (`Overlay`). Vadné přechody (ručně rozbitý projekt) plán ignoruje — klip hraje natvrdo, vadu hlásí `validate()`, stejný vzorec jako vadná rampa.
+  - **`CompositionBuilder` plán jen převádí na AVFoundation:** dráhy = stopy kompozice, instrukce `AVMutableVideoComposition` s `setOpacityRamp` (prolínačka: odcházející navrchu stmívá 1→0 nad nastupujícím — lineární směs; zatmívačka: pokles do barvy pozadí instrukce a zpět, černá/bílá), zvukový crossfade = `setVolumeRamp` dvojice v `audioMix(project:)`, takže přežívá i živou změnu hlasitosti stopy (po odchodové rampě se hlasitost VRACÍ — na téže dráze leží další klipy). **Video kompozice vzniká JEN když na obraze opravdu leží přechod** (vzorec `SubtitleOverlay`) — bez něj je přehrávací cesta bajt po bajtu ta z fází 3–5 a GPU baseline platí dál.
+  - **Aspect-fit transformace klipů:** s video kompozicí přestává obraz škálovat `AVPlayerLayer` — instrukce MUSÍ nést napřímení (`preferredTransform`), zmenšení a vycentrování na plátno, jinak by klip (a hlavně poloviční proxy) ležel v rohu 1:1.
+  - **Export toutéž kompozicí:** `CFRRenderer` dostal volitelný `videoComposition` — čte přes všechny obrazové stopy, co vidíš v náhledu, to dostaneš v souboru. Bez přechodů se nic nemění (ověřeno `--export-check`: 4739 snímků, shodné s fází 9 do posledního čísla).
+  - **Ověřeno CLI `--transition-check` kvantitativně:** zatmívačka — jas okolí 79/80, na střihu **0**; prolínačka — snímek na střihu (opacity 0,5) porovnán PO PIXELECH s průměrem obou zdrojových snímků: odchylka od směsi **0,7**, od čistých stran 12,9/13,1 — je to skutečná směs, ne tvrdý střih (průměrný jas by tvrdému střihu prošel, tenhle test ne). Sonda výstupu: 3840×2160 HEVC, 30,00 fps měřených, **kolísání 0,0 %, CFR**, délka přesně 6,000 s — ramena přechodů délku osy nemění.
+  - **⚠️ GPU skok ZMĚŘEN — očekávaný, plánovaný, nastal (28. 07. 2026).** Režim `--transition-gpu on|off` přehrává touž osu ~20 s v popředí, vedle vzorkuje skript `ioreg` „Device Utilization %" (1 Hz). Výsledky: klid 0–3 %, přehrávání 4K/30 BEZ kompozice 0–10 % (medián ~2 % — potvrzuje baseline fáze 1 „holé video GPU skoro nepotřebuje"), S kompozicí **8–16 %, medián ~12 %**. ⚠️ Metrika je jiná než ve fázi 1 (`powermetrics` chce sudo/heslo, které CLI běh nemá) — srovnávat spolu jdou jen tahle dvě čísla měřená STEJNĚ, ne proti 0,25 %/9,90 % z fáze 1. Nuly uvnitř „on" běhu jsou okamžiky restartu 6s smyčky, ne výpadek.
+  - Dvě pasti do sbírky: **① stdout CLI běhu se do roury bufferuje až do konce procesu** (i pod `script` pty na macOS) — synchronizace vnějšího měření jde přes markerový soubor v kontejneru, ne přes print; **② konec itemu poznávej ze `timeControlStatus == .paused`**, ne z času hlavy — periodický pozorovatel nemusí poslední snímek tiknout a smyčka čekající na `currentTime ≥ konec` se nikdy nedočká.
+  - *Koukanec rukou zatím neproběhl (odloženo autorem): prolínačka/zatmívačka v náhledu okem, plynulost přehrávání přes přechod.*
+
+  **Zbývá z fáze 10:** modul 3 — UI (přechod z kontextového menu střihu, lichoběžník přes hranu na ose, délka tažením okraje se zarážkou z `maxTransitionDuration`, hlášky `blockedByTransition` v interakcích).
 
 ## ✅ SPIKE 0 UZAVŘEN (26. 07. 2026)
 

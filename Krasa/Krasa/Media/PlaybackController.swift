@@ -83,7 +83,8 @@ final class PlaybackController: ObservableObject {
     /// Nahraje kompozici celé osy. Krok po snímku jde po snímcích ZÁKLADNY
     /// projektu — kompozice žádnou vlastní frekvenci nemá.
     func loadComposition(_ composition: AVComposition, frameRate: Int,
-                         audioMix: AVAudioMix? = nil) {
+                         audioMix: AVAudioMix? = nil,
+                         videoComposition: AVVideoComposition? = nil) {
         pause()
         let item = AVPlayerItem(asset: composition)
         // Korekce výšky pro škálované zvukové úseky rampy. `.timeDomain`
@@ -94,6 +95,10 @@ final class PlaybackController: ObservableObject {
         // Per-track hlasitost a mute (fáze 7, modul 2).
         // <https://developer.apple.com/documentation/avfoundation/avplayeritem/audiomix>
         item.audioMix = audioMix
+        // Přechody (fáze 10): instrukce s opacity rampami. `nil` = přímá
+        // cesta bez skládání — GPU baseline z fáze 1 zůstává v platnosti.
+        // <https://developer.apple.com/documentation/avfoundation/avplayeritem/videocomposition>
+        item.videoComposition = videoComposition
         player.replaceCurrentItem(with: item)
         duration = composition.duration
         frameDuration = CMTime(value: CMTimeValue(Int64(SourceTime.projectTimescale) / Int64(frameRate)),

@@ -474,6 +474,8 @@ final class AppModel: ObservableObject {
                 // přehrávače — co slyšíš při střihu, to dostaneš v souboru.
                 audioMix: mix,
                 audioGainLinear: audioGain,
+                // Přechody (fáze 10): tatáž video kompozice jako v náhledu.
+                videoComposition: built.videoComposition,
                 onProgress: { fraction in
                     Task { @MainActor [weak self] in
                         guard let self, self.exportProgress != nil else { return }
@@ -609,6 +611,221 @@ final class AppModel: ObservableObject {
         let cues = timeline.project.subtitleCues()
         print("titulků na ose: \(cues.count)")
         print(SRT.serialize(cues: cues, frameRate: timeline.project.timeline.frameRate))
+    }
+
+    /// CLI ověření přechodů (fáze 10, modul 2): tři klipy z téhož zdroje se
+    /// zdrojovými přesahy, zatmívačka na prvním střihu (snímek 60), prolínačka
+    /// na druhém (snímek 120), zvukový crossfade na A1. Export se přeměří po
+    /// snímcích: na střihu zatmívačky musí být obraz ~černý, uprostřed
+    /// prolínačky směs obou stran (opacity 0,5 → průměr jasů).
+    func verifyTransitionExport() async {
+        // CLI běh nesmí trvale přepsat uživatelské nastavení profilu.
+        let savedProfile = loudnessProfile
+        defer { loudnessProfile = savedProfile }
+        loudnessProfile = nil
+
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        var project = Project.empty()
+        project.addAsset(source)
+        let available = project.timeline.availableFrames(from: source.duration)
+        guard available.count >= 305 else {
+            print("❌ asset je krátký (\(available.count) snímků, potřeba 305)"); return
+        }
+
+        let v1 = project.timeline.tracks[0].id
+        let a1 = project.timeline.tracks[1].id
+        func makeClip(start: Int, sourceFrame: Int) -> Clip {
+            Clip(assetID: source.id, timelineStart: Frames(start), duration: Frames(60),
+                 sourceStart: project.timeline.sourceTime(Frames(sourceFrame)))
+        }
+        do {
+            var videoIDs: [ClipID] = []
+            var audioIDs: [ClipID] = []
+            for (start, src) in [(0, 0), (60, 120), (120, 240)] {
+                let video = makeClip(start: start, sourceFrame: src)
+                try project.insert(video, onTrack: v1)
+                videoIDs.append(video.id)
+                if source.hasAudio {
+                    let audio = makeClip(start: start, sourceFrame: src)
+                    try project.insert(audio, onTrack: a1)
+                    audioIDs.append(audio.id)
+                }
+            }
+            try project.setTransition(.dipToBlack, duration: Frames(20),
+                                      betweenLeft: videoIDs[0], andRight: videoIDs[1])
+            try project.setTransition(.crossDissolve, duration: Frames(30),
+                                      betweenLeft: videoIDs[1], andRight: videoIDs[2])
+            if audioIDs.count == 3 {
+                try project.setTransition(.audioCrossfade, duration: Frames(20),
+                                          betweenLeft: audioIDs[0], andRight: audioIDs[1])
+            }
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        timeline.project = project
+
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaTransitionCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("transition_check.mp4")
+        await export(to: url)
+        print(status)
+
+        // Zatmívačka (oblast [50, 70), střih 60): průměrný jas na střihu
+        // musí spadnout k nule.
+        guard let pureA = await lumaGrid(url: url, seconds: 40.5 / 30),
+              let dipCut = await lumaGrid(url: url, seconds: 60.5 / 30),
+              let pureB = await lumaGrid(url: url, seconds: 80.5 / 30) else {
+            print("❌ nepodařilo se přečíst kontrolní snímky exportu"); return
+        }
+        let dipLuma = dipCut.reduce(0, +) / Double(dipCut.count)
+        let edgeLuma = min(pureA.reduce(0, +), pureB.reduce(0, +)) / Double(pureA.count)
+        print(String(format: "zatmívačka: jas okolí %.0f | na střihu %.0f", edgeLuma, dipLuma))
+        print(dipLuma < 0.25 * edgeLuma
+              ? "✓ zatmívačka na střihu stmívá do černé"
+              : "❌ zatmívačka na střihu NENÍ černá")
+
+        // Prolínačka (oblast [105, 135), střih 120, opacity přesně 0,5):
+        // snímek na střihu se PO PIXELECH porovná s průměrem obou zdrojových
+        // snímků, které se v něm mají míchat — clip2 je v tu chvíli na 6,0 s
+        // zdroje, clip3 na 8,0 s. Průměr jasů by prošel i tvrdému střihu,
+        // tohle ne: směs musí být blíž průměru než kterékoli straně.
+        guard let mid = await lumaGrid(url: url, seconds: 120.5 / 30),
+              let sideA = await lumaGrid(url: source.originalURL, seconds: 6.0 + 0.5 / 30),
+              let sideB = await lumaGrid(url: source.originalURL, seconds: 8.0 + 0.5 / 30) else {
+            print("❌ nepodařilo se přečíst zdrojové snímky prolínačky"); return
+        }
+        let predicted = zip(sideA, sideB).map { ($0 + $1) / 2 }
+        func mae(_ a: [Double], _ b: [Double]) -> Double {
+            zip(a, b).map { abs($0 - $1) }.reduce(0, +) / Double(a.count)
+        }
+        let toPredicted = mae(mid, predicted)
+        let toSideA = mae(mid, sideA)
+        let toSideB = mae(mid, sideB)
+        print(String(format: "prolínačka: odchylka od směsi %.1f | od levé %.1f | od pravé %.1f",
+                     toPredicted, toSideA, toSideB))
+        let dissolveOK = toPredicted < 16 && toPredicted < toSideA && toPredicted < toSideB
+        print(dissolveOK ? "✓ prolínačka na střihu je směs obou stran (opacity 0,5)"
+                         : "❌ prolínačka na střihu není směs — vypadá jako tvrdý střih")
+        print("TRANSITION_CHECK_PATH=\(directory.path)")
+    }
+
+    /// CLI měření GPU skoku přechodů (fáze 10, modul 2): postaví touž osu
+    /// jako `--transition-check` (s přechody, nebo BEZ nich s argumentem
+    /// „off") a ~20 s ji přehrává v popředí. Čísla netiskne — GPU vzorkuje
+    /// vnější skript (`ioreg`/`powermetrics`) vedle běžící aplikace; okno
+    /// si říká o popředí, protože měření náhledu je platné, jen když bylo
+    /// na co koukat (poučení z fáze 1).
+    func runTransitionGPUPlayback(enabled: Bool) async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        var project = Project.empty()
+        project.addAsset(source)
+        guard project.timeline.availableFrames(from: source.duration).count >= 305 else {
+            print("❌ asset je krátký"); return
+        }
+        let v1 = project.timeline.tracks[0].id
+        let a1 = project.timeline.tracks[1].id
+        do {
+            var videoIDs: [ClipID] = []
+            for (start, src) in [(0, 0), (60, 120), (120, 240)] {
+                let video = Clip(assetID: source.id, timelineStart: Frames(start),
+                                 duration: Frames(60),
+                                 sourceStart: project.timeline.sourceTime(Frames(src)))
+                try project.insert(video, onTrack: v1)
+                videoIDs.append(video.id)
+                if source.hasAudio {
+                    let audio = Clip(assetID: source.id, timelineStart: Frames(start),
+                                     duration: Frames(60),
+                                     sourceStart: project.timeline.sourceTime(Frames(src)))
+                    try project.insert(audio, onTrack: a1)
+                }
+            }
+            if enabled {
+                try project.setTransition(.dipToBlack, duration: Frames(20),
+                                          betweenLeft: videoIDs[0], andRight: videoIDs[1])
+                try project.setTransition(.crossDissolve, duration: Frames(30),
+                                          betweenLeft: videoIDs[1], andRight: videoIDs[2])
+            }
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        timeline.project = project
+
+        if let host = await waitForPlayerWindow() {
+            host.window?.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        for _ in 0..<40 where builtTimeline == nil {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        guard let built = builtTimeline else { print("❌ kompozice nevznikla"); return }
+        print("videoComposition: \(built.videoComposition != nil ? "ANO" : "NE")")
+        // Synchronizace s vnějším vzorkovačem MARKEROVÝM SOUBOREM, ne přes
+        // stdout — print do roury se bufferuje až do konce procesu a vnější
+        // skript by se markery dozvěděl pozdě (změřeno: i pod `script` pty).
+        let marker = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaGPUPlayback.marker")
+        try? "playing".write(to: marker, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: marker) }
+        controller.seek(to: .zero)
+        controller.play()
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline {
+            // Osa má 6 s — na konci se točí znovu, měří se souvislé
+            // přehrávání. Konec se pozná ze STAVU přehrávače (`.pause` na
+            // konci itemu), ne z času hlavy — periodický pozorovatel nemusí
+            // poslední snímek vůbec tiknout a čas by konce nedosáhl.
+            if controller.player.timeControlStatus == .paused {
+                controller.seek(to: .zero)
+                controller.play()
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        controller.pause()
+    }
+
+    /// Mřížka jasů 8×8 snímku v daném čase (0–255): dekóduje přes
+    /// `AVAssetImageGenerator` s nulovou tolerancí. Čas se zadává o půl
+    /// snímku DOVNITŘ intervalu, aby se netrefovala hrana.
+    /// <https://developer.apple.com/documentation/avfoundation/avassetimagegenerator>
+    private func lumaGrid(url: URL, seconds: Double) async -> [Double]? {
+        let asset = AVURLAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 192, height: 108)
+        let time = CMTime(seconds: seconds, preferredTimescale: SourceTime.projectTimescale)
+        guard let image = try? await generator.image(at: time).image else { return nil }
+
+        let side = 8
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        let ok = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress, width: side, height: side,
+                bitsPerComponent: 8, bytesPerRow: side * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+            return true
+        }
+        guard ok else { return nil }
+        var lumas: [Double] = []
+        lumas.reserveCapacity(side * side)
+        for i in stride(from: 0, to: pixels.count, by: 4) {
+            lumas.append(0.299 * Double(pixels[i]) + 0.587 * Double(pixels[i + 1])
+                + 0.114 * Double(pixels[i + 2]))
+        }
+        return lumas
     }
 
     /// CLI ověření přepisu: soubor se známou českou větou (say/nahrávka),
@@ -909,7 +1126,8 @@ final class AppModel: ObservableObject {
             self.builtTimelineShape = project.timeline.withDefaultAudioSettings()
             self.playerContent = .timeline
             self.controller.loadComposition(built.composition, frameRate: frameRate,
-                                            audioMix: built.audioMix(project: project))
+                                            audioMix: built.audioMix(project: project),
+                                            videoComposition: built.videoComposition)
             self.controller.seek(to: CompositionBuilder.time(of: self.timeline.playhead,
                                                              frameRate: frameRate))
         }
@@ -934,7 +1152,8 @@ final class AppModel: ObservableObject {
             guard let built = builtTimeline else { return }
             playerContent = .timeline
             controller.loadComposition(built.composition, frameRate: frameRate,
-                                       audioMix: built.audioMix(project: timeline.project))
+                                       audioMix: built.audioMix(project: timeline.project),
+                                       videoComposition: built.videoComposition)
         }
         controller.seek(to: CompositionBuilder.time(of: frame, frameRate: frameRate))
     }
@@ -1271,6 +1490,10 @@ struct ContentView: View {
                     await model.verifyTranscription(path: explicit.first)
                 } else if arguments.contains("--srt-check") {
                     model.verifySRTExport()
+                } else if arguments.contains("--transition-check") {
+                    await model.verifyTransitionExport()
+                } else if arguments.contains("--transition-gpu") {
+                    await model.runTransitionGPUPlayback(enabled: !explicit.contains("off"))
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

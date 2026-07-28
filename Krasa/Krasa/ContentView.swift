@@ -1138,14 +1138,229 @@ final class AppModel: ObservableObject {
               : "❌ zmrazený snímek NEODPOVÍDÁ obrazu pod hlavou")
     }
 
+    /// CLI ověření barevných presetů (fáze 13, modul 2): dvojí export téže
+    /// osy — s presety a bez nich. Osa: video klip (pas-through), červená
+    /// fotka bez presetu, s ČB naplno, s ČB na 50 %, a prolínačka mezi
+    /// barevnou a ČB fotkou. Červený čtverec má ZNÁMOU saturaci (max−min
+    /// ≈ 255), takže efekt jde měřit čísly: ČB ~0, poloviční intenzita
+    /// ~půlka, směs na střihu ~půlka. Snímky bez presetu se mezi exporty
+    /// porovnávají po pixelech — vlastní compositor NESMÍ měnit, co barvit
+    /// nemá (týž vzorec jako `--title-check`).
+    func verifyColorExport() async {
+        let savedProfile = loudnessProfile
+        defer { loudnessProfile = savedProfile }
+        loudnessProfile = nil
+
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaColorCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        let photoURL = directory.appendingPathComponent("cerveny_ctverec.png")
+        guard writeSquarePNG(to: photoURL, side: 1000,
+                             color: CGColor(red: 1, green: 0, blue: 0, alpha: 1)) else {
+            print("❌ syntetickou fotku se nepodařilo zapsat"); return
+        }
+
+        // Osa: video 0–60 | fotka 60–120 | fotka 120–180 | fotka 180–240,
+        // prolínačka 30 snímků na střihu 120.
+        var bare = Project.empty()
+        bare.addAsset(source)
+        let photo = Asset.still(url: photoURL)
+        bare.addAsset(photo)
+        var gradedClips: [(ClipID, ColorGrade)] = []
+        do {
+            let v1 = bare.timeline.tracks[0].id
+            var video = try bare.makeClip(assetID: source.id)
+            video.duration = Frames(60)
+            try bare.insert(video, onTrack: v1)
+            var previous: ClipID?
+            for start in [60, 120, 180] {
+                var still = try bare.makeClip(assetID: photo.id, at: Frames(start))
+                still.duration = Frames(60)
+                try bare.insert(still, onTrack: v1)
+                if start == 120 { gradedClips.append((still.id, ColorGrade(
+                    preset: .blackAndWhite, intensity: 1.0))) }
+                if start == 180 { gradedClips.append((still.id, ColorGrade(
+                    preset: .blackAndWhite, intensity: 0.5))) }
+                if start == 120, let left = previous {
+                    try bare.setTransition(.crossDissolve, duration: Frames(30),
+                                           betweenLeft: left, andRight: still.id)
+                }
+                previous = still.id
+            }
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+
+        var graded = bare
+        do {
+            for (clipID, grade) in gradedClips {
+                try graded.setColorGrade(clipID: clipID, grade)
+            }
+        } catch {
+            print("❌ nastavení presetů selhalo: \(error)"); return
+        }
+
+        let gradedURL = directory.appendingPathComponent("color_on.mp4")
+        let bareURL = directory.appendingPathComponent("color_off.mp4")
+        timeline.project = graded
+        await export(to: gradedURL)
+        print(status)
+        timeline.project = bare
+        await export(to: bareURL)
+        print(status)
+
+        // Časy o půl snímku DOVNITŘ intervalu (vzorec `lumaGrid`).
+        // Snímek 30 video, 90 barevná fotka, 120 střed prolínačky,
+        // 150 ČB naplno, 210 ČB na 50 %.
+        guard let videoOn = await lumaGrid(url: gradedURL, seconds: 30.5 / 30),
+              let videoOff = await lumaGrid(url: bareURL, seconds: 30.5 / 30),
+              let photoOnLuma = await lumaGrid(url: gradedURL, seconds: 90.5 / 30),
+              let photoOffLuma = await lumaGrid(url: bareURL, seconds: 90.5 / 30),
+              let photoOn = await chromaGrid(url: gradedURL, seconds: 90.5 / 30),
+              let photoOff = await chromaGrid(url: bareURL, seconds: 90.5 / 30),
+              let mixOn = await chromaGrid(url: gradedURL, seconds: 120.5 / 30),
+              let mixOff = await chromaGrid(url: bareURL, seconds: 120.5 / 30),
+              let bwOn = await chromaGrid(url: gradedURL, seconds: 150.5 / 30),
+              let bwOff = await chromaGrid(url: bareURL, seconds: 150.5 / 30),
+              let halfOn = await chromaGrid(url: gradedURL, seconds: 210.5 / 30),
+              let halfOff = await chromaGrid(url: bareURL, seconds: 210.5 / 30) else {
+            print("❌ nepodařilo se přečíst kontrolní snímky"); return
+        }
+
+        func mae(_ a: [Double], _ b: [Double]) -> Double {
+            zip(a, b).map { abs($0 - $1) }.reduce(0, +) / Double(a.count)
+        }
+        // Čtverec v 16:9 — střední sloupce 2–5 (vzorec `--photo-check`).
+        func center(_ grid: [Double]) -> Double {
+            let cells = (0..<8).flatMap { row in [2, 3, 4, 5].map { grid[row * 8 + $0] } }
+            return cells.reduce(0, +) / Double(cells.count)
+        }
+
+        // ① Pas-through: snímky bez presetu jsou mezi exporty shodné —
+        // video klip (jiná cesta dekódování) i barevná fotka.
+        let videoDiff = mae(videoOn, videoOff)
+        let photoDiff = mae(photoOnLuma, photoOffLuma)
+        let photoChromaDiff = abs(center(photoOn) - center(photoOff))
+        print(String(format: "pas-through: video %.2f | fotka jas %.2f | fotka sat %.1f",
+                     videoDiff, photoDiff, photoChromaDiff))
+        print(videoDiff < 3 && photoDiff < 3 && photoChromaDiff < 12
+              ? "✓ snímky bez presetu jsou mezi exporty shodné"
+              : "❌ vlastní compositor mění snímky, které barvit nemá")
+
+        // ② ČB naplno: saturace k nule (proti témuž snímku bez presetu).
+        let bwCenter = center(bwOn), bwBase = center(bwOff)
+        print(String(format: "ČB naplno: saturace %.0f (bez presetu %.0f)", bwCenter, bwBase))
+        print(bwBase > 150 && bwCenter < 20
+              ? "✓ černobílý preset odbarvuje"
+              : "❌ černobílý preset v exportu nefunguje")
+
+        // ③ Intenzita 50 %: saturace zhruba na půlce originálu.
+        let halfCenter = center(halfOn), halfBase = center(halfOff)
+        let halfRatio = halfBase > 0 ? halfCenter / halfBase : 0
+        print(String(format: "ČB na 50 %%: saturace %.0f / %.0f = %.2f",
+                     halfCenter, halfBase, halfRatio))
+        print(halfRatio > 0.35 && halfRatio < 0.65
+              ? "✓ intenzita presetu je lineární směs (50 % ≈ půlka saturace)"
+              : "❌ intenzita 50 % nedává poloviční efekt")
+
+        // ④ Preset + prolínačka: na střihu (opacity 0,5) se míchá barevná
+        // a ČB fotka — saturace směsi ~půlka.
+        let mixCenter = center(mixOn), mixBase = center(mixOff)
+        let mixRatio = mixBase > 0 ? mixCenter / mixBase : 0
+        print(String(format: "prolínačka s presetem: saturace %.0f / %.0f = %.2f",
+                     mixCenter, mixBase, mixRatio))
+        print(mixRatio > 0.35 && mixRatio < 0.65
+              ? "✓ preset hraje i uvnitř prolínačky (směs barevné a ČB)"
+              : "❌ preset uvnitř prolínačky nefunguje")
+        print("COLOR_CHECK_PATH=\(directory.path)")
+    }
+
+    /// CLI měření GPU vlastního compositoru (fáze 13, modul 2): tři klipy
+    /// 4K/30 bez přechodů, s presetem na všech („on" — celá osa jde přes
+    /// `ColorVideoCompositor`) nebo bez („off" — přímá cesta bez video
+    /// kompozice). Vzorec `--transition-gpu` včetně markerového souboru.
+    func runColorGPUPlayback(enabled: Bool) async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        var project = Project.empty()
+        project.addAsset(source)
+        guard project.timeline.availableFrames(from: source.duration).count >= 305 else {
+            print("❌ asset je krátký"); return
+        }
+        let v1 = project.timeline.tracks[0].id
+        let a1 = project.timeline.tracks[1].id
+        do {
+            for (start, src) in [(0, 0), (60, 120), (120, 240)] {
+                let video = Clip(assetID: source.id, timelineStart: Frames(start),
+                                 duration: Frames(60),
+                                 sourceStart: project.timeline.sourceTime(Frames(src)))
+                try project.insert(video, onTrack: v1)
+                if enabled {
+                    try project.setColorGrade(clipID: video.id,
+                                              ColorGrade(preset: .warmFilm, intensity: 1.0))
+                }
+                if source.hasAudio {
+                    let audio = Clip(assetID: source.id, timelineStart: Frames(start),
+                                     duration: Frames(60),
+                                     sourceStart: project.timeline.sourceTime(Frames(src)))
+                    try project.insert(audio, onTrack: a1)
+                }
+            }
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        timeline.project = project
+
+        if let host = await waitForPlayerWindow() {
+            host.window?.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        for _ in 0..<40 where builtTimeline == nil {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        guard let built = builtTimeline else { print("❌ kompozice nevznikla"); return }
+        print("videoComposition: \(built.videoComposition != nil ? "ANO" : "NE")")
+        let marker = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaGPUPlayback.marker")
+        try? "playing".write(to: marker, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: marker) }
+        controller.seek(to: .zero)
+        controller.play()
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline {
+            if controller.player.timeControlStatus == .paused {
+                controller.seek(to: .zero)
+                controller.play()
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        controller.pause()
+    }
+
     /// Bílý čtverec jako PNG — syntetická fotka pro `--photo-check`.
     private func writeWhiteSquarePNG(to url: URL, side: Int) -> Bool {
+        writeSquarePNG(to: url, side: side, color: CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+    }
+
+    /// Jednobarevný čtverec jako PNG — `--color-check` potřebuje sytou
+    /// barvu se ZNÁMOU saturací, aby šel efekt presetu měřit čísly.
+    private func writeSquarePNG(to url: URL, side: Int, color: CGColor) -> Bool {
         guard let context = CGContext(
             data: nil, width: side, height: side, bitsPerComponent: 8,
             bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
                 | CGBitmapInfo.byteOrder32Little.rawValue) else { return false }
-        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.setFillColor(color)
         context.fill(CGRect(x: 0, y: 0, width: side, height: side))
         guard let image = context.makeImage(),
               let destination = CGImageDestinationCreateWithURL(
@@ -1254,6 +1469,45 @@ final class AppModel: ObservableObject {
         let time = CMTime(seconds: seconds, preferredTimescale: SourceTime.projectTimescale)
         guard let image = try? await generator.image(at: time).image else { return nil }
         return Self.lumaGrid(image: image)
+    }
+
+    /// Mřížka SATURACE 8×8 (max−min složek RGB, 0–255) — měří efekt
+    /// barevných presetů (`--color-check`): ČB má saturaci ~0, poloviční
+    /// intenzita ~polovinu originálu. Jas by to neviděl.
+    private func chromaGrid(url: URL, seconds: Double) async -> [Double]? {
+        let asset = AVURLAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 192, height: 108)
+        let time = CMTime(seconds: seconds, preferredTimescale: SourceTime.projectTimescale)
+        guard let image = try? await generator.image(at: time).image,
+              let pixels = Self.pixelGrid(image: image) else { return nil }
+        var chromas: [Double] = []
+        chromas.reserveCapacity(64)
+        for i in stride(from: 0, to: pixels.count, by: 4) {
+            let r = Double(pixels[i]), g = Double(pixels[i + 1]), b = Double(pixels[i + 2])
+            chromas.append(max(r, g, b) - min(r, g, b))
+        }
+        return chromas
+    }
+
+    /// Surové RGBA pixely mřížky 8×8 — společný základ jasové i saturační
+    /// mřížky.
+    private static func pixelGrid(image: CGImage) -> [UInt8]? {
+        let side = 8
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        let ok = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress, width: side, height: side,
+                bitsPerComponent: 8, bytesPerRow: side * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+            return true
+        }
+        return ok ? pixels : nil
     }
 
     /// Táž mřížka z hotového obrázku — pro PNG z freeze framu.
@@ -1953,6 +2207,10 @@ struct ContentView: View {
                     await model.verifyPhotoExport()
                 } else if arguments.contains("--freeze-check") {
                     await model.verifyFreezeFrame()
+                } else if arguments.contains("--color-check") {
+                    await model.verifyColorExport()
+                } else if arguments.contains("--color-gpu") {
+                    await model.runColorGPUPlayback(enabled: !explicit.contains("off"))
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

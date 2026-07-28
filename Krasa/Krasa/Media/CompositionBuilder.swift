@@ -141,6 +141,11 @@ enum CompositionBuilder {
         var clipGeometry: [ClipID: (size: CGSize, transform: CGAffineTransform)] = [:]
         /// Ken Burns fotek (fáze 12, modul 3) — vynucuje video kompozici.
         var kenBurnsByClip: [ClipID: KenBurns] = [:]
+        /// Barevné presety (fáze 13) — vynucují video kompozici s VLASTNÍM
+        /// compositorem. Vadný nebo nulový preset se ignoruje (klip hraje
+        /// natvrdo, vadu hlásí `validate()` — vzorec vadné rampy) a cesta
+        /// zůstává levná.
+        var colorGradeByClip: [ClipID: ColorGrade] = [:]
 
         for track in timeline.tracks {
             guard !track.clips.isEmpty,
@@ -164,6 +169,11 @@ enum CompositionBuilder {
             for placement in plan.placements {
                 guard let clip = track.clip(id: placement.clipID),
                       let source = project.asset(clip.assetID) else { continue }
+
+                if track.kind == .video, let grade = clip.colorGrade,
+                   grade.isUsable, grade.intensity > 0 {
+                    colorGradeByClip[clip.id] = grade
+                }
 
                 // Fotka (fáze 12): nemá video stopu, vkládá se JEDEN snímek
                 // mezisouboru (`StillMovieStore` — plátno s vpáleným
@@ -266,16 +276,19 @@ enum CompositionBuilder {
             }
         }
 
-        // Video kompozice JEN když je na obrazu co skládat (přechod, nebo
-        // Ken Burns fotky) — jinak zůstává přímá cesta a GPU baseline
-        // z fáze 1. S Ken Burns je skok na skládání přes GPU stejná třída
-        // jako u přechodů (změřeno ve fázi 10: medián ~12 %).
+        // Video kompozice JEN když je na obrazu co skládat (přechod,
+        // Ken Burns fotky, nebo barevný preset) — jinak zůstává přímá cesta
+        // a GPU baseline z fáze 1. S Ken Burns je skok na skládání přes GPU
+        // stejná třída jako u přechodů (změřeno ve fázi 10: medián ~12 %);
+        // s presetem skládá VLASTNÍ compositor (fáze 13) — měří `--color-gpu`.
         let needsVideoComposition = videoGroups.contains { !$0.plan.overlays.isEmpty }
             || !kenBurnsByClip.isEmpty
+            || !colorGradeByClip.isEmpty
         let videoComposition: AVVideoComposition? = needsVideoComposition
             ? makeVideoComposition(groups: videoGroups,
                                    clipGeometry: clipGeometry,
                                    kenBurnsByClip: kenBurnsByClip,
+                                   colorGradeByClip: colorGradeByClip,
                                    canvas: CGSize(width: timeline.canvasSize.width,
                                                   height: timeline.canvasSize.height),
                                    frameRate: timeline.frameRate,
@@ -295,13 +308,40 @@ enum CompositionBuilder {
         let plan: TrackCompositionPlan
     }
 
-    /// Instrukce pokrývají celou délku beze spár: hranice jsou začátky
-    /// a konce oblastí přechodů (u zatmívačky i střih — mění se tam směr
-    /// rampy) a instrukce mezi nimi nesou jen aspect-fit transformace.
+    /// Jedna vrstva jednoho úseku: krajní hodnoty transformace a průhlednosti
+    /// (uvnitř úseku lineární interpolace — tak rampy interpoluje kompozice
+    /// sama) + případný barevný preset.
+    private struct SpanLayer {
+        let track: AVMutableCompositionTrack
+        let transformStart: CGAffineTransform
+        let transformEnd: CGAffineTransform
+        let opacityStart: Float
+        let opacityEnd: Float
+        let grade: ColorGrade?
+    }
+
+    /// Úsek instrukce: vrstvy odpředu dozadu, barva pozadí zatmívačky.
+    private struct Span {
+        let range: CMTimeRange
+        let background: CGColor?
+        let layers: [SpanLayer]
+    }
+
+    /// Instrukce pokrývají celou délku beze spár. Hranice jsou okraje VŠECH
+    /// obrazových vkladů a oblastí přechodů (u zatmívačky i střih — mění se
+    /// tam směr rampy): každý vklad pak úsek buď celý pokrývá, nebo se ho
+    /// netýká, a vrstva úseku má JEDNU dvojici krajních hodnot.
+    ///
+    /// ⚠️ Tohle je JEDINÝ zdroj sémantiky obrazové kompozice. Emise je dvojí
+    /// (fáze 13): bez presetů standardní instrukce (vestavěný kompozitor —
+    /// cesta ověřená ve fázích 10 a 12), s presety `ColorCompositionInstruction`
+    /// pro `ColorVideoCompositor`. Obě cesty čtou TATÁŽ data — geometrie se
+    /// jim nemůže rozjet.
     private static func makeVideoComposition(
         groups: [VideoLaneGroup],
         clipGeometry: [ClipID: (size: CGSize, transform: CGAffineTransform)],
         kenBurnsByClip: [ClipID: KenBurns],
+        colorGradeByClip: [ClipID: ColorGrade],
         canvas: CGSize,
         frameRate: Int,
         totalDuration: CMTime) -> AVVideoComposition? {
@@ -312,11 +352,38 @@ enum CompositionBuilder {
                                                method: .default).value
         guard durationTicks > 0 else { return nil }
 
+        let spans = computeSpans(groups: groups,
+                                 clipGeometry: clipGeometry,
+                                 kenBurnsByClip: kenBurnsByClip,
+                                 colorGradeByClip: colorGradeByClip,
+                                 canvas: canvas,
+                                 ticksPerFrame: ticksPerFrame,
+                                 durationTicks: durationTicks)
+
+        let videoComposition = AVMutableVideoComposition()
+        videoComposition.renderSize = canvas
+        videoComposition.frameDuration = CMTime(value: CMTimeValue(ticksPerFrame),
+                                                timescale: SourceTime.projectTimescale)
+        if colorGradeByClip.isEmpty {
+            videoComposition.instructions = emitStandardInstructions(spans: spans)
+        } else {
+            videoComposition.instructions = emitCustomInstructions(spans: spans)
+            videoComposition.customVideoCompositorClass = ColorVideoCompositor.self
+        }
+        return videoComposition
+    }
+
+    private static func computeSpans(
+        groups: [VideoLaneGroup],
+        clipGeometry: [ClipID: (size: CGSize, transform: CGAffineTransform)],
+        kenBurnsByClip: [ClipID: KenBurns],
+        colorGradeByClip: [ClipID: ColorGrade],
+        canvas: CGSize,
+        ticksPerFrame: Int64,
+        durationTicks: Int64) -> [Span] {
+
         func ticks(_ frame: Frames) -> Int64 { Int64(frame.count) * ticksPerFrame }
 
-        // Hranice instrukcí. Klipy s Ken Burns dostávají hranice na svých
-        // okrajích — jejich úseky pak leží buď celé uvnitř klipu, nebo celé
-        // mimo, a transform rampa se dá zadat po úsecích.
         var boundarySet: Set<Int64> = [0, durationTicks]
         for group in groups {
             for overlay in group.plan.overlays {
@@ -326,134 +393,175 @@ enum CompositionBuilder {
                     boundarySet.insert(ticks(overlay.cut))
                 }
             }
-            for placement in group.plan.placements
-            where kenBurnsByClip[placement.clipID] != nil {
+            for placement in group.plan.placements {
                 boundarySet.insert(ticks(placement.start))
-                boundarySet.insert(ticks(placement.start) + Int64(placement.duration.count) * ticksPerFrame)
+                boundarySet.insert(ticks(placement.start)
+                    + Int64(placement.duration.count) * ticksPerFrame)
             }
         }
         let boundaries = boundarySet.filter { $0 >= 0 && $0 <= durationTicks }.sorted()
 
-        var instructions: [AVMutableVideoCompositionInstruction] = []
+        let spanFraction = { (t: Int64, from: Int64, to: Int64) -> Float in
+            to > from ? Float(t - from) / Float(to - from) : 1
+        }
 
+        var spans: [Span] = []
         for (t0, t1) in zip(boundaries, boundaries.dropFirst()) {
-            let span = CMTimeRange(
-                start: CMTime(value: t0, timescale: SourceTime.projectTimescale),
-                end: CMTime(value: t1, timescale: SourceTime.projectTimescale))
-            let instruction = AVMutableVideoCompositionInstruction()
-            instruction.timeRange = span
+            var layers: [SpanLayer] = []
+            var background: CGColor?
 
-            var layers: [AVMutableVideoCompositionLayerInstruction] = []
-
-            // Pozdější stopa osy překrývá dřívější → do instrukcí jde
-            // POZDĚJŠÍ DŘÍV (pole vrstev je odpředu dozadu).
+            // Pozdější stopa osy překrývá dřívější → do vrstev jde
+            // POZDĚJŠÍ DŘÍV (pole je odpředu dozadu).
             for group in groups.reversed() {
                 let overlay = group.plan.overlays.first {
                     ticks($0.start) <= t0 && t1 <= ticks($0.end)
                 }
 
-                // Vrstva dráhy s transformacemi klipů, které do úseku zasahují.
-                func makeLayer(lane: Int) -> AVMutableVideoCompositionLayerInstruction {
-                    let layer = AVMutableVideoCompositionLayerInstruction(
-                        assetTrack: group.laneTracks[lane])
-                    for placement in group.plan.placements where placement.lane == lane {
-                        let pStart = ticks(placement.start)
-                        let pEnd = pStart + Int64(placement.duration.count) * ticksPerFrame
-                        guard pStart < t1, t0 < pEnd,
-                              let geometry = clipGeometry[placement.clipID] else { continue }
-
-                        // Ken Burns (fáze 12): lineární transform rampa mezi
-                        // výřezy. Krajní hodnoty úseku se interpolují PO
-                        // SLOŽKÁCH — přesně tak rampu interpoluje i sama
-                        // kompozice, takže úseky na sebe navazují beze švů.
-                        // <https://developer.apple.com/documentation/avfoundation/avmutablevideocompositionlayerinstruction/settransformramp(fromstart:toend:timerange:)>
-                        if let kenBurns = kenBurnsByClip[placement.clipID], pEnd > pStart {
-                            let from = cropTransform(kenBurns.start, canvas: canvas)
-                            let to = cropTransform(kenBurns.end, canvas: canvas)
-                            let f0 = Double(max(pStart, t0) - pStart) / Double(pEnd - pStart)
-                            let f1 = Double(min(pEnd, t1) - pStart) / Double(pEnd - pStart)
-                            layer.setTransformRamp(
-                                fromStart: lerp(from, to, f0),
-                                toEnd: lerp(from, to, f1),
-                                timeRange: CMTimeRange(
-                                    start: CMTime(value: max(pStart, t0),
-                                                  timescale: SourceTime.projectTimescale),
-                                    end: CMTime(value: min(pEnd, t1),
-                                                timescale: SourceTime.projectTimescale)))
-                            continue
-                        }
-
-                        layer.setTransform(
-                            aspectFit(size: geometry.size, preferred: geometry.transform,
-                                      into: canvas),
-                            at: CMTime(value: max(pStart, t0),
-                                       timescale: SourceTime.projectTimescale))
-                    }
-                    return layer
-                }
-
-                guard let overlay else {
-                    // Mimo přechody: všechny dráhy natvrdo — média se
-                    // nepřekrývají, pořadí drah je jedno.
-                    for lane in group.laneTracks.indices { layers.append(makeLayer(lane: lane)) }
-                    continue
-                }
-
-                let spanFraction = { (t: Int64, from: Int64, to: Int64) -> Float in
-                    to > from ? Float(t - from) / Float(to - from) : 1
-                }
-
-                if overlay.kind.needsSourceOverlap {
-                    // Prolínačka: odcházející NAVRCHU stmívá 1 → 0, nastupující
-                    // pod ním drží plnou — lineární směs přes celou oblast.
-                    let start = ticks(overlay.start), end = ticks(overlay.end)
-                    let outgoing = makeLayer(lane: overlay.outgoingLane)
-                    outgoing.setOpacityRamp(
-                        fromStartOpacity: 1 - spanFraction(t0, start, end),
-                        toEndOpacity: 1 - spanFraction(t1, start, end),
-                        timeRange: span)
-                    layers.append(outgoing)
-                    layers.append(makeLayer(lane: overlay.incomingLane))
-                } else {
-                    // Zatmívačka: před střihem klesá do barvy pozadí,
-                    // za střihem z ní nastupuje. Obě půlky na téže dráze —
-                    // před střihem tam leží odcházející klip, za ním nastupující.
-                    let cut = ticks(overlay.cut)
-                    let layer = makeLayer(lane: overlay.outgoingLane)
-                    if t1 <= cut {
-                        let start = ticks(overlay.start)
-                        layer.setOpacityRamp(
-                            fromStartOpacity: 1 - spanFraction(t0, start, cut),
-                            toEndOpacity: 1 - spanFraction(t1, start, cut),
-                            timeRange: span)
-                    } else {
-                        let end = ticks(overlay.end)
-                        layer.setOpacityRamp(
-                            fromStartOpacity: spanFraction(t0, cut, end),
-                            toEndOpacity: spanFraction(t1, cut, end),
-                            timeRange: span)
-                    }
-                    layers.append(layer)
-                    for lane in group.laneTracks.indices
-                    where lane != overlay.outgoingLane {
-                        layers.append(makeLayer(lane: lane))
-                    }
-                    instruction.backgroundColor = overlay.kind == .dipToWhite
+                // Zatmívačka barví pozadí celé oblasti — nezávisle na tom,
+                // které dráhy v úseku zrovna nesou média.
+                if let overlay, !overlay.kind.needsSourceOverlap {
+                    background = overlay.kind == .dipToWhite
                         ? CGColor(red: 1, green: 1, blue: 1, alpha: 1)
                         : CGColor(red: 0, green: 0, blue: 0, alpha: 1)
                 }
+
+                // Pořadí drah: u prolínačky musí být odcházející NAVRCHU
+                // (stmívá 1 → 0 nad nastupujícím — lineární směs); jinak se
+                // média nepřekrývají a pořadí je jedno.
+                let laneOrder: [Int]
+                if let overlay, overlay.kind.needsSourceOverlap {
+                    laneOrder = [overlay.outgoingLane, overlay.incomingLane]
+                        + group.laneTracks.indices.filter {
+                            $0 != overlay.outgoingLane && $0 != overlay.incomingLane
+                        }
+                } else {
+                    laneOrder = Array(group.laneTracks.indices)
+                }
+
+                for lane in laneOrder {
+                    // Hranice zahrnují okraje všech vkladů, takže vklad úsek
+                    // buď celý pokrývá, nebo v něm neleží.
+                    guard let placement = group.plan.placements.first(where: { p in
+                        p.lane == lane && ticks(p.start) <= t0
+                            && t1 <= ticks(p.start) + Int64(p.duration.count) * ticksPerFrame
+                    }), let geometry = clipGeometry[placement.clipID] else { continue }
+
+                    let pStart = ticks(placement.start)
+                    let pEnd = pStart + Int64(placement.duration.count) * ticksPerFrame
+
+                    // Ken Burns (fáze 12): lineární transform rampa mezi
+                    // výřezy, krájená na úseky PO SLOŽKÁCH (`lerp`) — úseky
+                    // na sebe navazují beze švů.
+                    let transformStart: CGAffineTransform
+                    let transformEnd: CGAffineTransform
+                    if let kenBurns = kenBurnsByClip[placement.clipID], pEnd > pStart {
+                        let from = cropTransform(kenBurns.start, canvas: canvas)
+                        let to = cropTransform(kenBurns.end, canvas: canvas)
+                        let f0 = Double(t0 - pStart) / Double(pEnd - pStart)
+                        let f1 = Double(t1 - pStart) / Double(pEnd - pStart)
+                        transformStart = lerp(from, to, f0)
+                        transformEnd = lerp(from, to, f1)
+                    } else {
+                        let fit = aspectFit(size: geometry.size,
+                                            preferred: geometry.transform, into: canvas)
+                        transformStart = fit
+                        transformEnd = fit
+                    }
+
+                    var opacityStart: Float = 1
+                    var opacityEnd: Float = 1
+                    if let overlay {
+                        if overlay.kind.needsSourceOverlap {
+                            // Prolínačka: odcházející stmívá přes celou oblast.
+                            if lane == overlay.outgoingLane {
+                                let start = ticks(overlay.start), end = ticks(overlay.end)
+                                opacityStart = 1 - spanFraction(t0, start, end)
+                                opacityEnd = 1 - spanFraction(t1, start, end)
+                            }
+                        } else if lane == overlay.outgoingLane {
+                            // Zatmívačka: před střihem klesá do barvy pozadí,
+                            // za střihem z ní nastupuje — obě půlky na téže
+                            // dráze (před střihem tam leží odcházející klip,
+                            // za ním nastupující).
+                            let cut = ticks(overlay.cut)
+                            if t1 <= cut {
+                                let start = ticks(overlay.start)
+                                opacityStart = 1 - spanFraction(t0, start, cut)
+                                opacityEnd = 1 - spanFraction(t1, start, cut)
+                            } else {
+                                let end = ticks(overlay.end)
+                                opacityStart = spanFraction(t0, cut, end)
+                                opacityEnd = spanFraction(t1, cut, end)
+                            }
+                        }
+                    }
+
+                    layers.append(SpanLayer(track: group.laneTracks[lane],
+                                            transformStart: transformStart,
+                                            transformEnd: transformEnd,
+                                            opacityStart: opacityStart,
+                                            opacityEnd: opacityEnd,
+                                            grade: colorGradeByClip[placement.clipID]))
+                }
             }
 
-            instruction.layerInstructions = layers
-            instructions.append(instruction)
+            spans.append(Span(
+                range: CMTimeRange(
+                    start: CMTime(value: t0, timescale: SourceTime.projectTimescale),
+                    end: CMTime(value: t1, timescale: SourceTime.projectTimescale)),
+                background: background,
+                layers: layers))
         }
+        return spans
+    }
 
-        let videoComposition = AVMutableVideoComposition()
-        videoComposition.renderSize = canvas
-        videoComposition.frameDuration = CMTime(value: CMTimeValue(ticksPerFrame),
-                                                timescale: SourceTime.projectTimescale)
-        videoComposition.instructions = instructions
-        return videoComposition
+    /// Bez presetů: standardní instrukce, vykresluje vestavěný kompozitor.
+    /// Konstantní transformace jde jako rampa se shodnými krajními hodnotami
+    /// — kompozice ji drží konstantní, výsledek je týž jako `setTransform`.
+    /// <https://developer.apple.com/documentation/avfoundation/avmutablevideocompositionlayerinstruction/settransformramp(fromstart:toend:timerange:)>
+    /// <https://developer.apple.com/documentation/avfoundation/avmutablevideocompositionlayerinstruction/setopacityramp(fromstartopacity:toendopacity:timerange:)>
+    private static func emitStandardInstructions(
+        spans: [Span]) -> [AVMutableVideoCompositionInstruction] {
+        spans.map { span in
+            let instruction = AVMutableVideoCompositionInstruction()
+            instruction.timeRange = span.range
+            if let background = span.background {
+                instruction.backgroundColor = background
+            }
+            instruction.layerInstructions = span.layers.map { layer in
+                let layerInstruction = AVMutableVideoCompositionLayerInstruction(
+                    assetTrack: layer.track)
+                layerInstruction.setTransformRamp(fromStart: layer.transformStart,
+                                                  toEnd: layer.transformEnd,
+                                                  timeRange: span.range)
+                if layer.opacityStart != 1 || layer.opacityEnd != 1 {
+                    layerInstruction.setOpacityRamp(fromStartOpacity: layer.opacityStart,
+                                                    toEndOpacity: layer.opacityEnd,
+                                                    timeRange: span.range)
+                }
+                return layerInstruction
+            }
+            return instruction
+        }
+    }
+
+    /// S presety: vlastní instrukce pro `ColorVideoCompositor` (fáze 13) —
+    /// tatáž data, vykreslení přebírá CoreImage.
+    private static func emitCustomInstructions(
+        spans: [Span]) -> [ColorCompositionInstruction] {
+        spans.map { span in
+            ColorCompositionInstruction(
+                timeRange: span.range,
+                layers: span.layers.map {
+                    ColorCompositionInstruction.Layer(trackID: $0.track.trackID,
+                                                      transformStart: $0.transformStart,
+                                                      transformEnd: $0.transformEnd,
+                                                      opacityStart: $0.opacityStart,
+                                                      opacityEnd: $0.opacityEnd,
+                                                      grade: $0.grade)
+                },
+                background: span.background)
+        }
     }
 
     /// Transformace Ken Burns: výřez plátna (normalizovaný, počátek vlevo

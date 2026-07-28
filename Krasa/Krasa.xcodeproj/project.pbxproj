@@ -14,6 +14,7 @@
 		2F6B8D4A9C1E30517F8A2D6C /* ProxyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D8F2B6C1A9E50713D5C8F2A /* ProxyStore.swift */; };
 		A1B2C3D4E5F6071829304A5B /* TitleExportRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718293A4B5C6D /* TitleExportRenderer.swift */; };
 		C3D4E5F60718293A4B5C6D7E /* StillMovieStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F60718293A4B5C6D7E8F /* StillMovieStore.swift */; };
+		E5F60718293A4B5C6D7E8F90 /* ColorCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60718293A4B5C6D7E8F9012 /* ColorCompositor.swift */; };
 		4B5D8B6164C2AA68F3B7B073 /* MediaImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAEE8DA94BE24BFA4C09F61 /* MediaImporter.swift */; };
 		10018FACF7C253DE3EA2AF0F /* VFRDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F5DB175B37741ADE928956 /* VFRDetector.swift */; };
 		B83C201C79F8240BBCBB539B /* PlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87BEF812E75F65304C3D45FF /* PlaybackController.swift */; };
@@ -47,6 +48,7 @@
 		4D8F2B6C1A9E50713D5C8F2A /* ProxyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxyStore.swift; sourceTree = "<group>"; };
 		B2C3D4E5F60718293A4B5C6D /* TitleExportRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleExportRenderer.swift; sourceTree = "<group>"; };
 		D4E5F60718293A4B5C6D7E8F /* StillMovieStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillMovieStore.swift; sourceTree = "<group>"; };
+		F60718293A4B5C6D7E8F9012 /* ColorCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorCompositor.swift; sourceTree = "<group>"; };
 		DEAEE8DA94BE24BFA4C09F61 /* MediaImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaImporter.swift; sourceTree = "<group>"; };
 		60F5DB175B37741ADE928956 /* VFRDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VFRDetector.swift; sourceTree = "<group>"; };
 		87BEF812E75F65304C3D45FF /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
@@ -126,6 +128,7 @@
 				AE10D10E501AE24B7C3F0905 /* LoudnessScanner.swift */,
 				B2C3D4E5F60718293A4B5C6D /* TitleExportRenderer.swift */,
 				D4E5F60718293A4B5C6D7E8F /* StillMovieStore.swift */,
+				F60718293A4B5C6D7E8F9012 /* ColorCompositor.swift */,
 				AE10D10E501AE24B7C3F0907 /* MonoAudioReader.swift */,
 				AE10D10E501AE24B7C3F0909 /* TranscriptionService.swift */,
 				99311C7072B0DEAD06939D03 /* PlayerView.swift */,
@@ -244,6 +247,7 @@
 				2F6B8D4A9C1E30517F8A2D6C /* ProxyStore.swift in Sources */,
 				A1B2C3D4E5F6071829304A5B /* TitleExportRenderer.swift in Sources */,
 				C3D4E5F60718293A4B5C6D7E /* StillMovieStore.swift in Sources */,
+				E5F60718293A4B5C6D7E8F90 /* ColorCompositor.swift in Sources */,
 				4B5D8B6164C2AA68F3B7B073 /* MediaImporter.swift in Sources */,
 				10018FACF7C253DE3EA2AF0F /* VFRDetector.swift in Sources */,
 				B83C201C79F8240BBCBB539B /* PlaybackController.swift in Sources */,

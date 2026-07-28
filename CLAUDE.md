@@ -176,7 +176,15 @@ souseda by byl překryv, tedy chyba, a to šedesátkrát za sekundu. `beginInter
 Testy pustíš přes `cd TimelineModel && swift test`. Návrh a zdůvodnění v `FAZE_2_TIMELINE.md`.
 
 ### `AudioEngine/`
-Měření hlasitosti podle ITU-R BS.1770-4 (na něm stojí EBU R128). Čistý Swift, žádné závislosti. **20 testů; nezávisle ověřeno proti `pyloudnorm` — shoda < 0,05 LU** (tolerance EBU je ±0,5 LU).
+Měření hlasitosti podle ITU-R BS.1770-4 (na něm stojí EBU R128) a cross-korelační synchronizace nahrávek. Čistý Swift, žádné závislosti (vlastní FFT — Accelerate by zabil přeložitelnost na Linuxu). **32 testů; hlasitost nezávisle ověřena proti `pyloudnorm` — shoda < 0,05 LU** (tolerance EBU je ±0,5 LU); sync na reálném zvuku najde posun s chybou < 0,1 ms i při SNR −3 dB.
+
+```swift
+// sync klopáku: kam na osu reference patří začátek kandidáta
+let match = WaveformSync.offset(reference: cameraAudio, candidate: lavAudio,
+                                sampleRate: 48_000)
+// match.offsetSeconds (kladné = rekordér spuštěn později), match.confidence
+// (0–1; < 0,2 = nesouvisející nahrávky — NIKDY nepoložit mlčky)
+```
 
 ```swift
 var meter = LoudnessMeter(sampleRate: 48_000, channelCount: 2)

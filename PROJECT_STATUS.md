@@ -97,6 +97,17 @@ Rozvrh fáze: **1)** `LoudnessMeter` (hotový, níže), **2)** per-track hlasito
     - profil Vysílání −23 (`--broadcast`): gain +5,9 dB POD stropem → **výstup −23,11 LUFS, cíl dosažen**, špička −1,03 dBFS pod stropem.
   - *Koukanec rukou zatím neproběhl (odloženo autorem): volba profilu u exportu, hláška o hlasitosti po exportu.*
 
+✅ **Modul 4 — cross-korelační synchronizace, výpočetní jádro (28. 07. 2026).** `WaveformSync` v balíčku `AudioEngine` (čistý Swift, spec 7.2). **+12 testů, celkem 32 v balíčku.**
+
+  - **Dvoustupňově:** hrubě na RMS obálkách (200 binů/s — robustní vůči rozdílným mikrofonům a gainu, hodinová nahrávka je pak pár set tisíc binů), jemně přímou korelací syrových vzorků v okolí hrubého odhadu (±1 bin, výřez ze středu překryvu) — výsledek na vzorky, hluboko pod snímek obrazu.
+  - **Vlastní FFT (radix-2)** — žádný Accelerate, balíček zůstává přeložitelný na Linuxu. Ukotveno dvojím nezávislým výpočtem: FFT proti naivnímu DFT (1e-9) a FFT korelace proti přímému součtu přes všechny posuny.
+  - **Míra jistoty (normalizovaná korelace obálek):** nesouvisející nahrávky < 0,2, souvisící > 0,6 i při silném šumu — pojistka proti tichému položení cizího zvuku na špatné místo, test to vymáhá. Samé ticho a příliš krátké vstupy vrací `nil`.
+  - **Sémantika posunu = pozice začátku kandidáta na ose reference** (kladná: rekordér spuštěn později; záporná: dřív a přečnívá) — oba směry drží testy s konstruovanými posuny mimo mřížku obálky.
+  - ⚠️ Testovací signály musí mít amplitudovou STRUKTURU (bursty) — čistý bílý šum má plochou obálku a obálková korelace na něm nemá co chytit. Řeč i hudba strukturu mají, je to vlastnost metody, ne vada.
+  - **Ověřeno na reálném zvuku:** z testovacího klipu (44,9 s, rány sekerou) vyrobený „klopák" — posun 5,4321 s, gain 0,3×, přidaný šum HLASITĚJŠÍ než signál (SNR ≈ −3 dB). Sync našel **5,4321 s přesně** (chyba < 0,1 ms), jistota 0,86, výpočet 0,17 s.
+
+  **Zbývá z fáze 7 — modul 5: sync v UI.** Import zvukového souboru (WAV z rekordéru — `MediaImporter` zatím bere jen videa), akce „synchronizovat s klipem", položení na A2 podle nalezeného posunu, a chování při nízké jistotě (nabídnout, ne mlčky položit). Případné převzorkování na společnou frekvenci je věc volajícího — `WaveformSync` ho záměrně nedělá.
+
 ## 🔄 FÁZE 5 — projekt a export (rozjetá 28. 07. 2026)
 
 ✅ **Modul 1 — projektový soubor `.projektkrasa`: uložit, otevřít, obnovit po startu.**
@@ -292,7 +303,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - 🚧 **KILL-GATE 1:** sestříhat touhle appkou celou reálnou svatbu
 
 ### Cesta k v1.0 (+~3 měsíce)
-- **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — 🔄 **moduly 1–3 hotové 28. 07. 2026: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm), per-track hlasitost/mute (ověřeno `--mix-check`) a LUFS normalizace exportu se stropem špiček (ověřeno `--normalize-check`: cíl −23 dosažen na 0,11 LU, strop poctivě hlášen); zbývá cross-korelační sync klopáku**
+- **F7** Audio engine, 32-bit float, LUFS *(3 týdny)* — 🔄 **moduly 1–4 hotové 28. 07. 2026: `LoudnessMeter` (BS.1770-4, ověřeno proti pyloudnorm), per-track hlasitost/mute (`--mix-check`), LUFS normalizace exportu se stropem špiček (`--normalize-check`) a jádro cross-korelačního syncu (na reálném zvuku posun nalezen s chybou < 0,1 ms); zbývá modul 5 — sync v UI (import WAV, položení na A2)**
 - **F8** Titulky přes WhisperKit *(2 týdny)*
 - **F9** Distribuce, notarizace, Sparkle, licence *(3 týdny)* — **+ migrace na `AVVideoComposition.Configuration`** jako druhá větev pod `if #available(macOS 26.0, *)`. Ne dřív.
 - 🚧 **KILL-GATE 2:** prodat deseti lidem, kteří tě neznají

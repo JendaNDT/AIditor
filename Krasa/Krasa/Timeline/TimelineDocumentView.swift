@@ -93,6 +93,19 @@ enum TimelinePalette {
     /// Jméno klipu.
     static let clipText = adaptive("clipText", dark: 0.94, light: 0.10)
 
+    /// Výplň lichoběžníku přechodu. Fialová — jediná na ose, nesmí se plést
+    /// s modrým obrazem, zeleným zvukem ani žlutým výběrem. Poloprůhledná,
+    /// aby pod ní zůstaly čitelné okraje klipů, přes které se prolíná.
+    static let transitionFill = adaptive(
+        "transitionFill",
+        dark: NSColor(calibratedRed: 0.58, green: 0.44, blue: 0.86, alpha: 0.60),
+        light: NSColor(calibratedRed: 0.52, green: 0.36, blue: 0.80, alpha: 0.45))
+    /// Obrys lichoběžníku přechodu.
+    static let transitionStroke = adaptive(
+        "transitionStroke",
+        dark: NSColor(calibratedRed: 0.78, green: 0.66, blue: 1.00, alpha: 1),
+        light: NSColor(calibratedRed: 0.36, green: 0.20, blue: 0.62, alpha: 1))
+
     /// Přehrávací hlava. Červená je konvence — jediná svislá červená čára
     /// v celém okně, nesmí se s ničím plést.
     static let playhead = adaptive(
@@ -145,6 +158,40 @@ final class ClipLayer: CALayer {
     required init?(coder: NSCoder) { fatalError("nepoužívá se") }
 }
 
+/// Lichoběžník přechodu přes hranu střihu (fáze 10, modul 3). Horní hrana
+/// pokrývá celou oblast, spodní se sbíhá ke střihu — tvar říká „tady se
+/// dva klipy prolínají do jednoho bodu". `CAShapeLayer`, žádné `draw`
+/// (past s celookenní `ContentLayer`, viz `TimelinePane`).
+final class TransitionLayer: CAShapeLayer {
+
+    override init() {
+        super.init()
+        lineWidth = 1
+    }
+
+    override init(layer: Any) {
+        super.init(layer: layer)
+    }
+
+    /// Rámec = obdélník oblasti; cesta se počítá v souřadnicích vrstvy.
+    /// `cutX` je v souřadnicích DOKUMENTU, tady se převádí na lokální.
+    func apply(frame rect: CGRect, cutX: Double) {
+        frame = rect
+        let localCut = cutX - rect.origin.x
+        let foot = min(4.0, rect.width / 2)
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: 0, y: 0))
+        path.addLine(to: CGPoint(x: rect.width, y: 0))
+        path.addLine(to: CGPoint(x: min(localCut + foot, rect.width), y: rect.height))
+        path.addLine(to: CGPoint(x: max(localCut - foot, 0), y: rect.height))
+        path.closeSubpath()
+        self.path = path
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("nepoužívá se") }
+}
+
 final class TimelineDocumentView: NSView {
 
     /// Vlastník stavu. Silná reference je v pořádku, protože controller
@@ -164,6 +211,13 @@ final class TimelineDocumentView: NSView {
     /// zakládání vrstev při každém scrollnutí je přesně to, čemu se recyklací
     /// předchází.
     private var clipLayerPool: [ClipLayer] = []
+
+    /// Lichoběžníky přechodů — NAD klipy (kreslí se přes jejich okraje),
+    /// pod overlayem tažení. Stejná recyklace jako u klipů, jen ručně:
+    /// přechodů jsou jednotky, diff aparát by tu byl kanón na vrabce.
+    private let transitionsContainer = CALayer()
+    private var mountedTransitionLayers: [TransitionID: TransitionLayer] = [:]
+    private var transitionLayerPool: [TransitionLayer] = []
 
     /// Přehrávací hlava — svislá čára přes celou výšku dokumentu, nad klipy.
     private let playheadLayer = CALayer()
@@ -191,6 +245,7 @@ final class TimelineDocumentView: NSView {
         wantsLayer = true
         layer?.addSublayer(backgroundLayer)
         layer?.addSublayer(clipsContainer)
+        layer?.addSublayer(transitionsContainer)
         layer?.addSublayer(dragOverlay)
         layer?.addSublayer(playheadLayer)
 
@@ -308,6 +363,7 @@ final class TimelineDocumentView: NSView {
         }
 
         clipsContainer.frame = bounds
+        transitionsContainer.frame = bounds
         dragOverlay.frame = bounds
         refreshClips()
         updatePlayhead()
@@ -377,6 +433,46 @@ final class TimelineDocumentView: NSView {
             for placement in placements {
                 guard let layer = mountedClipLayers[placement.clipID] else { continue }
                 apply(placement, to: layer, visible: visible)
+            }
+        }
+
+        refreshTransitions(visible: visible)
+    }
+
+    // MARK: - Lichoběžníky přechodů (fáze 10, modul 3)
+
+    /// Táž smyčka jako u klipů, jen bez diff aparátu — KDE lichoběžníky
+    /// leží počítá otestovaný `TimelineLayout.transitionPlacements`.
+    private func refreshTransitions(visible: NSRect) {
+        let placements = TimelineLayout.transitionPlacements(
+            project: controller.project,
+            geometry: controller.geometry,
+            scrollX: visible.origin.x,
+            width: visible.width)
+
+        let visibleIDs = Set(placements.map(\.transitionID))
+        for (id, layer) in mountedTransitionLayers where !visibleIDs.contains(id) {
+            mountedTransitionLayers.removeValue(forKey: id)
+            layer.removeFromSuperlayer()
+            transitionLayerPool.append(layer)
+        }
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            for placement in placements {
+                let layer: TransitionLayer
+                if let mounted = mountedTransitionLayers[placement.transitionID] {
+                    layer = mounted
+                } else {
+                    layer = transitionLayerPool.popLast() ?? TransitionLayer()
+                    layer.contentsScale = window?.backingScaleFactor ?? 2
+                    transitionsContainer.addSublayer(layer)
+                    mountedTransitionLayers[placement.transitionID] = layer
+                }
+                layer.fillColor = TimelinePalette.transitionFill.cgColor
+                layer.strokeColor = TimelinePalette.transitionStroke.cgColor
+                layer.apply(frame: CGRect(x: placement.x, y: placement.y,
+                                          width: placement.width, height: placement.height),
+                            cutX: placement.cutX)
             }
         }
     }
@@ -546,6 +642,9 @@ final class TimelineDocumentView: NSView {
             layer.contentsScale = scale
             layer.title.contentsScale = scale
         }
+        for layer in mountedTransitionLayers.values + transitionLayerPool {
+            layer.contentsScale = scale
+        }
     }
 
     /// Volá se i při přesunu okna na displej s jiným rozlišením, ne jen na začátku.
@@ -569,9 +668,34 @@ final class TimelineDocumentView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
 
+    /// Rozjeté tažení okraje přechodu (fáze 10, modul 3). Mezistavy se do
+    /// modelu NEZAPISUJÍ — duch ukazuje budoucí oblast a zapisuje se jednou
+    /// při puštění, stejný vzorec jako `move`.
+    private struct TransitionDragState {
+        let transitionID: TransitionID
+        let trackID: TrackID
+        var duration: Frames? = nil
+    }
+    private var transitionDrag: TransitionDragState?
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
+
+        // Lichoběžník leží NAD klipy, proto má i v událostech přednost —
+        // jinak by se pod ním naslepo trimovalo něco, co uživatel nevidí.
+        if let transitionHit = controller.geometry.transitionHitTest(
+            x: point.x, y: point.y, in: controller.project) {
+            switch transitionHit.zone {
+            case .leadingEdge, .trailingEdge:
+                transitionDrag = TransitionDragState(
+                    transitionID: transitionHit.transitionID,
+                    trackID: transitionHit.trackID)
+            case .body:
+                break   // tělo zatím nic nedělá; akce jsou v kontextovém menu
+            }
+            return
+        }
 
         guard let hit = controller.geometry.hitTest(x: point.x, y: point.y,
                                                     in: controller.project.timeline) else {
@@ -603,6 +727,11 @@ final class TimelineDocumentView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if transitionDrag != nil {
+            let point = convert(event.locationInWindow, from: nil)
+            updateTransitionDrag(atX: point.x)
+            return
+        }
         guard controller.interaction.isDragging else { return }
         let point = convert(event.locationInWindow, from: nil)
         let preview = controller.interaction.preview(
@@ -612,7 +741,45 @@ final class TimelineDocumentView: NSView {
         updateDragOverlay(preview)
     }
 
+    /// Náhled tažení okraje přechodu: model přeloží pozici kurzoru na
+    /// zaraženou délku (`transitionDraggedDuration` — symetrie, meze,
+    /// podlaha), duch ukáže budoucí oblast. Model se nesahá.
+    private func updateTransitionDrag(atX x: Double) {
+        guard var drag = transitionDrag,
+              let transition = controller.project.transition(id: drag.transitionID),
+              let region = controller.project.transitionRegion(of: drag.transitionID),
+              let duration = controller.project.transitionDraggedDuration(
+                  id: drag.transitionID,
+                  edgeFrame: controller.geometry.frame(atX: x)) else { return }
+        drag.duration = duration
+        transitionDrag = drag
+
+        let cut = region.start + transition.framesBeforeCut
+        let start = cut - Frames(duration.count / 2)
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            ghostLayer.borderColor = TimelinePalette.transitionStroke.cgColor
+            ghostLayer.backgroundColor = TimelinePalette.transitionFill.cgColor
+        }
+        ghostLayer.isHidden = false
+        ghostLayer.frame = ghostFrame(trackID: drag.trackID, start: start,
+                                      duration: duration,
+                                      timeline: controller.project.timeline,
+                                      geometry: controller.geometry)
+    }
+
     override func mouseUp(with event: NSEvent) {
+        if let drag = transitionDrag {
+            transitionDrag = nil
+            ghostLayer.isHidden = true
+            if let duration = drag.duration {
+                controller.resizeTransition(drag.transitionID, to: duration)
+            }
+            return
+        }
         guard controller.interaction.isDragging else { return }
         let point = convert(event.locationInWindow, from: nil)
         let kind = controller.interaction.drag?.kind
@@ -644,6 +811,11 @@ final class TimelineDocumentView: NSView {
     override func keyDown(with event: NSEvent) {
         // Escape ruší rozjeté tažení. Model se během tažení nesahal, takže
         // stačí zapomenout stav interakce a základnu undo.
+        if event.keyCode == 53, transitionDrag != nil {
+            transitionDrag = nil
+            ghostLayer.isHidden = true
+            return
+        }
         if event.keyCode == 53, controller.interaction.isDragging {
             controller.interaction.cancel()
             _ = controller.undo.cancelInteraction()
@@ -712,7 +884,16 @@ final class TimelineDocumentView: NSView {
     }
 
     private func updateCursor(at point: NSPoint) {
-        guard !controller.interaction.isDragging else { return }
+        guard !controller.interaction.isDragging, transitionDrag == nil else { return }
+        // Přechod má přednost i u kurzoru — jeho okraje leží NAD klipy.
+        if let transitionHit = controller.geometry.transitionHitTest(
+            x: point.x, y: point.y, in: controller.project) {
+            switch transitionHit.zone {
+            case .leadingEdge, .trailingEdge: Self.edgeCursor.set()
+            case .body: NSCursor.arrow.set()
+            }
+            return
+        }
         switch controller.geometry.hitTest(x: point.x, y: point.y,
                                            in: controller.project.timeline)?.zone {
         case .leadingEdge, .trailingEdge:
@@ -726,9 +907,28 @@ final class TimelineDocumentView: NSView {
 
     /// Klip, na který se ukázalo pravým tlačítkem — cíl akcí menu.
     private var menuClipID: ClipID?
+    /// Střih, ke kterému míří položky přechodů — cíl `menuAddTransition`.
+    private var menuCut: CutHit?
+    /// Přechod pod pravým tlačítkem — cíl `menuRemoveTransition`.
+    private var menuTransitionID: TransitionID?
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let point = convert(event.locationInWindow, from: nil)
+
+        // Pravý klik na lichoběžník: menu přechodu, ne klipu pod ním.
+        if let transitionHit = controller.geometry.transitionHitTest(
+            x: point.x, y: point.y, in: controller.project) {
+            menuTransitionID = transitionHit.transitionID
+            let menu = NSMenu()
+            menu.autoenablesItems = false
+            let remove = NSMenuItem(title: "Odebrat přechod",
+                                    action: #selector(menuRemoveTransition(_:)),
+                                    keyEquivalent: "")
+            remove.target = self
+            menu.addItem(remove)
+            return menu
+        }
+
         guard let hit = controller.geometry.hitTest(x: point.x, y: point.y,
                                                     in: controller.project.timeline) else {
             return nil
@@ -738,6 +938,46 @@ final class TimelineDocumentView: NSView {
 
         let menu = NSMenu()
         menu.autoenablesItems = false
+
+        // Přechody (fáze 10): jen když se kliklo POBLÍŽ střihu se sousedem.
+        // Nedosažitelný druh (chybí zdrojové přesahy, rampa) zůstává v menu
+        // vypnutý s vysvětlením — přiznané meze, ne zmizelá položka.
+        menuCut = controller.geometry.cutHit(x: point.x, y: point.y,
+                                             in: controller.project)
+        if let cut = menuCut,
+           let track = controller.project.timeline.track(id: cut.trackID) {
+            let kinds: [(TransitionKind, String)] = track.kind == .video
+                ? [(.crossDissolve, "Prolínačka"),
+                   (.dipToBlack, "Zatmívačka do černé"),
+                   (.dipToWhite, "Zatmívačka do bílé")]
+                : [(.audioCrossfade, "Prolnutí zvuku")]
+            for (kind, name) in kinds {
+                let maxD = controller.project.maxTransitionDuration(
+                    kind: kind, betweenLeft: cut.leftClipID, andRight: cut.rightClipID)
+                let item = NSMenuItem(title: "\(name) na střihu",
+                                      action: #selector(menuAddTransition(_:)),
+                                      keyEquivalent: "")
+                item.target = self
+                item.representedObject = kind.rawValue
+                item.isEnabled = maxD.count >= 1
+                if maxD.count < 1 {
+                    item.toolTip = kind.needsSourceOverlap
+                        ? "Klipy nemají za hranou střihu dost zdrojového materiálu."
+                        : "Na střihu není pro přechod místo."
+                }
+                menu.addItem(item)
+            }
+            if let existing = controller.project.transition(
+                betweenLeft: cut.leftClipID, andRight: cut.rightClipID) {
+                menuTransitionID = existing.id
+                let remove = NSMenuItem(title: "Odebrat přechod",
+                                        action: #selector(menuRemoveTransition(_:)),
+                                        keyEquivalent: "")
+                remove.target = self
+                menu.addItem(remove)
+            }
+            menu.addItem(.separator())
+        }
 
         let split = NSMenuItem(title: "Rozdělit v hlavě",
                                action: #selector(menuSplit(_:)), keyEquivalent: "")
@@ -788,6 +1028,19 @@ final class TimelineDocumentView: NSView {
         menu.addItem(transcribe)
 
         return menu
+    }
+
+    @objc private func menuAddTransition(_ sender: NSMenuItem) {
+        guard let cut = menuCut,
+              let raw = sender.representedObject as? String,
+              let kind = TransitionKind(rawValue: raw) else { return }
+        controller.addTransition(kind, betweenLeft: cut.leftClipID,
+                                 andRight: cut.rightClipID)
+    }
+
+    @objc private func menuRemoveTransition(_ sender: Any?) {
+        guard let id = menuTransitionID else { return }
+        controller.removeTransition(id)
     }
 
     @objc private func menuTranscribe(_ sender: Any?) {

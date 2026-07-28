@@ -184,6 +184,42 @@ final class TimelineController: ObservableObject {
         project = updated
     }
 
+    // MARK: - Přechody (fáze 10, modul 3)
+
+    /// Výchozí délka nového přechodu: 1 sekunda základny, zaražená o to,
+    /// co střih unese. Jemné doladění je na tažení okraje lichoběžníku.
+    func addTransition(_ kind: TransitionKind,
+                       betweenLeft leftID: ClipID, andRight rightID: ClipID) {
+        let maxD = project.maxTransitionDuration(kind: kind,
+                                                 betweenLeft: leftID, andRight: rightID)
+        guard maxD.count >= 1 else { return }
+        let duration = Frames(min(project.timeline.frameRate, maxD.count))
+        var updated = project
+        guard (try? updated.setTransition(kind, duration: duration,
+                                          betweenLeft: leftID, andRight: rightID)) != nil
+        else { return }
+        undo.record(project)
+        project = updated
+    }
+
+    func removeTransition(_ id: TransitionID) {
+        var updated = project
+        guard (try? updated.removeTransition(id: id)) != nil else { return }
+        undo.record(project)
+        project = updated
+    }
+
+    /// Puštění tažení okraje: mezistavy se během tažení do modelu nepsaly
+    /// (duch), takže jeden `record()` před zápisem — vzorec `move`.
+    func resizeTransition(_ id: TransitionID, to duration: Frames) {
+        guard let current = project.transition(id: id),
+              current.duration != duration else { return }
+        var updated = project
+        guard (try? updated.setTransitionDuration(id: id, to: duration)) != nil else { return }
+        undo.record(project)
+        project = updated
+    }
+
     // MARK: - Synchronizace externího zvuku (fáze 7, modul 5)
 
     /// Kontextové menu klipu žádá synchronizaci — obslouží `AppModel`

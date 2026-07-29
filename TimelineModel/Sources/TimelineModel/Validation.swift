@@ -2,7 +2,7 @@
 //  Validation.swift
 //  TimelineModel — Projekt Krása
 //
-//  Invarianty (28), které musí platit po KAŽDÉ operaci. Testy je kontrolují
+//  Invarianty (29), které musí platit po KAŽDÉ operaci. Testy je kontrolují
 //  po každém volání, takže chytí i chyby, na které test přímo necílil.
 //
 
@@ -69,6 +69,10 @@ public enum Violation: Hashable, Sendable {
     case colorGradeOnWrongTrack(ClipID)
     /// 28. Intenzita barevného presetu mimo 0–1.
     case invalidColorGrade(ClipID)
+    /// 29. Zvukové fade na klipu mimo zvukovou stopu, nebo záporné
+    /// (fáze 16). Součet přes délku klipu invariant NENÍ — trim smí
+    /// klip zkrátit a kompozice délky zařeže (`effectiveAudioFades`).
+    case invalidAudioFades(ClipID)
 }
 
 extension Project {
@@ -127,6 +131,11 @@ extension Project {
                     } else if !grade.isUsable {
                         out.append(.invalidColorGrade(clip.id))
                     }
+                }
+                // 29. zvukové fade (fáze 16) — jen zvuková stopa, nezáporné.
+                if let fades = clip.audioFades,
+                   track.kind != .audio || fades.fadeIn < .zero || fades.fadeOut < .zero {
+                    out.append(.invalidAudioFades(clip.id))
                 }
                 // 2. překryv — stačí porovnat se sousedem, pole je seřazené
                 if i + 1 < track.clips.count, clip.overlaps(track.clips[i + 1]) {

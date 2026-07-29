@@ -453,6 +453,18 @@ final class TimelineController: ObservableObject {
         project = updated
     }
 
+    // MARK: - Zvukové fade (fáze 16)
+
+    /// Puštění úchytu fade — jeden undo krok (vzorec přechodů: mezistavy
+    /// kreslil jen náhled, model se sahá až tady).
+    func setAudioFades(_ clipID: ClipID, _ fades: AudioFades?) {
+        guard project.timeline.clip(clipID)?.audioFades != fades else { return }
+        var updated = project
+        guard (try? updated.setAudioFades(clipID: clipID, fades)) != nil else { return }
+        undo.record(project)
+        project = updated
+    }
+
     // MARK: - Analýzy kvality (fáze 15)
 
     /// Vzorky ostrosti per asset — plní je `AppModel` z diskové cache

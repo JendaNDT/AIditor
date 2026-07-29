@@ -273,6 +273,42 @@ enum CompositionBuilder {
                         compositionTrackID: laneTracks[overlay.incomingLane].trackID,
                         range: range, fadeIn: true))
                 }
+
+                // Fade na hranách klipů (fáze 16) — tytéž rampy v mixu.
+                // Hrana pokrytá crossfadem fade NEDOSTANE: přechod tam už
+                // rampuje a mix nesmí dostat dvě rampy přes sebe. Délky
+                // čte zařezané (`effectiveAudioFades`) — trim smí klip
+                // zkrátit pod součet fade.
+                func overlayCovers(_ frame: Frames) -> Bool {
+                    plan.overlays.contains { $0.start <= frame && frame < $0.end }
+                }
+                for placement in plan.placements {
+                    guard let clip = track.clip(id: placement.clipID),
+                          let fades = project.effectiveAudioFades(of: clip)
+                    else { continue }
+                    let laneID = laneTracks[placement.lane].trackID
+                    if fades.fadeIn > .zero, !overlayCovers(clip.timelineStart) {
+                        audioFades.append(.init(
+                            compositionTrackID: laneID,
+                            range: CMTimeRange(
+                                start: time(of: clip.timelineStart,
+                                            frameRate: timeline.frameRate),
+                                end: time(of: clip.timelineStart + fades.fadeIn,
+                                          frameRate: timeline.frameRate)),
+                            fadeIn: true))
+                    }
+                    if fades.fadeOut > .zero,
+                       !overlayCovers(clip.timelineEnd - Frames(1)) {
+                        audioFades.append(.init(
+                            compositionTrackID: laneID,
+                            range: CMTimeRange(
+                                start: time(of: clip.timelineEnd - fades.fadeOut,
+                                            frameRate: timeline.frameRate),
+                                end: time(of: clip.timelineEnd,
+                                          frameRate: timeline.frameRate)),
+                            fadeIn: false))
+                    }
+                }
             }
         }
 

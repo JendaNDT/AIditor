@@ -72,6 +72,9 @@ public enum TimelineError: Error, Hashable, Sendable {
     /// — automatika nad limit nejde; ručně to editor křivky se žlutou
     /// zónou dovolí (přiznaná duplikace, persona Alena).
     case noCleanSlowdown
+    /// Fade se nevejdou do klipu (záporné, nebo součet přes délku) —
+    /// nese největší legální součet pro zarážku tažení.
+    case invalidAudioFades(maxTotal: Frames)
 }
 
 // MARK: - Assety
@@ -333,6 +336,8 @@ extension Project {
             if keepsHead {
                 var head = existing
                 head.duration = clip.timelineStart - existing.timelineStart
+                // Hlavě zůstává nájezd; dojezd patřil useknutému konci.
+                head.audioFades = existing.audioFades.map { AudioFades(fadeIn: $0.fadeIn) }
                 survivors.append(head)
             }
             if keepsTail {
@@ -342,10 +347,12 @@ extension Project {
                 tail.timelineStart = clip.timelineEnd
                 tail.duration = existing.timelineEnd - clip.timelineEnd
                 // Ocásek je nový klip, potřebuje vlastní identitu.
+                // Fade: dojezd zůstává (konec klipu přežil), nájezd ne.
                 tail = Clip(assetID: tail.assetID, linkID: nil,
                             timelineStart: tail.timelineStart, duration: tail.duration,
                             sourceStart: tail.sourceStart, speedRamp: tail.speedRamp,
-                            kenBurns: tail.kenBurns, colorGrade: tail.colorGrade)
+                            kenBurns: tail.kenBurns, colorGrade: tail.colorGrade,
+                            audioFades: tail.audioFades.map { AudioFades(fadeOut: $0.fadeOut) })
                 survivors.append(tail)
             }
         }
@@ -491,6 +498,9 @@ extension Project {
         let offset = frame - clip.timelineStart
         var left = clip
         left.duration = offset
+        // Fade jsou hranové: nájezd patří začátku (levé polovině),
+        // dojezd konci (pravé) — řez uprostřed žádný fade nevyrábí.
+        left.audioFades = clip.audioFades.map { AudioFades(fadeIn: $0.fadeIn) }
 
         // Druhá polovina musí navázat ve zdroji. Kdo sem dá clip.sourceStart,
         // dostane opakující se záběr a nevšimne si toho, dokud to nepustí.
@@ -504,7 +514,8 @@ extension Project {
                          sourceStart: sourceOffset(in: clip, atFrame: offset),
                          speedRamp: clip.speedRamp,
                          kenBurns: clip.kenBurns,
-                         colorGrade: clip.colorGrade)
+                         colorGrade: clip.colorGrade,
+                         audioFades: clip.audioFades.map { AudioFades(fadeOut: $0.fadeOut) })
 
         var tracks = timeline.tracks
         tracks[at.trackIndex].clips[at.clipIndex] = left

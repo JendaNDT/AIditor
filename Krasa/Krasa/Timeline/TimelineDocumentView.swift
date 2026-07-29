@@ -54,6 +54,9 @@ enum TimelinePalette {
     /// hraně klipu: jiná dimenze než ostrost, jiná hrana i barva.
     static let qualityEmpty = NSColor.systemGray
 
+    /// Klín zvukového fade (fáze 16) — ztmavení nad křivkou nástupu.
+    static let fadeFill = NSColor.black.withAlphaComponent(0.35)
+
     /// Plocha pod stopami a za koncem projektu.
     static let background = adaptive("timelineBackground", dark: 0.09, light: 0.78)
     /// Pruh obrazové stopy. Nejsvětlejší — obraz je hlavní.
@@ -173,6 +176,18 @@ final class ClipLayer: CALayer {
         title.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         title.truncationMode = .end
         addSublayer(title)
+        for shape in [fadeInShape, fadeOutShape] {
+            shape.isHidden = true
+            addSublayer(shape)
+        }
+        for handle in [fadeInHandle, fadeOutHandle] {
+            handle.isHidden = true
+            handle.cornerRadius = 3
+            handle.backgroundColor = NSColor.white.withAlphaComponent(0.9).cgColor
+            handle.borderWidth = 1
+            handle.borderColor = NSColor.black.withAlphaComponent(0.4).cgColor
+            addSublayer(handle)
+        }
     }
 
     /// Proužky kvality (fáze 15) při horní hraně klipu — recyklované
@@ -180,6 +195,44 @@ final class ClipLayer: CALayer {
     var qualityLayers: [CALayer] = []
     /// Proužky hluchosti (F15/2) při SPODNÍ hraně klipu.
     var emptinessLayers: [CALayer] = []
+    /// Klíny zvukových fade (fáze 16) — `CAShapeLayer`, žádné `draw`
+    /// (past `ContentLayer` platí). Úchyt je kolečko na vrcholu klínu.
+    let fadeInShape = CAShapeLayer()
+    let fadeOutShape = CAShapeLayer()
+    let fadeInHandle = CALayer()
+    let fadeOutHandle = CALayer()
+
+    /// Překreslí klíny fade. Šířky v bodech; nulová šířka nechá jen úchyt
+    /// v rohu (jen na zvukovém klipu — `visible`).
+    func setFades(inWidth: Double, outWidth: Double, visible: Bool, color: CGColor) {
+        fadeInShape.isHidden = !visible || inWidth <= 0
+        fadeOutShape.isHidden = !visible || outWidth <= 0
+        fadeInHandle.isHidden = !visible
+        fadeOutHandle.isHidden = !visible
+        guard visible else { return }
+        let h = bounds.height
+        if inWidth > 0 {
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: 0, y: h))
+            path.addLine(to: CGPoint(x: inWidth, y: 0))
+            path.addLine(to: CGPoint(x: 0, y: 0))
+            path.closeSubpath()
+            fadeInShape.path = path
+            fadeInShape.fillColor = color
+        }
+        if outWidth > 0 {
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: bounds.width, y: h))
+            path.addLine(to: CGPoint(x: bounds.width - outWidth, y: 0))
+            path.addLine(to: CGPoint(x: bounds.width, y: 0))
+            path.closeSubpath()
+            fadeOutShape.path = path
+            fadeOutShape.fillColor = color
+        }
+        fadeInHandle.frame = CGRect(x: inWidth - 3, y: 1, width: 6, height: 6)
+        fadeOutHandle.frame = CGRect(x: bounds.width - outWidth - 3, y: 1,
+                                     width: 6, height: 6)
+    }
 
     /// Odpojí všechny dlaždice — při recyklaci a při změně úrovně.
     func clearWaveTiles() {
@@ -724,6 +777,29 @@ final class TimelineDocumentView: NSView {
 
         applyWaveform(placement, to: layer, info: info, visible: visible)
         applyQualityMarks(placement, to: layer)
+        applyFades(placement, to: layer, info: info)
+    }
+
+    /// Klíny zvukových fade (fáze 16): tažený náhled má přednost před
+    /// modelem — během tažení se do modelu nepíše (vzorec `move`).
+    private func applyFades(_ placement: TimelineLayout.Placement, to layer: ClipLayer,
+                            info: ClipDrawInfo?) {
+        let isAudio = info?.kind == .audio
+        guard isAudio, placement.width >= 24, let clip = info?.clip else {
+            layer.setFades(inWidth: 0, outWidth: 0, visible: false, color: TimelinePalette.fadeFill.cgColor)
+            return
+        }
+        let fades: AudioFades
+        if let preview = fadePreview, preview.clipID == placement.clipID {
+            fades = preview.fades
+        } else {
+            fades = controller.project.effectiveAudioFades(of: clip) ?? AudioFades()
+        }
+        let pointsPerFrame = controller.geometry.pointsPerFrame
+        layer.setFades(inWidth: Double(fades.fadeIn.count) * pointsPerFrame,
+                       outWidth: Double(fades.fadeOut.count) * pointsPerFrame,
+                       visible: true,
+                       color: TimelinePalette.fadeFill.cgColor)
     }
 
     /// Proužky kvality (fáze 15): oranžová/červená při horní hraně klipu,
@@ -931,6 +1007,19 @@ final class TimelineDocumentView: NSView {
     }
     private var titleDrag: TitleDragState?
 
+    /// Rozjeté tažení úchytu fade (fáze 16). Týž vzorec: náhled v klínu,
+    /// JEDEN zápis do modelu při puštění.
+    private struct FadeDragState {
+        let clipID: ClipID
+        let isFadeIn: Bool
+        let clipStart: Frames
+        let clipDuration: Frames
+        let otherFade: Frames
+    }
+    private var fadeDrag: FadeDragState?
+    /// Náhled fade během tažení — `applyFades` mu dává přednost před modelem.
+    private var fadePreview: (clipID: ClipID, fades: AudioFades)?
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
@@ -991,6 +1080,35 @@ final class TimelineDocumentView: NSView {
 
         controller.selectClips([hit.clipID])
 
+        // Úchyt zvukového fade (fáze 16): horní pás zvukového klipu,
+        // ±8 bodů od vrcholu klínu. Má přednost před trimem — trim bere
+        // celou výšku hrany, fade jen horních 10 bodů.
+        if let at = controller.project.timeline.locate(hit.clipID),
+           controller.project.timeline.tracks[at.trackIndex].kind == .audio,
+           let clip = controller.project.timeline.clip(hit.clipID),
+           let ti = controller.geometry.trackIndex(atY: point.y,
+                                                   in: controller.project.timeline),
+           point.y - controller.geometry.y(ofTrackAt: ti,
+                                           in: controller.project.timeline) <= 10 {
+            let fades = controller.project.effectiveAudioFades(of: clip) ?? AudioFades()
+            let inX = controller.geometry.x(for: clip.timelineStart + fades.fadeIn)
+            let outX = controller.geometry.x(for: clip.timelineEnd - fades.fadeOut)
+            if abs(point.x - inX) <= 8 {
+                fadeDrag = FadeDragState(clipID: clip.id, isFadeIn: true,
+                                         clipStart: clip.timelineStart,
+                                         clipDuration: clip.duration,
+                                         otherFade: fades.fadeOut)
+                return
+            }
+            if abs(point.x - outX) <= 8 {
+                fadeDrag = FadeDragState(clipID: clip.id, isFadeIn: false,
+                                         clipStart: clip.timelineStart,
+                                         clipDuration: clip.duration,
+                                         otherFade: fades.fadeIn)
+                return
+            }
+        }
+
         // Klik do proužku kvality (fáze 15) = seek na začátek problému —
         // značka je pozvánka „podívej se", ne dekorace. Jen krajní pásky
         // klipu (nahoře ostrost, dole hluchost), jinak by kolidoval
@@ -1039,6 +1157,11 @@ final class TimelineDocumentView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if let drag = fadeDrag {
+            let point = convert(event.locationInWindow, from: nil)
+            updateFadeDrag(drag, atX: point.x)
+            return
+        }
         if transitionDrag != nil {
             let point = convert(event.locationInWindow, from: nil)
             updateTransitionDrag(atX: point.x)
@@ -1057,6 +1180,25 @@ final class TimelineDocumentView: NSView {
             in: controller.project,
             snapping: !event.modifierFlags.contains(.shift))
         updateDragOverlay(preview)
+    }
+
+    /// Náhled tažení fade: délka od hrany klipu ke kurzoru, zaražená
+    /// o druhý fade a délku klipu. Do modelu se nepíše — klín kreslí
+    /// `applyFades` z `fadePreview`.
+    private func updateFadeDrag(_ drag: FadeDragState, atX x: Double) {
+        let frame = controller.geometry.frame(atX: x)
+        let limit = drag.clipDuration - drag.otherFade
+        let fades: AudioFades
+        if drag.isFadeIn {
+            let length = min(max(frame - drag.clipStart, .zero), limit)
+            fades = AudioFades(fadeIn: length, fadeOut: drag.otherFade)
+        } else {
+            let end = drag.clipStart + drag.clipDuration
+            let length = min(max(end - frame, .zero), limit)
+            fades = AudioFades(fadeIn: drag.otherFade, fadeOut: length)
+        }
+        fadePreview = (drag.clipID, fades)
+        refreshClips()
     }
 
     /// Náhled tažení okraje přechodu: model přeloží pozici kurzoru na
@@ -1143,6 +1285,16 @@ final class TimelineDocumentView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if let drag = fadeDrag {
+            fadeDrag = nil
+            let committed = fadePreview
+            fadePreview = nil
+            if let committed, committed.clipID == drag.clipID {
+                controller.setAudioFades(drag.clipID, committed.fades)
+            }
+            refreshClips()
+            return
+        }
         if let drag = transitionDrag {
             transitionDrag = nil
             ghostLayer.isHidden = true
@@ -1202,6 +1354,12 @@ final class TimelineDocumentView: NSView {
     override func keyDown(with event: NSEvent) {
         // Escape ruší rozjeté tažení. Model se během tažení nesahal, takže
         // stačí zapomenout stav interakce a základnu undo.
+        if event.keyCode == 53, fadeDrag != nil {
+            fadeDrag = nil
+            fadePreview = nil
+            refreshClips()
+            return
+        }
         if event.keyCode == 53, transitionDrag != nil {
             transitionDrag = nil
             ghostLayer.isHidden = true

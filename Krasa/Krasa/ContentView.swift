@@ -1809,6 +1809,115 @@ final class AppModel: ObservableObject {
         try? await Task.sleep(nanoseconds: 25_000_000_000)
     }
 
+    /// CLI ověření zvukových fade (fáze 16, modul 1): klip se zvukem
+    /// dostane nájezd 1 s a dojezd 1 s, exportuje se a RMS profil
+    /// výsledného zvuku musí na hranách klesat — a stejný export BEZ
+    /// fade musí mít hrany plné (kontrola, že se neměří artefakt).
+    func verifyAudioFades() async {
+        let savedProfile = loudnessProfile
+        defer { loudnessProfile = savedProfile }
+        loudnessProfile = nil
+
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && $0.hasAudio && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný asset se zvukem"); return
+        }
+        var bare = Project.empty()
+        bare.addAsset(source)
+        let audioClipID: ClipID
+        do {
+            let (video, audio) = try bare.makeLinkedClips(assetID: source.id)
+            var v = video; v.duration = Frames(120)
+            var a = audio; a.duration = Frames(120)
+            try bare.insert(v, onTrack: bare.timeline.tracks[0].id)
+            try bare.insert(a, onTrack: bare.timeline.tracks[1].id)
+            audioClipID = a.id
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        var faded = bare
+        do {
+            try faded.setAudioFades(clipID: audioClipID,
+                                    AudioFades(fadeIn: Frames(30), fadeOut: Frames(30)))
+        } catch {
+            print("❌ nastavení fade selhalo: \(error)"); return
+        }
+
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaFadeCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        let fadedURL = directory.appendingPathComponent("fade_on.mp4")
+        let bareURL = directory.appendingPathComponent("fade_off.mp4")
+        timeline.project = faded
+        await export(to: fadedURL)
+        print(status)
+        timeline.project = bare
+        await export(to: bareURL)
+        print(status)
+
+        func rmsProfile(_ url: URL) async -> (head: Double, middle: Double, tail: Double)? {
+            guard let audio = try? await MonoAudioReader.samples(url: url,
+                                                                 sampleRate: 48_000),
+                  audio.count > 48_000 * 3 else { return nil }
+            func rms(_ range: Range<Int>) -> Double {
+                let slice = audio[range.clamped(to: audio.indices)]
+                guard !slice.isEmpty else { return 0 }
+                let sum = slice.reduce(0.0) { $0 + Double($1) * Double($1) }
+                return (sum / Double(slice.count)).squareRoot()
+            }
+            // Kraje uvnitř fade (0,1–0,5 s a poslední 0,5–0,1 s), střed mimo.
+            let n = audio.count
+            return (rms(4_800..<24_000),
+                    rms(n / 2 - 24_000..<n / 2 + 24_000),
+                    rms(n - 24_000..<n - 4_800))
+        }
+        guard let on = await rmsProfile(fadedURL), let off = await rmsProfile(bareURL),
+              off.middle > 0 else {
+            print("❌ nepodařilo se přečíst zvuk exportů"); return
+        }
+        let headRatio = on.head / max(off.head, 1e-9)
+        let tailRatio = on.tail / max(off.tail, 1e-9)
+        print(String(format: "hrany s fade proti bez: začátek %.2f, konec %.2f "
+                     + "(střed %.2f)", headRatio, tailRatio, on.middle / off.middle))
+        print(headRatio < 0.6 && tailRatio < 0.6
+              ? "✓ nájezd i dojezd v exportu skutečně zeslabují"
+              : "❌ fade v exportu neshledán")
+        print(on.middle / off.middle > 0.9
+              ? "✓ střed klipu zůstává nedotčený"
+              : "❌ fade sahá doprostřed klipu")
+        print("FADE_CHECK_PATH=\(directory.path)")
+    }
+
+    /// CLI ukázka fáze 16 (`--fade-demo`): zvukový klip s klíny fade.
+    func runFadeDemo() async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && $0.hasAudio && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný asset se zvukem"); return
+        }
+        var project = Project.empty()
+        project.addAsset(source)
+        do {
+            let (video, audio) = try project.makeLinkedClips(assetID: source.id)
+            var v = video; v.duration = Frames(240)
+            var a = audio; a.duration = Frames(240)
+            try project.insert(v, onTrack: project.timeline.tracks[0].id)
+            try project.insert(a, onTrack: project.timeline.tracks[1].id)
+            try project.setAudioFades(clipID: a.id,
+                                      AudioFades(fadeIn: Frames(45), fadeOut: Frames(75)))
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        timeline.project = project
+        if let host = await waitForPlayerWindow() {
+            host.window?.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        try? await Task.sleep(nanoseconds: 25_000_000_000)
+    }
+
     /// Šum jako PNG — „dekorace": bohatý, prosvětlený obraz s vysokou
     /// entropií pro `--empty-check`.
     private func writeNoisePNG(to url: URL, side: Int) -> Bool {
@@ -2751,6 +2860,10 @@ struct ContentView: View {
                     await model.verifyEmptiness()
                 } else if arguments.contains("--empty-demo") {
                     await model.runEmptyDemo()
+                } else if arguments.contains("--fade-check") {
+                    await model.verifyAudioFades()
+                } else if arguments.contains("--fade-demo") {
+                    await model.runFadeDemo()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

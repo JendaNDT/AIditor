@@ -208,6 +208,11 @@ public struct Clip: Identifiable, Hashable, Codable, Sendable {
     /// se nezvedá (vzorec `speedRamp`/`kenBurns`).
     public var colorGrade: ColorGrade?
 
+    /// Zvukové fade (fáze 16): nájezd/dojezd na hranách klipu. Jen na
+    /// klipu zvukové stopy — zapisuj přes `Project.setAudioFades`.
+    /// Volitelné pole, formát beze změny verze.
+    public var audioFades: AudioFades?
+
     public init(id: ClipID = ClipID(),
                 assetID: AssetID,
                 linkID: LinkID? = nil,
@@ -216,7 +221,8 @@ public struct Clip: Identifiable, Hashable, Codable, Sendable {
                 sourceStart: SourceTime,
                 speedRamp: SpeedRamp? = nil,
                 kenBurns: KenBurns? = nil,
-                colorGrade: ColorGrade? = nil) {
+                colorGrade: ColorGrade? = nil,
+                audioFades: AudioFades? = nil) {
         self.id = id
         self.assetID = assetID
         self.linkID = linkID
@@ -226,6 +232,7 @@ public struct Clip: Identifiable, Hashable, Codable, Sendable {
         self.speedRamp = speedRamp
         self.kenBurns = kenBurns
         self.colorGrade = colorGrade
+        self.audioFades = audioFades
     }
 
     /// Exkluzivní konec.

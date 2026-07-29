@@ -57,6 +57,63 @@ extension Project {
     }
 }
 
+// MARK: - Zvukové fade na klipu (fáze 16)
+
+/// Nájezd a dojezd zvuku na hranách klipu, ve snímcích osy. Nula = bez
+/// fade; obě hodnoty se vejdou do klipu (vymáhá `setAudioFades`).
+/// Trim smí klip pod součet fade zkrátit — kompozice délky poctivě
+/// zařeže (`effectiveAudioFades`), model kvůli tomu nepřepisuje šest
+/// trim operací.
+public struct AudioFades: Hashable, Codable, Sendable {
+    public var fadeIn: Frames
+    public var fadeOut: Frames
+
+    public init(fadeIn: Frames = .zero, fadeOut: Frames = .zero) {
+        self.fadeIn = fadeIn
+        self.fadeOut = fadeOut
+    }
+
+    public var isEmpty: Bool { fadeIn <= .zero && fadeOut <= .zero }
+}
+
+extension Project {
+
+    /// Nastaví (nebo `nil` smaže) fade klipu. Jen na zvukové stopě —
+    /// fade je volume rampa v mixu a obraz žádnou hlasitost nemá
+    /// (zatmívačku obrazu dělá přechod). Prázdné fade se ukládají
+    /// jako `nil`, ať se projekty zbytečně nenafukují.
+    public mutating func setAudioFades(clipID: ClipID, _ fades: AudioFades?) throws {
+        guard let at = timeline.locate(clipID) else { throw TimelineError.clipNotFound(clipID) }
+        let clip = timeline.tracks[at.trackIndex].clips[at.clipIndex]
+        var stored = fades
+        if let fades {
+            guard timeline.tracks[at.trackIndex].kind == .audio else {
+                throw TimelineError.wrongTrackKind(expected: .audio,
+                                                   got: timeline.tracks[at.trackIndex].kind)
+            }
+            guard fades.fadeIn >= .zero, fades.fadeOut >= .zero,
+                  fades.fadeIn + fades.fadeOut <= clip.duration else {
+                throw TimelineError.invalidAudioFades(maxTotal: clip.duration)
+            }
+            if fades.isEmpty { stored = nil }
+        }
+        var tracks = timeline.tracks
+        tracks[at.trackIndex].clips[at.clipIndex].audioFades = stored
+        timeline.tracks = tracks
+    }
+
+    /// Fade zařezané do AKTUÁLNÍ délky klipu — jediné místo, odkud je
+    /// čte kompozice. Trim pod součet fade není chyba modelu; tady se
+    /// dojezd zkrátí o to, co nájezd nechá.
+    public func effectiveAudioFades(of clip: Clip) -> AudioFades? {
+        guard let fades = clip.audioFades, !fades.isEmpty else { return nil }
+        let fadeIn = min(max(fades.fadeIn, .zero), clip.duration)
+        let fadeOut = min(max(fades.fadeOut, .zero), clip.duration - fadeIn)
+        let clamped = AudioFades(fadeIn: fadeIn, fadeOut: fadeOut)
+        return clamped.isEmpty ? nil : clamped
+    }
+}
+
 extension Timeline {
 
     /// Kopie s výchozím mixem na všech zvukových stopách. Odpovídá na

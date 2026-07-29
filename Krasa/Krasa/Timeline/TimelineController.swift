@@ -399,6 +399,29 @@ final class TimelineController: ObservableObject {
 
     func kenBurnsDragEnded() { undo.endInteraction(project) }
 
+    // MARK: - Barevné presety (fáze 13, modul 3)
+
+    /// Výběr presetu z pickeru — jeden undo krok.
+    func setColorGrade(_ clipID: ClipID, _ grade: ColorGrade?) {
+        guard project.timeline.clip(clipID)?.colorGrade != grade else { return }
+        var updated = project
+        guard (try? updated.setColorGrade(clipID: clipID, grade)) != nil else { return }
+        undo.record(project)
+        project = updated
+    }
+
+    /// Posuvník síly — vzorec hlasitosti a zoomu: mezistavy legální,
+    /// zapisují se průběžně a begin/end z nich složí jeden undo krok.
+    func colorGradeDragBegan() { undo.beginInteraction(project) }
+
+    func colorGradeDragChanged(_ clipID: ClipID, _ grade: ColorGrade?) {
+        var updated = project
+        guard (try? updated.setColorGrade(clipID: clipID, grade)) != nil else { return }
+        project = updated
+    }
+
+    func colorGradeDragEnded() { undo.endInteraction(project) }
+
     // MARK: - Synchronizace externího zvuku (fáze 7, modul 5)
 
     /// Kontextové menu klipu žádá synchronizaci — obslouží `AppModel`

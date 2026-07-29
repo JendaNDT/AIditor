@@ -1347,6 +1347,48 @@ final class AppModel: ObservableObject {
         controller.pause()
     }
 
+    /// CLI ukázka fáze 13 (`--color-demo`): tři klipy, prostřední s ČB
+    /// presetem a VYBRANÝ — inspektor ukazuje panel presetu, hlava stojí
+    /// v přebarveném klipu. Nic neměří; koukanec pro oko a screenshot.
+    func runColorDemo() async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        var project = Project.empty()
+        project.addAsset(source)
+        guard project.timeline.availableFrames(from: source.duration).count >= 305 else {
+            print("❌ asset je krátký"); return
+        }
+        let v1 = project.timeline.tracks[0].id
+        var middle: ClipID?
+        do {
+            for (start, src) in [(0, 0), (60, 120), (120, 240)] {
+                let video = Clip(assetID: source.id, timelineStart: Frames(start),
+                                 duration: Frames(60),
+                                 sourceStart: project.timeline.sourceTime(Frames(src)))
+                try project.insert(video, onTrack: v1)
+                if start == 60 {
+                    middle = video.id
+                    try project.setColorGrade(clipID: video.id, ColorGrade(
+                        preset: .blackAndWhite, intensity: 1.0))
+                }
+            }
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        timeline.project = project
+        if let middle { timeline.selectClips([middle]) }
+        timeline.setPlayheadFromUser(Frames(90))
+
+        if let host = await waitForPlayerWindow() {
+            host.window?.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        try? await Task.sleep(nanoseconds: 25_000_000_000)
+    }
+
     /// Bílý čtverec jako PNG — syntetická fotka pro `--photo-check`.
     private func writeWhiteSquarePNG(to url: URL, side: Int) -> Bool {
         writeSquarePNG(to: url, side: side, color: CGColor(red: 1, green: 1, blue: 1, alpha: 1))
@@ -2211,6 +2253,8 @@ struct ContentView: View {
                     await model.verifyColorExport()
                 } else if arguments.contains("--color-gpu") {
                     await model.runColorGPUPlayback(enabled: !explicit.contains("off"))
+                } else if arguments.contains("--color-demo") {
+                    await model.runColorDemo()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
@@ -2416,8 +2460,22 @@ private struct InspectorStrip: View {
             SpeechInspector(timeline: timeline, selection: speech, currentText: text)
         } else if let still = selectedStillClip() {
             // Fotka: editor křivky by tu neměl co dělat (rampa na fotce
-            // je zakázaná) — místo něj Ken Burns (fáze 12, modul 3).
-            PhotoInspector(timeline: timeline, clipID: still)
+            // je zakázaná) — místo něj Ken Burns (fáze 12, modul 3)
+            // a barevný preset (fáze 13, modul 3).
+            HStack(spacing: 0) {
+                PhotoInspector(timeline: timeline, clipID: still)
+                Divider()
+                ColorGradePanel(timeline: timeline, clipID: still)
+                    .frame(width: 260)
+            }
+        } else if let video = selectedVideoClip() {
+            // Video klip: editor křivky + panel barevného presetu vedle.
+            HStack(spacing: 0) {
+                RampEditorPaneView(controller: timeline)
+                Divider()
+                ColorGradePanel(timeline: timeline, clipID: video)
+                    .frame(width: 260)
+            }
         } else {
             RampEditorPaneView(controller: timeline)
         }
@@ -2428,6 +2486,17 @@ private struct InspectorStrip: View {
               let id = timeline.selection.first,
               let clip = timeline.project.timeline.clip(id),
               timeline.project.asset(clip.assetID)?.isStill == true else { return nil }
+        return id
+    }
+
+    /// Jediný vybraný klip na OBRAZOVÉ stopě (a ne fotka — ta má vlastní
+    /// větev). Preset patří jen obrazu; u zvukového klipu panel nemá smysl.
+    private func selectedVideoClip() -> ClipID? {
+        guard timeline.selection.count == 1,
+              let id = timeline.selection.first,
+              let at = timeline.project.timeline.locate(id),
+              timeline.project.timeline.tracks[at.trackIndex].kind == .video
+        else { return nil }
         return id
     }
 
@@ -2574,6 +2643,75 @@ private struct PhotoInspector: View {
         return motion == .zoomIn
             ? KenBurns(start: .full, end: inner)
             : KenBurns(start: inner, end: .full)
+    }
+}
+
+/// Panel barevného presetu (fáze 13, modul 3): výběr presetu + posuvník
+/// síly 0–100 %. Výběr = jeden undo krok; posuvník skládá undo kolem
+/// tažení (vzorec hlasitosti a zoomu). Vzhled presetů drží
+/// `ColorPresetFilter` — tady je jen volba, přesně jako v modelu.
+private struct ColorGradePanel: View {
+    @ObservedObject var timeline: TimelineController
+    let clipID: ClipID
+
+    var body: some View {
+        let grade = timeline.project.timeline.clip(clipID)?.colorGrade
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Barevný preset")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Picker("Preset", selection: Binding(
+                get: { grade?.preset },
+                set: { newPreset in
+                    if let newPreset {
+                        // Přepnutí presetu drží nastavenou sílu.
+                        timeline.setColorGrade(clipID, ColorGrade(
+                            preset: newPreset, intensity: grade?.intensity ?? 1.0))
+                    } else {
+                        timeline.setColorGrade(clipID, nil)
+                    }
+                })) {
+                Text("Bez úpravy").tag(ColorPreset?.none)
+                Text("Jemný svatební").tag(ColorPreset?.some(.softWedding))
+                Text("Teplý film").tag(ColorPreset?.some(.warmFilm))
+                Text("Čistá pleť").tag(ColorPreset?.some(.cleanSkin))
+                Text("Černobílá").tag(ColorPreset?.some(.blackAndWhite))
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .frame(width: 180)
+
+            HStack(spacing: 10) {
+                Text("Síla")
+                Slider(value: Binding(
+                    get: { (grade?.intensity ?? 1.0) * 100 },
+                    set: { percent in
+                        guard let preset = grade?.preset else { return }
+                        timeline.colorGradeDragChanged(clipID, ColorGrade(
+                            preset: preset, intensity: percent / 100))
+                    }),
+                    in: 0...100,
+                    onEditingChanged: { editing in
+                        if editing { timeline.colorGradeDragBegan() }
+                        else { timeline.colorGradeDragEnded() }
+                    })
+                    .frame(width: 140)
+                    .disabled(grade == nil)
+                Text(grade.map { String(format: "%.0f %%", $0.intensity * 100) } ?? "—")
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, alignment: .trailing)
+            }
+
+            Text("Preset platí pro tenhle klip, v náhledu i exportu.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

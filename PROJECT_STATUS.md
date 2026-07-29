@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (⭐ FÁZE 17 CELÁ HOTOVÁ — před námi koukance a KILL-GATE 1)*
+*Naposled aktualizováno: 29. 07. 2026 (FÁZE 18 ROZJETÁ — modul 1 hotový: nová skořápka okna)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,11 +13,47 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (453, 29
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: KOUKANCE RUKOU a pak 🚧 KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu** (materiál ~konec srpna 2026). Fáze 17 je celá hotová a byla poslední, která směla přijít před kill-gate.
+**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 2 — stavový řádek a čip běžících analýz.** Plán celé fáze je ve `FAZE_18_UI.md`.
 
-**Pořadí odsud:** koukance rukou → 🚧 **KILL-GATE 1 (svatba)** → fáze 18–21 v pořadí, které určí svatba. Do té doby se **nepřidávají funkce**: „Zvládl jsi to, ale bolelo to → opravy toho, co bolelo."
+**Pořadí odsud:** fáze 18 (M1 ✅ → M2 → M3 → M7 → M8 → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
-⚠️ **Do kill-gate se nepřidávají FUNKCE — fáze 17 je pojmenovaná výjimka a není funkce.** Auto-scroll za hlavou, JKL, kopírovat/vložit a multi-výběr jsou chybějící základy ovládání; bez nich bude svatba bolet z důvodů, které s produktem nesouvisejí (a hromadné operace navíc rozhodují o tom, jestli jsou presety z F13 na dvou stech klipech vůbec použitelné). Všechno ostatní — V2, ducking, multikamera, stabilizace — čeká AŽ ZA svatbu: „Zvládl jsi to, ale bolelo to → opravy toho, co bolelo. Žádné nové funkce, dokud to nebolí míň."
+⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
+
+## 🔄 FÁZE 18 — přestavba UI podle design handoffu (ROZJETÁ 29. 07. 2026)
+
+Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zadání:
+`design_handoff_krasa_ui/` (šest obrazovek, hi-fi, rozměry v bodech na dodržení).
+
+**Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
+② **světlý režim padá** — okno je natvrdo tmavé.
+
+✅ **Modul 1 — nový rám okna (29. 07. 2026).**
+
+  - **`UI/Shell/`:** `AppShell` (toolbar 46 → rail 60 + obsah → stavový řádek 26), `KrasaToolbar`,
+    `IconRail` (6 sekcí, SF Symbols), `ViewerPane` (čipy na obraze, měřidlo hlasitosti, pilulka
+    transportu s kruhem 44 a čipem rychlosti), `ShellStatusBar`, `DesignTokens`, `LegacySettingsPanel`.
+    `ContentView.swift` zhubl z 4483 na 4247 řádků; `HSplitView { sidebar | player }` je pryč.
+  - **Fullscreen CELÉ APLIKACE je hotový už v M1.** Skořápka je parametrická (`ShellMode`), okno
+    a celá obrazovka sdílejí jedno rozvržení a liší se třemi čísly (toolbar 46/48, odsazení zleva
+    78/16, horní pás 372/426) — osa, hlavičky ani panel si rozměry nemění, takže se po přepnutí nic
+    nekreslí dvakrát. M13 tím zbývá jen fullscreen **náhledu**.
+  - **Ověřeno `--shell-check`** ze skutečných view v hierarchii, ne z konstant: v OKNĚ osa
+    **61 / 453 / 453 / 27** (zleva / shora / zprava / zdola), obraz **77 / 63**; na CELÉ OBRAZOVCE
+    **61 / 509 / 453 / 27** a obraz **77 / 65** — všech 16 hodnot sedí na tabulku návrhu.
+    Plocha obrazu **1208×680 → 1400×788** (fullscreen se opravdu projevil, ne jen příznakem).
+  - **⚠️ Tři chyby, a každou chytilo něco jiného.** ① `NSHostingView` je **flipped** — první verze
+    kontroly měla odsazení shora a zdola prohozená a obě čísla vypadala „nějak rozumně";
+    ② bezpečná zóna titulkového pruhu srážela obsah o **32 bodů** (osa v okně 485 místo 453, ve
+    fullscreenu správně) — chytilo měření; ③ ani po `.ignoresSafeArea()` nebyla horní třetina
+    toolbaru vidět (jméno projektu a horní půlky tlačítek) — **to chytil až screenshot**, protože
+    kontrola měří vůči `contentView`, který sahá k horní hraně okna. Vyřešeno
+    `.windowStyle(.hiddenTitleBar)`.
+  - **Tmavý režim natvrdo:** okno dostává `.darkAqua`, z `TimelinePalette` a `RampEditorPalette`
+    zmizelo **22 světlých hodnot**. Inertní `viewDidChangeEffectiveAppearance` zůstalo — odstraní
+    ho M4, který do těch souborů sahá kvůli výškám stop.
+  - **Regrese:** `--timeline-bench` **0 vypadlých tiků** na 2000 klipech (kritérium fáze 2 drží),
+    `--select-check` i `--range-check` prošly celé.
+  - *Koukanec rukou (v seznamu): puntíky v toolbaru, rail, pilulka transportu, ⌘4, ⌃⌘F tam a zpět.*
 
 ## ✅ FÁZE 17 — ergonomie střihu (HOTOVÁ 29. 07. 2026)
 

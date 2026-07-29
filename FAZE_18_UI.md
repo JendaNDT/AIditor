@@ -135,6 +135,59 @@ po každém modulu etapy A a B**.
 
 ---
 
+## 4b. Hotové moduly
+
+### ✅ M1 — nový rám okna (29. 07. 2026)
+
+**Postaveno:** `UI/Shell/` — `AppShell` (toolbar → rail + obsah → stavový řádek), `KrasaToolbar`,
+`IconRail`, `ViewerPane` (čipy, měřidlo, pilulka transportu), `ShellStatusBar`, `DesignTokens`,
+`LegacySettingsPanel`. `ContentView` zhubl z 4483 na 4247 řádků a drží už jen `AppModel` a rozcestník
+měřicích běhů.
+
+**Fullscreen celé aplikace je hotový už teď.** Skořápka je postavená parametricky (`ShellMode`),
+takže okno i celá obrazovka sdílejí jedno rozvržení a liší se jen třemi čísly (toolbar 46/48,
+odsazení zleva 78/16, horní pás 372/426). M13 tím zbývá jen fullscreen **náhledu**.
+
+**Ověřeno `--shell-check`** — geometrie měřená ze skutečných view v hierarchii (`TimelinePane`,
+`PlayerHostView`), ne z konstant:
+
+| | okno | celá obrazovka |
+|---|---|---|
+| osa zleva (rail) | **61** ✅ | **61** ✅ |
+| osa shora (lišty) | **453** ✅ | **509** ✅ |
+| osa zprava (panel) | **453** ✅ | **453** ✅ |
+| osa zdola (stavový řádek) | **27** ✅ | **27** ✅ |
+| obraz zleva / shora | **77 / 63** ✅ | **77 / 65** ✅ |
+
+Plocha obrazu 1208×680 → **1400×788** ve fullscreenu (vzrostla, takže se přepnulo doopravdy —
+bit `styleMask` se přepíná už na začátku přechodu a ptát se ho nestačí).
+
+**⚠️ Dvě chyby, které chytilo až měření, ne oko:**
+① `NSHostingView` je **flipped** — první verze kontroly měla odsazení shora a zdola prohozená,
+a protože obě čísla vyšla „nějak rozumně", vypadalo to jako chyba v layoutu, ne v měření.
+② SwiftUI si nad obsahem drží **bezpečnou zónu titulkového pruhu**: osa v okně začínala na 485
+místo 453, ve fullscreenu (kde pruh není) správně na 509. Vyřešeno `.ignoresSafeArea()`
+a `.windowStyle(.hiddenTitleBar)` — návrh chce puntíky uvnitř toolbaru.
+③ Screenshot pak ukázal třetí: se samotným `.ignoresSafeArea()` zůstala horní třetina toolbaru
+schovaná za pruhem (jméno projektu a horní půlky tlačítek nebyly vidět). Kontrola geometrie to
+neviděla, protože měří vůči `contentView`, který sahá až k horní hraně okna. **Koukanec chytil,
+co měření nemohlo.**
+
+**Regrese beze změny:** `--timeline-bench` 2000 klipů, **0 vypadlých tiků**, medián práce 0,78 ms
+(kritérium fáze 2 drží) · `--select-check` a `--range-check` prošly celé.
+
+**Tmavý režim natvrdo:** okno dostává `.darkAqua`, z `TimelinePalette` a `RampEditorPalette` zmizelo
+**22 světlých hodnot**. Obal `NSColor(name:dynamicProvider:)` zůstal — vrací pořád totéž, ale drží
+jméno v debuggeru a jedno místo, kam by se světlá varianta vracela.
+
+**Přiznaný dluh M1:** `viewDidChangeEffectiveAppearance` a `performAsCurrentDrawingAppearance`
+zůstaly na místě, přestože jsou od zafixování tmavého režimu inertní. Odstraní je **M4**, který do
+těch souborů stejně sahá kvůli výškám stop — vytrhávat je teď by znamenalo velký diff v modulu,
+který o kreslení osy není. Editor rychlostní křivky sedí v panelu 452 px, ale jeho vnitřní layout je
+pořád ten z pásu 132 px a nahoře se zařezává; přestaví ho **M7**.
+
+---
+
 ## 5. Roadmapa
 
 Čtyři etapy, třináct modulů. **Jeden modul = jedna session** (pravidlo projektu).

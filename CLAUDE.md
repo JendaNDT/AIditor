@@ -135,8 +135,8 @@ Testy pustíš přes `cd SpeedRampEngine && swift test`.
 ### `TimelineModel/`
 Logika, geometrie a interakce časové osy. Čistý Swift, závislosti
 `SpeedRampEngine` a od F14 `AudioEngine` (oba také čistý Swift), **žádné
-AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **399
-testů, ověřeno; 28 invariantů ve `validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
+AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **408
+testů, ověřeno; 29 invariantů ve `validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
 křivku (uzly kotvené ve zdrojovém čase) a `rampPlaybackPlan` vydává
 segmentaci v celých tickách pro `scaleTimeRange`. Od vylepšovacích fází
 navíc:
@@ -187,6 +187,13 @@ navíc:
   a soubor bez zvukové stopy je z definice ticho. Pohyb se měří a
   ukládá, ale v klasifikaci v1 se nepoužívá (kapsa se hýbe, dekorace
   stojí — hluchost neurčuje).
+- **Fade (F16):** `Clip.audioFades` přes `setAudioFades` — jen zvuková
+  stopa. Fade jsou HRANOVÉ: split/overwrite dávají nájezd začátku
+  a dojezd konci. Trim smí klip zkrátit pod součet fade — délky
+  zařezává `effectiveAudioFades` (jediné místo, odkud je čte
+  kompozice); invariant 29 hlídá jen zápornost a stopu. V mixu jsou to
+  tytéž volume rampy jako crossfade; hrana pokrytá crossfadem fade
+  NEDOSTANE (dvě rampy přes sebe mix nesmí dostat).
 
 ```swift
 var project = Project.empty()                        // V1 + A1 + A2 + T1

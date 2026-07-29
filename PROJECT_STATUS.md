@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 15 HOTOVÁ — analýzy kvality)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 16: modul 1 hotový — zvukové fade úchyty)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,7 +13,17 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (365, 28
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 16 — vymazlení a technické dluhy (poslední před kill-gate).** Zvukové fade úchyty na klipech (nájezd/dojezd per klip přes `AVAudioMix` rampy); strop normalizace na true peak (dBTP, 4× převzorkování v `AudioEngine`); správa modelu Whisperu (velikost, smazání, přemístění); drobnosti z koukanců (trim zaražený přechodem tiše nepustí — duch nezčervená; přechod nejde vybrat klikem do těla). Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 16, modul 2 — true peak strop normalizace (dBTP)** — 4× převzorkování ve špičkovém měření (`AudioEngine`, čistý Swift s testy na kotvách ITU-R BS.1770 — inter-sample špičky sinusu), zapojit do stropu normalizace exportu místo dnešní špičky vzorků. Pak modul 3: správa modelu Whisperu (velikost, smazání, přemístění) + drobnosti z koukanců (trim zaražený přechodem tiše nepustí — duch nezčervená; přechod nejde vybrat klikem do těla). Detail v `IMPLEMENTACNI_PLAN.md`.
+
+## 🚧 FÁZE 16 — vymazlení a technické dluhy (modul 1 HOTOVÝ 29. 07. 2026)
+
+✅ **Modul 1 — zvukové fade úchyty (29. 07. 2026).**
+
+  - **Model (+9 testů, celkem 408; invariant 29):** `Clip.audioFades` (nájezd/dojezd ve snímcích, volitelné pole — formát beze změny verze), `setAudioFades` (jen zvuková stopa; nezáporné; součet ≤ délka — chyba nese `maxTotal` pro zarážku; prázdné fade se ukládají jako `nil`). **Fade jsou HRANOVÉ:** split dá nájezd levé polovině a dojezd pravé, overwrite hlavě/ocásku totéž — řez uprostřed žádný fade nevyrábí. Trim smí klip zkrátit pod součet fade — invariant hlídá jen zápornost a stopu, délky poctivě zařezává `effectiveAudioFades` (jediné místo, odkud je čte kompozice) — model kvůli tomu nepřepisuje šest trim operací.
+  - **Kompozice:** fade = tytéž volume rampy v mixu jako crossfade (`BuiltTimeline.audioFades` → `audioMix(project:)`, přežívají živou změnu hlasitosti stopy). **Hrana pokrytá crossfadem fade NEDOSTANE** — přechod tam už rampuje a `AVAudioMix` nesmí dostat dvě rampy přes sebe.
+  - **UI:** klíny (CAShapeLayer, tmavý trojúhelník nad křivkou nástupu) s úchyty (bílá kolečka na vrcholu) na zvukových klipech; tažení = náhled v klínu + JEDEN zápis při puštění (vzorec přechodů), Escape ruší, ⌘Z vrací. Úchyt bere horních 10 bodů klipu — trim zůstává na zbytku výšky hrany.
+  - **Ověřeno `--fade-check` kvantitativně:** dvojí export (fade 1 s + 1 s vs. bez) — RMS hran **0,27/0,38** úrovně bez fade (přesně lineární rampa přes měřené okno), **střed 1,00** nedotčený. **Screenshot (`--fade-demo`):** klín nájezdu přes vlnu zvukového klipu s úchytem na vrcholu.
+  - *Koukanec rukou (v seznamu): tažení úchytů, fade slyšet při přehrávání, kombinace s crossfadem.*
 
 ## ✅ FÁZE 15 — analýzy kvality záběrů (HOTOVÁ 29. 07. 2026)
 
@@ -209,7 +219,7 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 4. ✅ **F13 — barevné presety** (HOTOVÁ 29. 07.; vlastní `ColorVideoCompositor` ověřený `--color-check`, GPU skok ~24 %, UI v inspektoru)
 5. ✅ **F14 — hudební synchronizace** (HOTOVÁ 29. 07.; detekce ±0,1 BPM, doby v pravítku, magnet `.beat`, dopasování s přiznanými mezemi — VLAJKOVÁ)
 6. ✅ **F15 — analýzy kvality** (HOTOVÁ 29. 07.; neostrost 93×, hluchá místa s pravidlem „dekorace není chyba", značky s klik=seek — jen návrhy, nikdy automatický střih)
-7. **F16 — vymazlení** (zvukové fade úchyty, dBTP strop, správa Whisper modelu) **← PRÁVĚ TADY, poslední před kill-gate**
+7. 🚧 **F16 — vymazlení** (zvukové fade úchyty ✅, dBTP strop, správa Whisper modelu) **← PRÁVĚ TADY, poslední před kill-gate** (modul 1 hotový; zbývá dBTP a Whisper+drobnosti)
 
 Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou před kill-gate (seznam níže).
 
@@ -221,6 +231,7 @@ Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou p�
 - [ ] **Barevné presety (F13, po modulu 3):** preset na klipu se projeví v náhledu při přehrávání i scrubování; intenzita mění sílu plynule; přehrávání s presety na 4K ose je plynulé; export vypadá jako náhled; preset + prolínačka + Ken Burns dohromady fungují.
 - [ ] **Hudba a doby (F14, po modulu 3):** Soubor → Přidat hudbu… položí skladbu na A2 a status řekne BPM s jistotou; jantarové doby v pravítku sedí na hudbě („raz" vyšší); tažení klipu se přichytává na doby (slaběji než na hrany, Shift vypíná); u ambientní hudby se tempo poctivě nenajde; dopasování klipu na dobu (modul 3) funguje a respektuje žlutou zónu.
 - [ ] **Analýzy kvality (F15):** po importu se na rozmazaných úsecích klipů objeví oranžové/červené proužky nahoře a na hluchých místech (ticho + tma/prázdno ≥ 5 s) šedé dole (chvíli to trvá — analýza jede na pozadí); klik do proužku skočí hlavou na začátek problému; ostrý/živý klip proužky nemá; tichý záběr na dekoraci se NEhlásí.
+- [ ] **Zvukové fade (F16):** na zvukovém klipu jsou v horních rozích úchyty (bílá kolečka); tažením vznikne klín nájezdu/dojezdu, Escape ruší, ⌘Z vrací; fade je slyšet při přehrávání i v exportu; na hraně s prolnutím zvuku fade nefunguje (přechod má přednost).
 - [ ] **Dotaz při zavírání (F5):** změna v projektu → ⌘Q ukáže Uložit/Neukládat/Zrušit (Escape ruší); týž dotaz po výběru souboru při ⌘O a importu; „Uložit" u neuloženého projektu přes „Uložit jako" — zrušení panelu ruší i zavírání.
 - [ ] **Hlasitost stop (F7):** posuvník v hlavičce A1/A2 mění hlasitost ZA BĚHU přehrávání bez zastavení; M ztlumí a vrátí; ⌘Z vrací tažení jedním krokem; hodnoty přežijí uložení a otevření projektu.
 - [ ] **Normalizace exportu (F7):** volba profilu u tlačítka exportu; po exportu status hlásí „Hlasitost X → cíl (gain ±Y dB)", případně poctivé omezení špičkami.

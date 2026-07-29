@@ -2029,31 +2029,12 @@ final class TimelineDocumentView: NSView {
     }
 
     /// Důvod, proč dopasování nejde — z chyby modelu na lidskou radu.
-    /// Plán F14: při velké odchylce NEVYNUCOVAT, nabídnout trim nebo
-    /// jiný bod.
+    /// Plán F14: při velké odchylce NEVYNUCOVAT, nabídnout trim nebo jiný bod.
+    ///
+    /// Text drží `TimelineError.beatFitReason` — od fáze 18 ho čte i připnutý
+    /// panel a dvě kopie téhož by se rozešly, jakmile v modelu přibude případ.
     private func beatFitExcuse(for error: TimelineError) -> String {
-        switch error {
-        case .noBeatInReach(let nearest):
-            if let nearest {
-                let rate = controller.project.timeline.frameRate
-                return "V dosahu není volná doba — nejbližší je na "
-                    + "\(nearest.timecode(frameRate: rate).text). "
-                    + "Trimni klip, posuň ho, nebo přisuň hudbu."
-            }
-            return "Na ose není hudba s dobami — přidej ji přes "
-                + "Soubor → Přidat hudbu…"
-        case .noCleanSlowdown:
-            return "Zdroj nemá dost snímků na čisté zpomalení "
-                + "(potřeba zdrojFps ≥ výstupFps/rychlost). Ručně to jde "
-                + "v editoru křivky — přiznaně, přes žlutou zónu."
-        case .blockedByTransition:
-            return "Na střihu klipu leží přechod — napřed ho odeber."
-        case .beatFitOnMusicClip:
-            return "Tohle je hudební klip — dopasovávají se záběry na něj, "
-                + "ne on sám na sebe."
-        default:
-            return "Dopasování tady nejde provést."
-        }
+        error.beatFitReason(frameRate: controller.project.timeline.frameRate)
     }
 
     @objc private func menuSplit(_ sender: Any?) {

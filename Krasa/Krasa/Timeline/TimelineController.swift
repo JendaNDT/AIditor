@@ -290,6 +290,30 @@ final class TimelineController: ObservableObject {
     /// znamená tři uzly a tři tahy, tohle je jeden klik. Když už klip
     /// křivku má, akce ji smaže. Dvojče řeší model (`setSpeedRamp` je
     /// link-aware), undo jeden krok.
+    /// Rychlý preset zpomalení (fáze 18/M7): `nil` rampu zruší.
+    ///
+    /// Rozpětí se kotví tak, aby VÝSTUP zůstal dlouhý jako klip. Průměrná
+    /// rychlost easeInOut rampy je `(1 + slow) / 2` — táž symetrie, ze které
+    /// vychází referenční hodnota Spiku 0 (1× → 0,25× → 1× přes 5 s spotřebuje
+    /// 3,125 s). Pro 0,25× vyjde 0,625, tedy přesně číslo, se kterým počítal
+    /// `toggleClassicRamp` před zobecněním.
+    func setClassicRamp(_ clipID: ClipID, slowSpeed: Double?) {
+        guard let clip = project.timeline.clip(clipID) else { return }
+        var updated = project
+        if let slowSpeed {
+            let consumption = project.sourceConsumption(of: clip)
+            let span = SourceTime(seconds: consumption.seconds * (1 + slowSpeed) / 2)
+            let ramp = SpeedRamp.classicSlowMotion(from: clip.sourceStart,
+                                                   spanning: span,
+                                                   slowSpeed: slowSpeed)
+            guard (try? updated.setSpeedRamp(clipID: clipID, ramp: ramp)) != nil else { return }
+        } else {
+            guard (try? updated.setSpeedRamp(clipID: clipID, ramp: nil)) != nil else { return }
+        }
+        undo.record(project)
+        project = updated
+    }
+
     func toggleClassicRamp(_ clipID: ClipID) {
         guard let clip = project.timeline.clip(clipID) else { return }
         var updated = project

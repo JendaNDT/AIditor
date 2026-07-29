@@ -344,6 +344,22 @@ final class RampEditorView: NSView {
 
     // MARK: - Události
 
+    /// Kde na obrazovce leží uzly křivky (fáze 18, modul 7).
+    ///
+    /// Měřicí okno pro `--panel-check`: uzel neleží doprostřed plochy, ale
+    /// tam, kam ho posadí mapování rychlosti na `y`. Bez tohohle by kontrola
+    /// tažení musela pozici hádat — a hádala špatně (první verze táhla ze
+    /// středu plochy, kde žádný uzel nebyl, a „prošla" tím, že se nic nestalo).
+    var nodePoints: [(index: Int, point: CGPoint)] {
+        guard let clip = editedClip else { return [] }
+        let duration = Double(clip.duration.count)
+        return controller.project.rampEditorNodes(of: clip).map {
+            (index: $0.index,
+             point: CGPoint(x: x(forFrame: $0.outputFrame, duration: duration),
+                            y: y(forSpeed: $0.speed)))
+        }
+    }
+
     private func hitNode(at point: NSPoint) -> Int? {
         guard let clip = editedClip else { return nil }
         let duration = Double(clip.duration.count)

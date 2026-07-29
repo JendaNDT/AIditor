@@ -630,3 +630,249 @@ extension AppModel {
         try? await Task.sleep(nanoseconds: Self.coolDownSeconds * 1_000_000_000)
     }
 }
+
+// MARK: - Připnutý panel (fáze 18, modul 7)
+
+extension AppModel {
+
+    /// Kontrola fáze 18, modulu 7 (`--panel-check`).
+    ///
+    ///  A) **Presety zpomalení**: dají rampu s očekávanou nejnižší rychlostí
+    ///     a jsou to jednotlivé undo kroky. Preset pod mezí čistého zpomalení
+    ///     se pozná (panel ho vypíná a nese důvod).
+    ///  B) **Editor křivky v boxu 150 px** se dá ovládat myší stejně jako
+    ///     dřív v pásu 132 px: dvojklik přidá uzel, tažení ho posune,
+    ///     Escape tažení zruší, ⌘Z vrátí.
+    ///  C) **⌘4** panel skryje a šířku dostane osa.
+    func verifyPinnedPanel() async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+
+        var project = Project.empty()
+        project.addAsset(source)
+        var clipID: ClipID?
+        do {
+            let clip = try project.makeClip(assetID: source.id)
+            try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+            clipID = clip.id
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        guard let clipID else { return }
+        timeline.project = project
+        timeline.selectClips([clipID])
+        panelVisible = true
+        panelTab = .speed
+        railSection = .media
+
+        var failures = 0
+        func check(_ ok: Bool, _ text: String) {
+            if !ok { failures += 1 }
+            print("\(ok ? "✅" : "❌") \(text)")
+        }
+
+        print("=== A) presety zpomalení ===")
+        let limit = timeline.project.pureSlowdownLimit(
+            of: timeline.project.timeline.clip(clipID)!)
+        print(String(format: "   zdroj %.2f fps → mez čistého zpomalení %.3f×",
+                     source.measuredFrameRate, limit ?? 0))
+
+        // Táž tolerance jako v panelu — kontrola musí měřit, co produkt dělá.
+        let usableLimit = (limit ?? 0) * (1 - SpeedTab.presetLimitTolerance)
+        for speed in [0.5, 0.25] where limit == nil || speed >= usableLimit {
+            timeline.setClassicRamp(clipID, slowSpeed: speed)
+            let slowest = timeline.project.timeline.clip(clipID)?
+                .speedRamp?.nodes.map(\.speed).min()
+            check(slowest != nil && abs(slowest! - speed) < 1e-6,
+                  String(format: "preset %.3f× dal rampu s nejnižší rychlostí %.3f×",
+                         speed, slowest ?? 0))
+            // Spotřeba zdroje se presetem NESMÍ přetáhnout za konec assetu —
+            // kotvení přes (1+slow)/2 je právě proto.
+            let consumption = timeline.project.sourceConsumption(
+                of: timeline.project.timeline.clip(clipID)!).seconds
+            check(consumption <= source.duration.seconds + 1e-6,
+                  String(format: "spotřeba %.3f s se vejde do zdroje %.3f s",
+                         consumption, source.duration.seconds))
+        }
+
+        timeline.setClassicRamp(clipID, slowSpeed: nil)
+        check(timeline.project.timeline.clip(clipID)?.speedRamp == nil,
+              "tlačítko Bez rampy rampu zrušilo")
+
+        // Jeden preset = jeden undo krok.
+        timeline.setClassicRamp(clipID, slowSpeed: 0.5)
+        timeline.undoStep()
+        check(timeline.project.timeline.clip(clipID)?.speedRamp == nil,
+              "⌘Z vrátil preset jedním krokem")
+
+        // Preset pod mezí: predikát, kterým panel vypíná tlačítko.
+        if let limit {
+            let tooDeep = limit / 2
+            check(tooDeep < limit, String(format:
+                "preset %.3f× je pod mezí %.3f× — panel ho vypíná a nese důvod",
+                tooDeep, limit))
+        }
+
+        print("")
+        print("=== B) editor křivky v boxu 150 px ===")
+        guard let editor = await waitForRampEditor() else {
+            print("❌ editor křivky se nedostal do okna"); return
+        }
+        print(String(format: "   plocha editoru %.0f×%.0f bodů",
+                     editor.bounds.width, editor.bounds.height))
+        check(abs(editor.bounds.height - 150) <= 1,
+              String(format: "box má výšku 150 (má %.0f)", editor.bounds.height))
+        check(editor.bounds.width > 380,
+              String(format: "box je širší než dosavadní pás (%.0f > 380)", editor.bounds.width))
+
+        timeline.setClassicRamp(clipID, slowSpeed: 0.5)
+        let nodesBefore = timeline.project.timeline.clip(clipID)?.speedRamp?.nodes.count ?? 0
+
+        // Dvojklik doprostřed přidá uzel.
+        synthesizeClick(on: editor, at: CGPoint(x: editor.bounds.midX,
+                                                y: editor.bounds.midY), clickCount: 2)
+        let nodesAfter = timeline.project.timeline.clip(clipID)?.speedRamp?.nodes.count ?? 0
+        check(nodesAfter == nodesBefore + 1,
+              "dvojklik přidal uzel (\(nodesBefore) → \(nodesAfter))")
+
+        // Tažení uzlu. ⚠️ Porovnává se CELÝ seznam rychlostí, ne jeho
+        // minimum: přidaný uzel leží na křivce v jejím nejnižším bodě, takže
+        // po posunutí nahoru zůstane minimem pořád původní uzel a test by
+        // prošel i u tažení, které nic neudělá. (První verze na to naletěla.)
+        func speeds() -> [Double] {
+            timeline.project.timeline.clip(clipID)?.speedRamp?.nodes.map(\.speed) ?? []
+        }
+        let beforeDrag = speeds()
+        // Pozice uzlu se ČTE z editoru, nehádá. Uzel leží tam, kam ho posadí
+        // mapování rychlosti na y — ne doprostřed plochy.
+        guard let target = editor.nodePoints.min(by: {
+            abs($0.point.x - editor.bounds.midX) < abs($1.point.x - editor.bounds.midX)
+        }) else {
+            print("❌ editor nehlásí žádné uzly"); return
+        }
+        print(String(format: "   táhnu uzlem %d z (%.0f, %.0f)",
+                     target.index, target.point.x, target.point.y))
+        synthesizeDrag(on: editor, from: target.point,
+                       to: CGPoint(x: target.point.x, y: target.point.y + 30))
+        let afterDrag = speeds()
+        check(afterDrag != beforeDrag,
+              "tažení uzlu změnilo křivku ("
+              + beforeDrag.map { String(format: "%.2f", $0) }.joined(separator: "/")
+              + " → " + afterDrag.map { String(format: "%.2f", $0) }.joined(separator: "/") + ")")
+
+        // ⌘Z vrátí tažení jedním krokem.
+        timeline.undoStep()
+        check(speeds() == beforeDrag, "⌘Z vrátil tažení celé")
+
+        // Escape zruší ROZJETÉ tažení — model se během něj nesahá.
+        let beforeCancelled = timeline.project.timeline.clip(clipID)?.speedRamp
+        synthesizeDragCancelledByEscape(
+            on: editor,
+            from: CGPoint(x: editor.bounds.midX, y: editor.bounds.midY),
+            to: CGPoint(x: editor.bounds.midX, y: editor.bounds.midY - 40))
+        check(timeline.project.timeline.clip(clipID)?.speedRamp == beforeCancelled,
+              "Escape zrušil tažení a křivka zůstala, jak byla")
+
+        print("")
+        print("=== C) ⌘4 skryje panel a šířku dostane osa ===")
+        guard let pane = timelinePane, let content = pane.window?.contentView else {
+            print("❌ osa není v okně"); return
+        }
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        let widthWithPanel = pane.bounds.width
+        panelVisible = false
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        let widthWithout = pane.bounds.width
+        panelVisible = true
+        print(String(format: "   šířka osy %.0f → %.0f bodů (okno %.0f)",
+                     widthWithPanel, widthWithout, content.bounds.width))
+        check(widthWithout > widthWithPanel,
+              "osa se po skrytí panelu rozšířila")
+        check(abs((widthWithout - widthWithPanel)
+                  - (KrasaUI.Metric.pinnedPanelWidth + 1)) <= 1,
+              String(format: "získala právě šířku panelu i s předělem (%.0f, čekáno %.0f)",
+                     widthWithout - widthWithPanel, KrasaUI.Metric.pinnedPanelWidth + 1))
+
+        print("")
+        print(failures == 0 ? "✅ PANEL SEDÍ" : "❌ neshod: \(failures)")
+    }
+
+    // MARK: Pomocníci
+
+    /// Najde editor křivky v hierarchii okna. Panel ho staví ze SwiftUI,
+    /// takže se na něj nedá držet odkaz — hledá se průchodem.
+    private func waitForRampEditor(timeout: TimeInterval = 10) async -> RampEditorView? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let window = hostView?.window,
+               let content = window.contentView,
+               let editor = Self.findRampEditor(in: content), editor.bounds.height > 1 {
+                return editor
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        return nil
+    }
+
+    private static func findRampEditor(in view: NSView) -> RampEditorView? {
+        if let editor = view as? RampEditorView { return editor }
+        for sub in view.subviews {
+            if let found = findRampEditor(in: sub) { return found }
+        }
+        return nil
+    }
+
+    private func synthesizeClick(on view: NSView, at point: CGPoint, clickCount: Int) {
+        guard let window = view.window else { return }
+        if let down = NSEvent.mouseEvent(with: .leftMouseDown,
+                                         location: view.convert(point, to: nil),
+                                         modifierFlags: [], timestamp: 0,
+                                         windowNumber: window.windowNumber, context: nil,
+                                         eventNumber: 0, clickCount: clickCount, pressure: 1) {
+            view.mouseDown(with: down)
+        }
+        if let up = NSEvent.mouseEvent(with: .leftMouseUp,
+                                        location: view.convert(point, to: nil),
+                                        modifierFlags: [], timestamp: 0,
+                                        windowNumber: window.windowNumber, context: nil,
+                                        eventNumber: 0, clickCount: clickCount, pressure: 1) {
+            view.mouseUp(with: up)
+        }
+    }
+
+    private func synthesizeDrag(on view: NSView, from: CGPoint, to: CGPoint) {
+        guard let window = view.window else { return }
+        func event(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: view.convert(point, to: nil),
+                               modifierFlags: [], timestamp: 0,
+                               windowNumber: window.windowNumber, context: nil,
+                               eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        if let down = event(.leftMouseDown, from) { view.mouseDown(with: down) }
+        if let moved = event(.leftMouseDragged, to) { view.mouseDragged(with: moved) }
+        if let up = event(.leftMouseUp, to) { view.mouseUp(with: up) }
+    }
+
+    /// Tažení, které se nepustí, ale zruší Escapem.
+    private func synthesizeDragCancelledByEscape(on view: NSView, from: CGPoint, to: CGPoint) {
+        guard let window = view.window else { return }
+        func event(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: view.convert(point, to: nil),
+                               modifierFlags: [], timestamp: 0,
+                               windowNumber: window.windowNumber, context: nil,
+                               eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        if let down = event(.leftMouseDown, from) { view.mouseDown(with: down) }
+        if let moved = event(.leftMouseDragged, to) { view.mouseDragged(with: moved) }
+        if let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                                         timestamp: 0, windowNumber: window.windowNumber,
+                                         context: nil, characters: "\u{1b}",
+                                         charactersIgnoringModifiers: "\u{1b}",
+                                         isARepeat: false, keyCode: 53) {
+            view.keyDown(with: escape)
+        }
+    }
+}

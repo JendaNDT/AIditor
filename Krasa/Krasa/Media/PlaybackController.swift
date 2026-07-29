@@ -101,14 +101,17 @@ final class PlaybackController: ObservableObject {
     /// projektu — kompozice žádnou vlastní frekvenci nemá.
     func loadComposition(_ composition: AVComposition, frameRate: Int,
                          audioMix: AVAudioMix? = nil,
-                         videoComposition: AVVideoComposition? = nil) {
+                         videoComposition: AVVideoComposition? = nil,
+                         pitchAlgorithm: AVAudioTimePitchAlgorithm = .timeDomain) {
         pause()
         let item = AVPlayerItem(asset: composition)
         // Korekce výšky pro škálované zvukové úseky rampy. `.timeDomain`
         // zachovává transienty (rozhodnutí ze Spiku 0 — `.spectral` je
         // rozmazává do plechovosti); na úsecích 1× nedělá nic.
         // <https://developer.apple.com/documentation/avfoundation/avplayeritem/audiotimepitchalgorithm-swift.property>
-        item.audioTimePitchAlgorithm = .timeDomain
+        // Od fáze 18 volitelné (panel Rychlost) — výchozí zůstává
+        // `.timeDomain`, protože zachovává transienty.
+        item.audioTimePitchAlgorithm = pitchAlgorithm
         // Per-track hlasitost a mute (fáze 7, modul 2).
         // <https://developer.apple.com/documentation/avfoundation/avplayeritem/audiomix>
         item.audioMix = audioMix

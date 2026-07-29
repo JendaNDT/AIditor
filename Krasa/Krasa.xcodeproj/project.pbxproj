@@ -50,6 +50,8 @@
 		F18200000000000000000008 /* ShellChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000008 /* ShellChecks.swift */; };
 		F18200000000000000000009 /* AnalysisProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000009 /* AnalysisProgress.swift */; };
 		F1820000000000000000000A /* TimelineLayerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000A /* TimelineLayerBar.swift */; };
+		F1820000000000000000000B /* PinnedPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000B /* PinnedPanel.swift */; };
+		F1820000000000000000000C /* SpeedTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000C /* SpeedTab.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -92,6 +94,8 @@
 		F18100000000000000000008 /* ShellChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellChecks.swift; sourceTree = "<group>"; };
 		F18100000000000000000009 /* AnalysisProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisProgress.swift; sourceTree = "<group>"; };
 		F1810000000000000000000A /* TimelineLayerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineLayerBar.swift; sourceTree = "<group>"; };
+		F1810000000000000000000B /* PinnedPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedPanel.swift; sourceTree = "<group>"; };
+		F1810000000000000000000C /* SpeedTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedTab.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -192,6 +196,7 @@
 			isa = PBXGroup;
 			children = (
 				F18000000000000000000002 /* Shell */,
+				F18000000000000000000003 /* Panels */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -210,6 +215,15 @@
 				F18100000000000000000007 /* LegacySettingsPanel.swift */,
 			);
 			path = Shell;
+			sourceTree = "<group>";
+		};
+		F18000000000000000000003 /* Panels */ = {
+			isa = PBXGroup;
+			children = (
+				F1810000000000000000000B /* PinnedPanel.swift */,
+				F1810000000000000000000C /* SpeedTab.swift */,
+			);
+			path = Panels;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -329,6 +343,8 @@
 				F18200000000000000000006 /* StatusBar.swift in Sources */,
 				F18200000000000000000009 /* AnalysisProgress.swift in Sources */,
 				F1820000000000000000000A /* TimelineLayerBar.swift in Sources */,
+				F1820000000000000000000B /* PinnedPanel.swift in Sources */,
+				F1820000000000000000000C /* SpeedTab.swift in Sources */,
 				F18200000000000000000007 /* LegacySettingsPanel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

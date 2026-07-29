@@ -35,6 +35,8 @@ final class AppModel: ObservableObject {
     @Published var railSection: RailSection = .media
     /// Připnutý panel vpravo od osy (⌘4).
     @Published var panelVisible = true
+    /// Vybraná záložka panelu (fáze 18, modul 7).
+    @Published var panelTab: PanelTab = .speed
     /// Okno je na celé obrazovce. Plní `WindowConfigurator` z notifikací
     /// `didEnterFullScreen` / `didExitFullScreen` — `styleMask` se přepíná
     /// už na ZAČÁTKU přechodu, takže se na něj ptát nestačí.
@@ -50,6 +52,39 @@ final class AppModel: ObservableObject {
     /// v modelu — čip i stavový řádek na něj koukají zvlášť, a kdyby seděl
     /// v `AppModelu`, překresloval by se s ním každý řádek stavu.
     let analysis = AnalysisProgress()
+
+    /// Korekce výšky pro škálované úseky rampy (fáze 18, modul 7).
+    ///
+    /// ⚠️ **Je to nastavení PROJEKTU, ne klipu, a nejde to jinak.**
+    /// `audioTimePitchAlgorithm` je vlastnost `AVPlayerItem`u a výstupu
+    /// čtečky, ne stopy ani segmentu — jemnější zrno API nedovoluje.
+    /// Rozbalovátko v panelu proto platí na celý film.
+    ///
+    /// Výchozí `.timeDomain` (rozhodnutí ze Spiku 0: zachovává transienty,
+    /// `.spectral` je rozmazává do plechovosti). Volitelné zůstává proto, že
+    /// na drženém hudebním tónu je fázový vokodér lepší.
+    ///
+    /// ⚠️ Přiznaná mez v1: drží se v `UserDefaults`, ne v projektovém
+    /// souboru. Dva projekty se stejným nastavením tedy nejsou dva různé
+    /// projekty — je to zatím volba aplikace.
+    @Published var pitchAlgorithm: AVAudioTimePitchAlgorithm = AppModel.storedPitchAlgorithm() {
+        didSet {
+            guard pitchAlgorithm != oldValue else { return }
+            UserDefaults.standard.set(pitchAlgorithm.rawValue, forKey: Self.pitchKey)
+            // Náhled musí říct pravdu hned. Korekce výšky se nastavuje na
+            // `AVPlayerItem`u, takže se musí postavit NOVÝ item — zahozením
+            // zapamatovaného tvaru se přestavba přestane přeskakovat.
+            builtTimelineShape = nil
+            rebuildTimelineComposition()
+        }
+    }
+
+    private static let pitchKey = "cz.projektkrasa.pitchAlgorithm"
+
+    private static func storedPitchAlgorithm() -> AVAudioTimePitchAlgorithm {
+        guard let raw = UserDefaults.standard.string(forKey: pitchKey) else { return .timeDomain }
+        return AVAudioTimePitchAlgorithm(rawValue: raw)
+    }
 
     let importer = MediaImporter()
     let controller = PlaybackController()
@@ -752,7 +787,7 @@ final class AppModel: ObservableObject {
                 audioTracks: composition.tracks(withMediaType: .audio),
                 frameDuration: CMTime(value: ticksPerFrame,
                                       timescale: SourceTime.projectTimescale),
-                audioTimePitchAlgorithm: .timeDomain,
+                audioTimePitchAlgorithm: pitchAlgorithm,
                 outputSize: CGSize(width: canvas.width, height: canvas.height),
                 format: .hevcAAC(videoBitRate: 50_000_000, audioBitRate: 256_000),
                 // Hlasitosti stop do exportu STEJNOU cestou jako do
@@ -3328,7 +3363,8 @@ final class AppModel: ObservableObject {
             self.playerContent = .timeline
             self.controller.loadComposition(built.composition, frameRate: frameRate,
                                             audioMix: built.audioMix(project: project),
-                                            videoComposition: built.videoComposition)
+                                            videoComposition: built.videoComposition,
+                                            pitchAlgorithm: self.pitchAlgorithm)
             self.controller.seek(to: CompositionBuilder.time(of: self.timeline.playhead,
                                                              frameRate: frameRate))
         }
@@ -3739,6 +3775,8 @@ struct ContentView: View {
                     await model.verifyAnalysisStatus()
                 } else if arguments.contains("--layers-check") {
                     await model.verifyTimelineLayers()
+                } else if arguments.contains("--panel-check") {
+                    await model.verifyPinnedPanel()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
@@ -3818,7 +3856,7 @@ struct InspectorStrip: View {
 /// Inspektor vybraného titulku: text, šablona, zarovnání, smazání.
 /// Text se píše ŽIVĚ (titulek se mění v náhledu při psaní) a undo krok
 /// se skládá kolem fokusu — vzorec posuvníku hlasitosti.
-private struct TitleInspector: View {
+struct TitleInspector: View {
     @ObservedObject var timeline: TimelineController
     let titleID: TitleClipID
     let title: TitleClip
@@ -3877,7 +3915,7 @@ private struct TitleInspector: View {
 /// Výřezy drží poměr plátna (v normalizovaných jednotkách w == h) a sedí
 /// ve středu — nájezd/odjezd, klasika svatebních prezentací. Volné
 /// obdélníky až bude důvod; model je umí už teď.
-private struct PhotoInspector: View {
+struct PhotoInspector: View {
     @ObservedObject var timeline: TimelineController
     let clipID: ClipID
 
@@ -3958,7 +3996,7 @@ private struct PhotoInspector: View {
 /// síly 0–100 %. Výběr = jeden undo krok; posuvník skládá undo kolem
 /// tažení (vzorec hlasitosti a zoomu). Vzhled presetů drží
 /// `ColorPresetFilter` — tady je jen volba, přesně jako v modelu.
-private struct ColorGradePanel: View {
+struct ColorGradePanel: View {
     @ObservedObject var timeline: TimelineController
     let clipID: ClipID
 
@@ -4037,7 +4075,7 @@ private struct ColorGradePanel: View {
 /// se drží lokálně a zapisuje při odchodu z pole nebo Enterem — živý
 /// zápis nejde: prázdný text úsek MAŽE a při psaní je prázdno legální
 /// mezistav.
-private struct SpeechInspector: View {
+struct SpeechInspector: View {
     @ObservedObject var timeline: TimelineController
     let selection: TimelineController.SpeechSelection
     let currentText: String

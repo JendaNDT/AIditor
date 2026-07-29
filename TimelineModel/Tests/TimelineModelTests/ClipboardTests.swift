@@ -249,6 +249,27 @@ final class ClipboardTests: XCTestCase {
         XCTAssertValid(f.project)
     }
 
+    // MARK: Rozsah pro shift-klik
+
+    func testClipRangeCoversEverythingBetween() throws {
+        var f = Fixture(seconds: 120)
+        var ids: [ClipID] = []
+        for i in 0..<5 { ids.append(try f.addClip(start: i * 100, duration: 50)) }
+
+        XCTAssertEqual(f.project.clipRange(from: ids[1], to: ids[3]), Array(ids[1...3]))
+        XCTAssertEqual(f.project.clipRange(from: ids[3], to: ids[1]), Array(ids[1...3]),
+                       "směr nerozhoduje")
+        XCTAssertEqual(f.project.clipRange(from: ids[2], to: ids[2]), [ids[2]])
+    }
+
+    /// Přes stopy rozsah nedává smysl — vrací se jen cíl.
+    func testClipRangeAcrossTracksReturnsTargetOnly() throws {
+        var f = Fixture(seconds: 60)
+        let video = try f.addClip(start: 0, duration: 50)
+        let audio = try f.addClip(start: 200, duration: 50, on: f.a1)
+        XCTAssertEqual(f.project.clipRange(from: video, to: audio), [audio])
+    }
+
     // MARK: Rámečkový výběr
 
     func testRubberBandSelectsIntersectingClips() throws {

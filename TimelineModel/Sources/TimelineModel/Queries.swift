@@ -105,6 +105,19 @@ extension Project {
         return Frames(-back.count) ... forward
     }
 
+    /// Souvislý rozsah klipů na téže stopě, oba krajní včetně (shift-klik,
+    /// fáze 17).
+    ///
+    /// Klipy na RŮZNÝCH stopách rozsah nedávají — co je „mezi" klipem na V1
+    /// a klipem na A2? Tam se vrací jen cíl a shift se chová jako prostý klik.
+    public func clipRange(from anchor: ClipID, to target: ClipID) -> [ClipID] {
+        guard let a = timeline.locate(anchor), let b = timeline.locate(target),
+              a.trackIndex == b.trackIndex else { return [target] }
+        let lower = Swift.min(a.clipIndex, b.clipIndex)
+        let upper = Swift.max(a.clipIndex, b.clipIndex)
+        return timeline.tracks[a.trackIndex].clips[lower...upper].map(\.id)
+    }
+
     /// Klipy svázané s tímhle (bez něj samotného).
     public func linkedPartners(of clipID: ClipID) -> [Clip] {
         guard let clip = timeline.clip(clipID), let link = clip.linkID else { return [] }

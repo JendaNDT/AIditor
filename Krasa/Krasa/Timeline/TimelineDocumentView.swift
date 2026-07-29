@@ -397,6 +397,8 @@ final class TimelineDocumentView: NSView {
     private let partnerGhostLayer = CALayer()
     /// Svislá vodicí čára na kandidátovi, na kterého se přichytilo.
     private let snapGuideLayer = CALayer()
+    /// Rámeček výběru (fáze 17, modul 2).
+    private let bandLayer = CALayer()
 
     init(controller: TimelineController) {
         self.controller = controller
@@ -421,6 +423,10 @@ final class TimelineDocumentView: NSView {
         }
         snapGuideLayer.isHidden = true
         dragOverlay.addSublayer(snapGuideLayer)
+
+        bandLayer.isHidden = true
+        bandLayer.borderWidth = 1
+        dragOverlay.addSublayer(bandLayer)
 
         rebuildLanes()
     }
@@ -1026,11 +1032,29 @@ final class TimelineDocumentView: NSView {
     /// Náhled fade během tažení — `applyFades` mu dává přednost před modelem.
     private var fadePreview: (clipID: ClipID, fades: AudioFades)?
 
+    /// Rozjetý rámečkový výběr (fáze 17, modul 2).
+    private struct BandDragState {
+        let origin: NSPoint
+        /// Tažení se shiftem nebo ⌘ k výběru PŘIDÁVÁ.
+        let adding: Bool
+        var current: NSPoint? = nil
+    }
+    private var bandDrag: BandDragState?
+
+    /// Klik s modifikátorem, o kterém se rozhodne až při puštění: ⌘ a shift
+    /// znamenají při TAŽENÍ něco jiného (slip, vypnuté přichytávání), takže
+    /// se výběr mění, jen když se myš nepohnula.
+    private enum PendingSelection {
+        case toggle(ClipID)
+        case extend(ClipID)
+    }
+    private var pendingSelection: PendingSelection?
+
     /// Drží uživatel něco rozjetého? Auto-scroll za hlavou (fáze 17) se po
     /// tu dobu MUSÍ vypnout — jinak by osa ujížděla pod taženým klipem.
     var hasActiveDrag: Bool {
         fadeDrag != nil || transitionDrag != nil || titleDrag != nil
-            || controller.interaction.isDragging
+            || bandDrag != nil || controller.interaction.isDragging
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -1087,14 +1111,35 @@ final class TimelineDocumentView: NSView {
 
         guard let hit = controller.geometry.hitTest(x: point.x, y: point.y,
                                                     in: controller.project.timeline) else {
-            if !controller.selection.isEmpty { controller.selection = [] }
+            // Prázdná plocha: začíná rámečkový výběr (fáze 17). Výběr se
+            // ruší až při puštění — kdyby se rušil hned, tažení se shiftem
+            // by nemělo co rozšiřovat.
+            bandDrag = BandDragState(origin: point,
+                                     adding: event.modifierFlags.contains(.shift)
+                                          || event.modifierFlags.contains(.command))
             controller.selectTitle(nil)
             controller.selectSpeech(nil)
             controller.selectTransition(nil)
             return
         }
 
-        controller.selectClips([hit.clipID])
+        // Modifikátory u kliku na klip (fáze 17). ⌘ i shift mají na ose
+        // druhý význam PŘI TAŽENÍ (⌘ = slip, shift = bez přichytávání),
+        // takže se o výběru rozhodne až při puštění — když se nepohnulo,
+        // byl to klik a platí výběr; když ano, platí tažení.
+        if event.modifierFlags.contains(.shift) {
+            pendingSelection = .extend(hit.clipID)
+        } else if event.modifierFlags.contains(.command) {
+            pendingSelection = .toggle(hit.clipID)
+        } else {
+            pendingSelection = nil
+            // Klik do klipu, který je součástí většího výběru, výběr NEruší —
+            // jinak by se nedalo z výběru rovnou spustit hromadná akce
+            // z kontextového menu.
+            if !controller.selection.contains(hit.clipID) {
+                controller.selectClips([hit.clipID])
+            }
+        }
 
         // Úchyt zvukového fade (fáze 16): horní pás zvukového klipu,
         // ±8 bodů od vrcholu klínu. Má přednost před trimem — trim bere
@@ -1173,6 +1218,16 @@ final class TimelineDocumentView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        // Jakmile se táhne, klik s modifikátorem přestává být klikem —
+        // platí tažení (slip / bez přichytávání).
+        pendingSelection = nil
+
+        if var band = bandDrag {
+            band.current = convert(event.locationInWindow, from: nil)
+            bandDrag = band
+            updateBandOverlay(band)
+            return
+        }
         if let drag = fadeDrag {
             let point = convert(event.locationInWindow, from: nil)
             updateFadeDrag(drag, atX: point.x)
@@ -1196,6 +1251,25 @@ final class TimelineDocumentView: NSView {
             in: controller.project,
             snapping: !event.modifierFlags.contains(.shift))
         updateDragOverlay(preview)
+    }
+
+    /// Rámeček výběru. Jen rám a průsvitná výplň, žádný diff — vrstva se
+    /// při tažení jen přepisuje (vzorec ducha).
+    private func updateBandOverlay(_ band: BandDragState) {
+        guard let current = band.current else { bandLayer.isHidden = true; return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            bandLayer.borderColor = TimelinePalette.clipSelectedStroke.cgColor
+            bandLayer.backgroundColor = TimelinePalette.clipSelectedStroke
+                .withAlphaComponent(0.15).cgColor
+        }
+        bandLayer.isHidden = false
+        bandLayer.frame = CGRect(x: min(band.origin.x, current.x),
+                                 y: min(band.origin.y, current.y),
+                                 width: abs(current.x - band.origin.x),
+                                 height: abs(current.y - band.origin.y))
+        CATransaction.commit()
     }
 
     /// Náhled tažení fade: délka od hrany klipu ke kurzoru, zaražená
@@ -1301,12 +1375,45 @@ final class TimelineDocumentView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        // Klik s modifikátorem, který se nerozvinul v tažení (fáze 17).
+        if let pending = pendingSelection {
+            pendingSelection = nil
+            controller.interaction.cancel()
+            _ = controller.undo.cancelInteraction()
+            updateDragOverlay(nil)
+            switch pending {
+            case .toggle(let id): controller.toggleSelection(id)
+            case .extend(let id): controller.extendSelection(to: id)
+            }
+            return
+        }
+
+        if let band = bandDrag {
+            bandDrag = nil
+            bandLayer.isHidden = true
+            if let current = band.current {
+                controller.selectClips(in: TimelineRect(from: (x: band.origin.x, y: band.origin.y),
+                                                        to: (x: current.x, y: current.y)),
+                                       adding: band.adding)
+            } else if !band.adding {
+                // Klik do prázdna bez tažení = zrušit výběr (dosavadní chování).
+                if !controller.selection.isEmpty { controller.selectClips([]) }
+            }
+            return
+        }
+
         if let drag = fadeDrag {
             fadeDrag = nil
             let committed = fadePreview
             fadePreview = nil
             if let committed, committed.clipID == drag.clipID {
-                controller.setAudioFades(drag.clipID, committed.fades)
+                // Hromadná varianta (fáze 17): stejný fade dostanou všechny
+                // zvukové klipy výběru, když jich je víc a tažený je mezi nimi.
+                if controller.selection.count > 1, controller.selection.contains(drag.clipID) {
+                    controller.setAudioFadesOnSelection(committed.fades)
+                } else {
+                    controller.setAudioFades(drag.clipID, committed.fades)
+                }
             }
             refreshClips()
             return
@@ -1387,6 +1494,11 @@ final class TimelineDocumentView: NSView {
             snapGuideLayer.isHidden = true
             return
         }
+        if event.keyCode == 53, bandDrag != nil {
+            bandDrag = nil
+            bandLayer.isHidden = true
+            return
+        }
         if event.keyCode == 53, controller.interaction.isDragging {
             controller.interaction.cancel()
             _ = controller.undo.cancelInteraction()
@@ -1424,6 +1536,18 @@ final class TimelineDocumentView: NSView {
                 controller.splitAtPlayhead(clipID)
             }
             return
+        }
+
+        // Schránka (fáze 17, modul 2). ⌘A vybere všechny klipy — bez něj
+        // je hromadná operace na dvě stě klipů pořád rámeček přes celou osu.
+        if event.modifierFlags.contains(.command), !event.modifierFlags.contains(.option) {
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "c": controller.copySelection(); return
+            case "x": controller.cutSelection(); return
+            case "v": controller.pasteAtPlayhead(); return
+            case "a": controller.selectAllClips(); return
+            default: break
+            }
         }
 
         // JKL (fáze 17). Písmena bez modifikátoru, proto AŽ za zkratkami
@@ -1583,7 +1707,11 @@ final class TimelineDocumentView: NSView {
                                                     in: controller.project.timeline) else {
             return nil
         }
-        controller.selectClips([hit.clipID])
+        // Pravý klik do klipu, který je součástí výběru, výběr NECHÁ být —
+        // jinak by se hromadná akce nedala z menu vůbec spustit (fáze 17).
+        if !controller.selection.contains(hit.clipID) {
+            controller.selectClips([hit.clipID])
+        }
         menuClipID = hit.clipID
 
         let menu = NSMenu()
@@ -1661,12 +1789,25 @@ final class TimelineDocumentView: NSView {
         // křivky pod přehrávačem (modul 3).
         menu.addItem(.separator())
         let hasRamp = menuClip?.speedRamp != nil
-        let ramp = NSMenuItem(title: hasRamp ? "Zrušit rychlostní křivku"
-                                             : "Zpomalit 0,25× (klasický ramp)",
+        // Hromadná varianta (fáze 17): s víc vybranými klipy jede preset
+        // na celý výběr. Každý klip dostane rampu počítanou ze SVÉ spotřeby —
+        // uzly jsou kotvené ve zdrojovém čase konkrétního záběru, kopírovat
+        // je z cizího klipu nejde.
+        let videoSelection = controller.selection.filter { id in
+            controller.project.timeline.locate(id).map {
+                controller.project.timeline.tracks[$0.trackIndex].kind == .video
+            } ?? false
+        }
+        let bulkRamp = videoSelection.count > 1 && videoSelection.contains(hit.clipID)
+        let ramp = NSMenuItem(title: bulkRamp
+                              ? (hasRamp ? "Zrušit rychlostní křivku (\(videoSelection.count) klipů)"
+                                         : "Zpomalit 0,25× (\(videoSelection.count) klipů)")
+                              : (hasRamp ? "Zrušit rychlostní křivku"
+                                         : "Zpomalit 0,25× (klasický ramp)"),
                               action: #selector(menuToggleRamp(_:)), keyEquivalent: "")
         ramp.target = self
-        ramp.isEnabled = !isStillClip
-        if isStillClip { ramp.toolTip = "Fotka stojí sama — zpomalovat není co." }
+        ramp.isEnabled = !isStillClip || bulkRamp
+        if isStillClip && !bulkRamp { ramp.toolTip = "Fotka stojí sama — zpomalovat není co." }
         menu.addItem(ramp)
 
         // Zmrazit snímek (fáze 12, modul 3): z videa pod hlavou se udělá
@@ -1788,7 +1929,13 @@ final class TimelineDocumentView: NSView {
 
     @objc private func menuToggleRamp(_ sender: Any?) {
         guard let clipID = menuClipID else { return }
-        controller.toggleClassicRamp(clipID)
+        // S víc vybranými klipy jede dávka (jeden undo krok, přeskočené
+        // klipy se přiznají ve stavu); jinak jen ten pod kurzorem.
+        if controller.selection.count > 1, controller.selection.contains(clipID) {
+            controller.toggleClassicRampOnSelection()
+        } else {
+            controller.toggleClassicRamp(clipID)
+        }
     }
 
     @objc private func menuFitToBeat(_ sender: Any?) {

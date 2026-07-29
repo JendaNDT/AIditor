@@ -375,9 +375,104 @@ final class TimelineController: ObservableObject {
     func selectClips(_ ids: Set<ClipID>) {
         if selection != ids { selection = ids }
         if !ids.isEmpty {
+            selectionAnchor = ids.count == 1 ? ids.first : selectionAnchor
             if selectedTitle != nil { selectedTitle = nil }
             if selectedSpeech != nil { selectedSpeech = nil }
             if selectedTransition != nil { selectedTransition = nil }
+        }
+    }
+
+    // MARK: - Multi-výběr (fáze 17, modul 2)
+
+    /// Poslední klip, na který se kliklo bez modifikátoru. Od něj měří
+    /// shift-klik rozsah — bez kotvy by „rozšířit" nemělo od čeho.
+    private(set) var selectionAnchor: ClipID?
+
+    /// ⌘-klik: přidat nebo odebrat jeden klip.
+    func toggleSelection(_ id: ClipID) {
+        var ids = selection
+        if ids.contains(id) {
+            ids.remove(id)
+        } else {
+            ids.insert(id)
+            selectionAnchor = id
+        }
+        selectClips(ids)
+        if ids.isEmpty { selectionAnchor = nil }
+    }
+
+    /// Shift-klik: rozsah od kotvy k cíli (na téže stopě), přidaný k výběru.
+    /// Bez kotvy se chová jako prostý klik.
+    func extendSelection(to id: ClipID) {
+        guard let anchor = selectionAnchor, anchor != id else {
+            selectClips([id])
+            selectionAnchor = id
+            return
+        }
+        selectClips(selection.union(project.clipRange(from: anchor, to: id)))
+    }
+
+    /// Rámečkový výběr. `adding` = tažení se shiftem nebo ⌘ přidává
+    /// k dosavadnímu výběru místo aby ho nahradilo.
+    func selectClips(in rect: TimelineRect, adding: Bool) {
+        let hits = Set(geometry.clips(in: rect, in: project.timeline))
+        selectClips(adding ? selection.union(hits) : hits)
+        selectionAnchor = hits.count == 1 ? hits.first : selectionAnchor
+    }
+
+    /// ⌘A — všechny klipy osy (titulky ne, ty mají výhradní výběr).
+    func selectAllClips() {
+        let all = project.timeline.tracks.flatMap { $0.clips.map(\.id) }
+        guard !all.isEmpty else { return }
+        selectClips(Set(all))
+    }
+
+    // MARK: - Schránka (fáze 17, modul 2)
+
+    /// Stav sezení, ne dokumentu — do projektového souboru nepatří a undo
+    /// se jí netýká. Svázané dvojice a čerstvé `LinkID` řeší model.
+    @Published private(set) var clipboard = Clipboard()
+
+    /// Hlášky pro stavový řádek (vložení, které se nevejde, hromadná
+    /// operace, která část výběru přeskočila). `AppModel` to napojí na
+    /// `status`; osa sama žádný stavový řádek nemá.
+    var onStatus: ((String) -> Void)?
+
+    func copySelection() {
+        let board = project.clipboard(copying: selection)
+        guard !board.isEmpty else { return }
+        clipboard = board
+        onStatus?(board.count == 1 ? "Zkopírován 1 klip."
+                                   : "Zkopírováno \(board.count) klipů.")
+    }
+
+    func cutSelection() {
+        guard !selection.isEmpty else { return }
+        var updated = project
+        guard let board = try? updated.cut(selection), !board.isEmpty else { return }
+        undo.record(project)
+        project = updated
+        clipboard = board
+        selection = []
+        selectionAnchor = nil
+        onStatus?(board.count == 1 ? "Vyjmut 1 klip." : "Vyjmuto \(board.count) klipů.")
+    }
+
+    /// Vloží na hlavu. Buď celý obsah, nebo nic — model je atomický.
+    /// Vložené klipy se rovnou vyberou, ať je vidět, s čím se dál pracuje.
+    func pasteAtPlayhead() {
+        guard !clipboard.isEmpty else { return }
+        var updated = project
+        do {
+            let inserted = try updated.paste(clipboard, at: playhead)
+            undo.record(project)
+            project = updated
+            selectClips(inserted)
+            onStatus?(inserted.count == 1 ? "Vložen 1 klip." : "Vloženo \(inserted.count) klipů.")
+        } catch {
+            // Poctivá hláška místo tichého nic: uživatel jinak zkouší
+            // ⌘V třikrát a myslí si, že je appka rozbitá.
+            onStatus?("Na hlavě není místo — vlož jinam nebo udělej díru.")
         }
     }
 
@@ -431,6 +526,111 @@ final class TimelineController: ObservableObject {
         guard (try? updated.setColorGrade(clipID: clipID, grade)) != nil else { return }
         undo.record(project)
         project = updated
+    }
+
+    // MARK: - Hromadné operace nad výběrem (fáze 17, modul 2)
+    //
+    // Vlastní odměna modulu: preset na deset klipů je jedno kliknutí.
+    // Společné pravidlo — klipy, kde operace nedává smysl (zvuk u presetu,
+    // fotka u rampy), se PŘESKOČÍ a řekne se to; celá dávka je jeden
+    // undo krok.
+
+    /// Klipy výběru, na které operace daného druhu sedí.
+    private func selectedClips(onKind kind: TrackKind) -> [ClipID] {
+        var out: [ClipID] = []
+        for track in project.timeline.tracks where track.kind == kind {
+            for clip in track.clips where selection.contains(clip.id) { out.append(clip.id) }
+        }
+        return out
+    }
+
+    /// Barevný preset na celý výběr.
+    func setColorGradeOnSelection(_ grade: ColorGrade?) {
+        let targets = selectedClips(onKind: .video)
+        guard !targets.isEmpty else { return }
+        var updated = project
+        var changed = 0
+        for id in targets where updated.timeline.clip(id)?.colorGrade != grade {
+            if (try? updated.setColorGrade(clipID: id, grade)) != nil { changed += 1 }
+        }
+        guard changed > 0 else { return }
+        undo.record(project)
+        project = updated
+        if targets.count > 1 { onStatus?("Preset nastaven na \(changed) klipech.") }
+    }
+
+    /// Táhne se posuvník síly nad víc klipy — vzorec hlasitosti: mezistavy
+    /// legální, `beginInteraction`/`endInteraction` z nich složí jeden krok.
+    func colorGradeDragChangedOnSelection(_ grade: ColorGrade?) {
+        var updated = project
+        for id in selectedClips(onKind: .video) {
+            _ = try? updated.setColorGrade(clipID: id, grade)
+        }
+        project = updated
+    }
+
+    /// Fade na celý výběr. Délky se každému klipu zařežou zvlášť — krátký
+    /// klip dostane, co unese, místo aby operace na něm selhala.
+    func setAudioFadesOnSelection(_ fades: AudioFades?) {
+        let targets = selectedClips(onKind: .audio)
+        guard targets.count > 1 else { return }
+        var updated = project
+        var changed = 0
+        for id in targets {
+            guard let clip = updated.timeline.clip(id) else { continue }
+            let capped = fades.map { f -> AudioFades in
+                let limit = clip.duration
+                var fadeIn = Frames(min(f.fadeIn.count, limit.count))
+                let fadeOut = Frames(min(f.fadeOut.count, limit.count))
+                if fadeIn + fadeOut > limit { fadeIn = limit - fadeOut }
+                return AudioFades(fadeIn: fadeIn, fadeOut: fadeOut)
+            }
+            if (try? updated.setAudioFades(clipID: id, capped)) != nil { changed += 1 }
+        }
+        guard changed > 0 else { return }
+        undo.record(project)
+        project = updated
+        onStatus?("Fade nastaven na \(changed) klipech.")
+    }
+
+    /// Klasické zpomalení na celý výběr. Rampa se každému klipu počítá
+    /// z JEHO spotřeby — kopírovat uzly z cizího klipu nejde, jsou kotvené
+    /// ve zdrojovém čase konkrétního záběru.
+    func toggleClassicRampOnSelection() {
+        let targets = selectedClips(onKind: .video)
+        guard !targets.isEmpty else { return }
+        // Když je bez rampy aspoň jeden, dávka rampu PŘIDÁVÁ; jinak maže.
+        // Jinak by se u smíšeného výběru půlka zapnula a půlka vypnula.
+        let adding = targets.contains { project.timeline.clip($0)?.speedRamp == nil }
+
+        var updated = project
+        var changed = 0
+        var skipped = 0
+        for id in targets {
+            guard let clip = updated.timeline.clip(id) else { continue }
+            if adding {
+                guard clip.speedRamp == nil else { continue }
+                let consumption = updated.sourceConsumption(of: clip)
+                let ramp = SpeedRamp.classicSlowMotion(from: clip.sourceStart,
+                                                       spanning: SourceTime(seconds: consumption.seconds * 0.625),
+                                                       slowSpeed: 0.25)
+                if (try? updated.setSpeedRamp(clipID: id, ramp: ramp)) != nil { changed += 1 }
+                else { skipped += 1 }        // fotka, přechod na střihu, málo zdroje
+            } else {
+                if (try? updated.setSpeedRamp(clipID: id, ramp: nil)) != nil { changed += 1 }
+            }
+        }
+        guard changed > 0 else {
+            onStatus?("Zpomalení nešlo použít ani na jeden klip výběru.")
+            return
+        }
+        undo.record(project)
+        project = updated
+        if targets.count > 1 {
+            onStatus?(skipped > 0
+                      ? "Zpomalení na \(changed) klipech, \(skipped) přeskočeno."
+                      : "Zpomalení na \(changed) klipech.")
+        }
     }
 
     /// Posuvník síly — vzorec hlasitosti a zoomu: mezistavy legální,

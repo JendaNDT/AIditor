@@ -80,6 +80,10 @@ final class AppModel: ObservableObject {
         timeline.onTranscribeRequest = { [weak self] clipID in
             Task { await self?.performTranscription(clipID: clipID) }
         }
+        // Hlášky z osy (schránka, hromadné operace) do stavového řádku.
+        timeline.onStatus = { [weak self] message in
+            self?.status = message
+        }
         // JKL z osy → rychlost přehrávače (fáze 17).
         timeline.onShuttle = { [weak self] key in
             guard let self else { return }
@@ -2164,6 +2168,209 @@ final class AppModel: ObservableObject {
               : "❌ klávesy nedošly: LL→\(afterL)×, J→\(afterJ)×, K→\(afterK)×")
     }
 
+    /// Kvantitativní kontrola fáze 17, modulu 2 (`--select-check`).
+    ///
+    ///  A) výběr: ⌘-klik přepíná, shift-klik bere rozsah, rámeček protíná
+    ///  B) schránka: dvojice se kopíruje celá, kopie má ČERSTVOU vazbu
+    ///     a projekt zůstává platný (to je ta past, kvůli které modul je)
+    ///  C) hromadné operace: preset na N klipů je JEDEN undo krok
+    ///  D) celý řetězec v běžícím okně: události myši a klávesnice
+    func verifySelectionAndClipboard() async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && $0.hasAudio && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný asset s obrazem i zvukem — pusť s cestou ke klipům"); return
+        }
+        // Osa: pět klipů po 60 snímcích s mezerami po 30 + jedna svázaná
+        // dvojice obraz/zvuk na konci.
+        var project = Project.empty()
+        project.addAsset(source)
+        let v1 = project.timeline.tracks[0].id
+        let a1 = project.timeline.tracks[1].id
+        var ids: [ClipID] = []
+        do {
+            for i in 0..<5 {
+                let clip = Clip(assetID: source.id, timelineStart: Frames(i * 90),
+                                duration: Frames(60), sourceStart: .zero)
+                try project.insert(clip, onTrack: v1)
+                ids.append(clip.id)
+            }
+            let (video, audio) = try project.makeLinkedClips(assetID: source.id)
+            var v = video; v.timelineStart = Frames(600); v.duration = Frames(60)
+            var a = audio; a.timelineStart = Frames(600); a.duration = Frames(60)
+            try project.insertLinked(video: v, onVideoTrack: v1, audio: a, onAudioTrack: a1)
+            ids.append(v.id)
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        timeline.project = project
+        var geometry = timeline.geometry
+        geometry.setZoom(4)
+        timeline.geometry = geometry
+
+        print("=== A) výběr ===")
+        timeline.selectClips([ids[0]])
+        timeline.toggleSelection(ids[2])
+        let afterToggle = timeline.selection
+        timeline.toggleSelection(ids[2])
+        let afterUntoggle = timeline.selection
+        print(afterToggle == Set([ids[0], ids[2]]) && afterUntoggle == Set([ids[0]])
+              ? "✅ ⌘-klik přidá a zase odebere"
+              : "❌ ⌘-klik: \(afterToggle.count) → \(afterUntoggle.count)")
+
+        timeline.selectClips([ids[1]])
+        timeline.extendSelection(to: ids[4])
+        let range = timeline.selection
+        print(range == Set(ids[1...4])
+              ? "✅ shift-klik vzal rozsah 1–4 (\(range.count) klipy)"
+              : "❌ shift-klik vybral \(range.count) místo 4")
+
+        // Rámeček přes první tři klipy: 0–60, 90–150, 180–240 snímků
+        // → 0–960 bodů při 4 b/snímek; třetí končí na 960.
+        timeline.selectClips(in: TimelineRect(from: (x: 0, y: 5), to: (x: 800, y: 40)),
+                             adding: false)
+        let band = timeline.selection
+        print(band == Set(ids[0...2])
+              ? "✅ rámeček vzal 3 protnuté klipy, zvuk pod ním ne"
+              : "❌ rámeček vzal \(band.count) klipů")
+
+        timeline.selectAllClips()
+        let all = timeline.selection.count
+        print(all == 7 ? "✅ ⌘A vzalo všech 7 klipů (6 obrazových + 1 zvukový)"
+                       : "❌ ⌘A vzalo \(all) klipů")
+
+        print("\n=== B) schránka ===")
+        // Vybraný jen OBRAZ svázané dvojice — zvuk musí jít s ním.
+        timeline.selectClips([ids[5]])
+        timeline.copySelection()
+        print(timeline.clipboard.count == 2
+              ? "✅ kopie svázaného obrazu vzala i zvuk (2 položky)"
+              : "❌ ve schránce je \(timeline.clipboard.count) položek")
+
+        let originalLink = timeline.project.timeline.clip(ids[5])?.linkID
+        timeline.setPlayheadFromUser(Frames(1200))
+        timeline.pasteAtPlayhead()
+        let pasted = timeline.selection
+        let pastedLinks = Set(pasted.compactMap { timeline.project.timeline.clip($0)?.linkID })
+        let violations = timeline.project.validate()
+        print(pasted.count == 2 && pastedLinks.count == 1 && pastedLinks.first != originalLink
+              ? "✅ vložená dvojice drží pohromadě a má ČERSTVOU vazbu"
+              : "❌ vloženo \(pasted.count) klipů, vazeb \(pastedLinks.count), shoda s originálem: \(pastedLinks.first == originalLink)")
+        print(violations.isEmpty ? "✅ projekt po vložení bez porušených invariantů"
+                                 : "❌ porušené invarianty: \(violations)")
+
+        // Vložení na obsazené místo nesmí udělat NIC.
+        let before = timeline.project
+        timeline.setPlayheadFromUser(Frames(0))
+        timeline.pasteAtPlayhead()
+        print(timeline.project == before
+              ? "✅ vložení na obsazené místo projekt nezměnilo (\"\(status)\")"
+              : "❌ vložení na obsazené místo osu změnilo")
+
+        print("\n=== C) hromadné operace ===")
+        timeline.selectClips(Set(ids[0...4]))
+        let undoBefore = timeline.undo.canUndo
+        timeline.setColorGradeOnSelection(ColorGrade(preset: .blackAndWhite, intensity: 1.0))
+        let graded = ids[0...4].filter { timeline.project.timeline.clip($0)?.colorGrade != nil }.count
+        timeline.undoStep()
+        let afterUndo = ids[0...4].filter { timeline.project.timeline.clip($0)?.colorGrade != nil }.count
+        print(graded == 5 && afterUndo == 0
+              ? "✅ preset na 5 klipů jedním voláním, ⌘Z vrátil všech 5 naráz (jeden undo krok)"
+              : "❌ obarveno \(graded), po undo zůstalo \(afterUndo) (undo bylo dostupné: \(undoBefore))")
+
+        timeline.selectClips(Set(ids[0...4]))
+        timeline.toggleClassicRampOnSelection()
+        let ramped = ids[0...4].filter { timeline.project.timeline.clip($0)?.speedRamp != nil }.count
+        timeline.undoStep()
+        let rampAfterUndo = ids[0...4].filter { timeline.project.timeline.clip($0)?.speedRamp != nil }.count
+        print(ramped >= 1 && rampAfterUndo == 0
+              ? "✅ zpomalení na \(ramped) klipech, ⌘Z je vrátil naráz (\"\(status)\")"
+              : "❌ zpomaleno \(ramped), po undo \(rampAfterUndo)")
+
+        print("\n=== D) celý řetězec v běžícím okně ===")
+        NSApp.activate(ignoringOtherApps: true)
+        let deadline = Date().addingTimeInterval(10)
+        while timelinePane?.window == nil, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        guard let pane = timelinePane, let window = pane.window else {
+            print("❌ osa se nedostala do okna"); return
+        }
+        window.makeKeyAndOrderFront(nil)
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        let view = pane.documentView
+        window.makeFirstResponder(view)
+
+        /// Tažení myší v souřadnicích DOKUMENTU osy.
+        func drag(from: NSPoint, to: NSPoint, modifiers: NSEvent.ModifierFlags = []) {
+            func event(_ type: NSEvent.EventType, _ point: NSPoint) -> NSEvent? {
+                NSEvent.mouseEvent(with: type,
+                                   location: view.convert(point, to: nil),
+                                   modifierFlags: modifiers, timestamp: 0,
+                                   windowNumber: window.windowNumber, context: nil,
+                                   eventNumber: 0, clickCount: 1, pressure: 1)
+            }
+            if let down = event(.leftMouseDown, from) { view.mouseDown(with: down) }
+            if let moved = event(.leftMouseDragged, to) { view.mouseDragged(with: moved) }
+            if let up = event(.leftMouseUp, to) { view.mouseUp(with: up) }
+        }
+
+        timeline.selectClips([])
+        // Rámeček přes první tři klipy V1. ⚠️ Začátek MUSÍ být v prázdnu —
+        // stisk uvnitř klipu je trim nebo přesun, ne rámeček. Pod stopami
+        // (y = 200) prázdno je: V1 0–64, A1 66–110, A2 112–156, T1 158–186.
+        drag(from: NSPoint(x: 5, y: 200), to: NSPoint(x: 800, y: 5))
+        let bandLive = timeline.selection
+        print(bandLive == Set(ids[0...2])
+              ? "✅ tažení myší v prázdné ploše vybralo rámečkem 3 klipy"
+              : "❌ rámeček myší vybral \(bandLive.count) klipů")
+
+        // ⌘-klik na čtvrtý klip (bez pohybu myši) ho přidá — a NESMÍ přitom
+        // spustit slip, který má ⌘ při tažení.
+        func click(at point: NSPoint, modifiers: NSEvent.ModifierFlags) {
+            func event(_ type: NSEvent.EventType) -> NSEvent? {
+                NSEvent.mouseEvent(with: type, location: view.convert(point, to: nil),
+                                   modifierFlags: modifiers, timestamp: 0,
+                                   windowNumber: window.windowNumber, context: nil,
+                                   eventNumber: 0, clickCount: 1, pressure: 1)
+            }
+            if let down = event(.leftMouseDown) { view.mouseDown(with: down) }
+            if let up = event(.leftMouseUp) { view.mouseUp(with: up) }
+        }
+        let sourceBefore = timeline.project.timeline.clip(ids[3])?.sourceStart
+        click(at: NSPoint(x: 1100, y: 30), modifiers: .command)     // klip 3: 270–330 sn.
+        let withFourth = timeline.selection
+        let sourceAfter = timeline.project.timeline.clip(ids[3])?.sourceStart
+        print(withFourth == Set(ids[0...3])
+              ? "✅ ⌘-klik přidal čtvrtý klip k rámečkovému výběru"
+              : "❌ po ⌘-kliku je ve výběru \(withFourth.count) klipů")
+        print(sourceBefore == sourceAfter
+              ? "✅ ⌘-klik bez pohybu NEudělal slip (zdrojový začátek beze změny)"
+              : "❌ ⌘-klik posunul obsah klipu — spustil se slip")
+
+        // ⌘C a ⌘V z klávesnice na konec osy.
+        func press(_ character: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
+            guard let event = NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0,
+                windowNumber: window.windowNumber, context: nil,
+                characters: character, charactersIgnoringModifiers: character,
+                isARepeat: false, keyCode: keyCode) else { return }
+            view.keyDown(with: event)
+        }
+        timeline.selectClips([ids[0]])
+        press("c", keyCode: 8, modifiers: .command)
+        timeline.setPlayheadFromUser(Frames(2000))
+        let countBefore = timeline.project.timeline.tracks[0].clips.count
+        press("v", keyCode: 9, modifiers: .command)
+        let countAfter = timeline.project.timeline.tracks[0].clips.count
+        print(countAfter == countBefore + 1
+              ? "✅ ⌘C a ⌘V z klávesnice vložily klip na hlavu (\(countBefore) → \(countAfter))"
+              : "❌ po ⌘C/⌘V je na V1 \(countAfter) klipů místo \(countBefore + 1)")
+        print(timeline.project.validate().isEmpty
+              ? "✅ osa po celé sérii operací bez porušených invariantů"
+              : "❌ porušené invarianty: \(timeline.project.validate())")
+    }
+
     /// CLI ukázka fáze 17 (`--jkl-demo`): dlouhá osa, rychlost 2× a osa
     /// ujíždějící za hlavou. Koukanec pro oko a screenshot; měří `--jkl-check`.
     func runShuttleDemo() async {
@@ -3218,6 +3425,8 @@ struct ContentView: View {
                     await model.verifyShuttleAndFollow()
                 } else if arguments.contains("--jkl-demo") {
                     await model.runShuttleDemo()
+                } else if arguments.contains("--select-check") {
+                    await model.verifySelectionAndClipboard()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
@@ -3621,6 +3830,13 @@ private struct ColorGradePanel: View {
     @ObservedObject var timeline: TimelineController
     let clipID: ClipID
 
+    /// Kolik obrazových klipů preset zasáhne (fáze 17: hromadné operace).
+    private var selectedVideoCount: Int {
+        timeline.project.timeline.tracks
+            .filter { $0.kind == .video }
+            .reduce(0) { $0 + $1.clips.filter { timeline.selection.contains($0.id) }.count }
+    }
+
     var body: some View {
         let grade = timeline.project.timeline.clip(clipID)?.colorGrade
 
@@ -3634,10 +3850,10 @@ private struct ColorGradePanel: View {
                 set: { newPreset in
                     if let newPreset {
                         // Přepnutí presetu drží nastavenou sílu.
-                        timeline.setColorGrade(clipID, ColorGrade(
+                        timeline.setColorGradeOnSelection(ColorGrade(
                             preset: newPreset, intensity: grade?.intensity ?? 1.0))
                     } else {
-                        timeline.setColorGrade(clipID, nil)
+                        timeline.setColorGradeOnSelection(nil)
                     }
                 })) {
                 Text("Bez úpravy").tag(ColorPreset?.none)
@@ -3656,7 +3872,7 @@ private struct ColorGradePanel: View {
                     get: { (grade?.intensity ?? 1.0) * 100 },
                     set: { percent in
                         guard let preset = grade?.preset else { return }
-                        timeline.colorGradeDragChanged(clipID, ColorGrade(
+                        timeline.colorGradeDragChangedOnSelection(ColorGrade(
                             preset: preset, intensity: percent / 100))
                     }),
                     in: 0...100,
@@ -3672,7 +3888,9 @@ private struct ColorGradePanel: View {
                     .frame(width: 44, alignment: .trailing)
             }
 
-            Text("Preset platí pro tenhle klip, v náhledu i exportu.")
+            Text(selectedVideoCount > 1
+                 ? "Preset platí pro celý výběr (\(selectedVideoCount) klipů), v náhledu i exportu."
+                 : "Preset platí pro tenhle klip, v náhledu i exportu.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)

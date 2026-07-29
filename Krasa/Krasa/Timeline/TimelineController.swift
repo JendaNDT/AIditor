@@ -17,6 +17,7 @@
 //  To všechno umí `TimelineModel` a je to otestované (351 testů balíčku).
 //
 
+import AudioEngine
 import Foundation
 import TimelineModel
 
@@ -421,6 +422,18 @@ final class TimelineController: ObservableObject {
     }
 
     func colorGradeDragEnded() { undo.endInteraction(project) }
+
+    // MARK: - Hudba a doby (fáze 14, modul 2)
+
+    /// Uloží mřížku dob k assetu hudby — jeden undo krok (výsledek
+    /// analýzy i budoucí ruční korekce jdou touhle cestou).
+    func setBeatGrid(assetID: AssetID, _ grid: BeatGrid?) {
+        guard project.asset(assetID)?.beatGrid != grid else { return }
+        var updated = project
+        guard (try? updated.setBeatGrid(assetID: assetID, grid)) != nil else { return }
+        undo.record(project)
+        project = updated
+    }
 
     // MARK: - Synchronizace externího zvuku (fáze 7, modul 5)
 

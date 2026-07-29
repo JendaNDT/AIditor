@@ -496,6 +496,71 @@ final class AppModel: ObservableObject {
                             : "Přidáno fotek: \(added) (po 5 s, délky jdou natáhnout)."
     }
 
+    /// Hudba na A2 (fáze 14, modul 2): vybrat soubor, položit klip a na
+    /// pozadí najít doby.
+    func addMusic() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio]
+        panel.allowsMultipleSelection = false
+        panel.message = "Vyber hudbu (M4A, MP3, WAV…) — položí se na A2 a najdou se doby."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task { await importMusic(url: url) }
+    }
+
+    /// Vlastní import: klip celé skladby na A2 (za poslední klip stopy),
+    /// pak analýza dob `BeatDetectorem` a mřížka k assetu. Analýza čte
+    /// mono 24 kHz — krok obálky vyjde ~10,7 ms jako na 48 kHz, ale FFT
+    /// jsou poloviční a detekci basy a rytmu vyšší pásmo nechybí.
+    func importMusic(url: URL) async {
+        status = "Načítám hudbu…"
+        do {
+            let duration = try await AVURLAsset(url: url).load(.duration).seconds
+            guard duration > 1 else {
+                status = "Soubor je moc krátký na hudební podklad."
+                return
+            }
+            guard let a2 = timeline.project.timeline.tracks.last(where: { $0.kind == .audio })
+            else {
+                status = "Projekt nemá zvukovou stopu pro hudbu."
+                return
+            }
+            let asset = Asset(originalURL: url,
+                              bookmark: ProjectStore.assetBookmark(for: url),
+                              duration: SourceTime(seconds: duration),
+                              measuredFrameRate: Double(timeline.project.timeline.frameRate),
+                              hasVideo: false,
+                              hasAudio: true)
+            var project = timeline.project
+            project.addAsset(asset)
+            let start = a2.clips.last?.timelineEnd ?? .zero
+            let clip = try project.makeClip(assetID: asset.id, at: start)
+            try project.insert(clip, onTrack: a2.id)
+            timeline.undo.record(timeline.project)
+            timeline.project = project
+
+            status = "Hudba na A2. Hledám tempo…"
+            guard let samples = try await MonoAudioReader.samples(url: url, sampleRate: 24_000)
+            else {
+                status = "Hudba na A2, ale soubor nemá čitelný zvuk — doby nebudou."
+                return
+            }
+            if let grid = BeatDetector.analyze(samples: samples, sampleRate: 24_000) {
+                timeline.setBeatGrid(assetID: asset.id, grid)
+                // Nízká jistota se PŘIZNÁVÁ — mřížka se nepodsouvá jako fakt.
+                let warning = grid.confidence < 0.3
+                    ? " Jistota je nízká — doby ber s rezervou."
+                    : ""
+                status = String(format: "Hudba na A2: %.1f BPM (jistota %.0f %%).%@",
+                                grid.bpm, grid.confidence * 100, warning)
+            } else {
+                status = "Hudba na A2. Zřetelné tempo se nenašlo — doby nebudou "
+                    + "(u ambientní hudby je to v pořádku)."
+            }
+        } catch {
+            status = "Přidání hudby selhalo: \(error.localizedDescription)"
+        }
+    }
+
     func exportMovie() {
         guard exportProgress == nil else { return }
         let panel = NSSavePanel()
@@ -1389,6 +1454,119 @@ final class AppModel: ObservableObject {
         try? await Task.sleep(nanoseconds: 25_000_000_000)
     }
 
+    /// CLI ověření hudby (fáze 14, modul 2): syntetický klikový WAV se
+    /// ZNÁMÝM tempem projde toutéž cestou jako hudba uživatele — import,
+    /// analýza, mřížka k assetu, promítnutí na osu, magnet. 120 BPM na
+    /// 30fps ose = doba PŘESNĚ každých 15 snímků, takže rozteče značek
+    /// jsou tvrdá kontrola, ne přibližná.
+    func verifyMusicImport() async {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaMusicCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        let wav = directory.appendingPathComponent("klik120.wav")
+        guard writeClickWAV(to: wav, bpm: 120, seconds: 12) else {
+            print("❌ klikový WAV se nepodařilo zapsat"); return
+        }
+
+        timeline.project = Project.empty()
+        await importMusic(url: wav)
+        print(status)
+
+        guard let asset = timeline.project.assets.first(where: { $0.beatGrid != nil }),
+              let grid = asset.beatGrid else {
+            print("❌ mřížka dob k assetu nedorazila"); return
+        }
+        print(String(format: "mřížka: %.2f BPM, jistota %.0f %%, první doba %.3f s",
+                     grid.bpm, grid.confidence * 100, grid.firstBeatTime))
+        print(abs(grid.bpm - 120) < 0.5
+              ? "✓ tempo sedí (120 BPM)"
+              : "❌ tempo nesedí")
+
+        // Značky proti ideální mřížce 15 snímků od první doby: detekce smí
+        // mít zbytkovou chybu tempa (~0,02 BPM ze zaokrouhlení obálky),
+        // takže jednotlivá rozteč smí o snímek uhnout — ale odchylka se
+        // NESMÍ SČÍTAT. Kumulativní drift je přesně to, co má regrese
+        // v detektoru zabíjet.
+        let marks = timeline.project.beatMarks()
+        let drift = marks.enumerated()
+            .map { abs($0.element.frame.count - (marks[0].frame.count + 15 * $0.offset)) }
+            .max() ?? 0
+        print("značek na ose: \(marks.count), největší odchylka od ideální mřížky: \(drift) sn.")
+        print(marks.count == 24 && drift <= 1
+              ? "✓ doby drží mřížku 15 snímků bez kumulativního driftu"
+              : "❌ značky driftují nebo chybí")
+        let downbeats = marks.filter(\.isDownbeat).count
+        print(downbeats == (marks.count + 3) / 4
+              ? "✓ raz každé čtyři doby (\(downbeats)×)"
+              : "❌ takty nesedí (\(downbeats) z \(marks.count))")
+
+        // Magnet: snímek vedle doby se přitáhne na dobu, druh .beat.
+        guard let first = marks.first else { return }
+        let candidates = timeline.geometry.snapCandidates(
+            in: timeline.project.timeline,
+            beats: marks.map(\.frame))
+        let snapped = timeline.geometry.snap(first.frame - Frames(1), to: candidates)
+        print(snapped.frame == first.frame && snapped.candidate?.kind == .beat
+              ? "✓ magnet: snímek vedle doby se přitáhl na dobu"
+              : "❌ magnet na dobu nefunguje")
+        print("MUSIC_CHECK_PATH=\(directory.path)")
+    }
+
+    /// CLI ukázka fáze 14 (`--music-demo`): klikový WAV na A2 s mřížkou —
+    /// jantarové doby v pravítku, „raz" vyšší. Koukanec pro oko a screenshot.
+    func runMusicDemo() async {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaMusicCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        let wav = directory.appendingPathComponent("klik110.wav")
+        guard writeClickWAV(to: wav, bpm: 110, seconds: 30) else {
+            print("❌ klikový WAV se nepodařilo zapsat"); return
+        }
+        timeline.project = Project.empty()
+        await importMusic(url: wav)
+        print(status)
+        if let host = await waitForPlayerWindow() {
+            host.window?.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        try? await Task.sleep(nanoseconds: 25_000_000_000)
+    }
+
+    /// Klikový WAV (PCM16 mono 44,1 kHz): 8ms úder 1 kHz s dozníváním na
+    /// každé době od 0,5 s — týž syntetický vzor jako testy `AudioEngine`.
+    private func writeClickWAV(to url: URL, bpm: Double, seconds: Double) -> Bool {
+        let rate = 44_100.0
+        var samples = [Int16](repeating: 0, count: Int(seconds * rate))
+        let clickLength = Int(0.008 * rate)
+        let interval = 60.0 / bpm
+        var t = 0.5
+        while t < seconds {
+            let start = Int(t * rate)
+            for i in 0..<clickLength where start + i < samples.count {
+                let envelope = 1.0 - Double(i) / Double(clickLength)
+                let tone = sin(2.0 * .pi * 1000.0 * Double(i) / rate)
+                samples[start + i] = Int16(max(-32_768, min(32_767,
+                    Double(samples[start + i]) + 0.8 * envelope * tone * 32_767)))
+            }
+            t += interval
+        }
+
+        // WAV hlavička (RIFF little-endian, PCM16 mono).
+        var data = Data()
+        func append(_ string: String) { data.append(string.data(using: .ascii)!) }
+        func append32(_ value: UInt32) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+        func append16(_ value: UInt16) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+        let dataSize = UInt32(samples.count * 2)
+        append("RIFF"); append32(36 + dataSize); append("WAVE")
+        append("fmt "); append32(16); append16(1); append16(1)
+        append32(UInt32(rate)); append32(UInt32(rate) * 2); append16(2); append16(16)
+        append("data"); append32(dataSize)
+        samples.withUnsafeBytes { data.append(contentsOf: $0) }
+        return (try? data.write(to: url)) != nil
+    }
+
     /// Bílý čtverec jako PNG — syntetická fotka pro `--photo-check`.
     private func writeWhiteSquarePNG(to url: URL, side: Int) -> Bool {
         writeSquarePNG(to: url, side: side, color: CGColor(red: 1, green: 1, blue: 1, alpha: 1))
@@ -2255,6 +2433,10 @@ struct ContentView: View {
                     await model.runColorGPUPlayback(enabled: !explicit.contains("off"))
                 } else if arguments.contains("--color-demo") {
                     await model.runColorDemo()
+                } else if arguments.contains("--music-check") {
+                    await model.verifyMusicImport()
+                } else if arguments.contains("--music-demo") {
+                    await model.runMusicDemo()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

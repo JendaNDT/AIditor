@@ -72,6 +72,7 @@ final class TimelineRulerView: NSView {
                                                overscanPoints: Self.minimumLabelSpacing)
 
         drawMinorTicks(geometry: geometry, range: range, interval: interval)
+        drawBeatMarks(geometry: geometry, range: range)
         drawLabels(geometry: geometry, range: range, interval: interval, frameRate: frameRate)
 
         // Předěl proti ploše osy.
@@ -97,6 +98,26 @@ final class TimelineRulerView: NSView {
             guard frame.count % interval.count != 0 else { continue }   // pod popiskem už ryska je
             let x = (geometry.x(for: frame) - scrollX).rounded()
             NSRect(x: x, y: bounds.height - 5, width: 1, height: 4).fill()
+        }
+    }
+
+    /// Doby hudby (fáze 14): jantarové rysky při spodní hraně, „raz"
+    /// taktu vyšší a plný. Počítá se při každém kreslení — bez hudby
+    /// s mřížkou je `beatMarks()` okamžitý early-out přes assety a
+    /// s hudbou jsou to stovky značek, ne tisíce (scroll benchmark
+    /// fáze 2 zůstává nedotčený).
+    private func drawBeatMarks(geometry: TimelineGeometry, range: Range<Frames>) {
+        let marks = controller.project.beatMarks()
+        guard !marks.isEmpty else { return }
+        for mark in marks {
+            guard mark.frame >= range.lowerBound, mark.frame < range.upperBound else { continue }
+            let x = (geometry.x(for: mark.frame) - scrollX).rounded()
+            let height: CGFloat = mark.isDownbeat ? 8 : 4
+            (mark.isDownbeat
+                ? TimelinePalette.beat
+                : TimelinePalette.beat.withAlphaComponent(0.55)).setFill()
+            NSRect(x: x, y: bounds.height - 1 - height,
+                   width: mark.isDownbeat ? 2 : 1, height: height).fill()
         }
     }
 

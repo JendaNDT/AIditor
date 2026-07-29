@@ -142,7 +142,8 @@ public struct TimelineInteraction: Sendable {
                             partnerID: partner,
                             candidates: geometry.snapCandidates(in: project.timeline,
                                                                 playhead: playhead,
-                                                                excluding: excluded))
+                                                                excluding: excluded,
+                                                                beats: project.beatMarks().map(\.frame)))
     }
 
     // MARK: Průběh

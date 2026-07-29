@@ -42,6 +42,10 @@ enum TimelinePalette {
         }
     }
 
+    /// Doba hudby v pravítku (fáze 14) — jantarová, v paletě nová:
+    /// neplete se s modrou/zelenou/fialovou/žlutou/terakotovou.
+    static let beat = NSColor.systemOrange
+
     /// Plocha pod stopami a za koncem projektu.
     static let background = adaptive("timelineBackground", dark: 0.09, light: 0.78)
     /// Pruh obrazové stopy. Nejsvětlejší — obraz je hlavní.
@@ -870,7 +874,8 @@ final class TimelineDocumentView: NSView {
                 candidates: controller.geometry.snapCandidates(
                     in: controller.project.timeline,
                     playhead: controller.playhead,
-                    excludingTitles: [titleHit.titleID]))
+                    excludingTitles: [titleHit.titleID],
+                    beats: controller.project.beatMarks().map(\.frame)))
             if titleHit.zone == .body { NSCursor.closedHand.set() }
             return
         }

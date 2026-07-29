@@ -6,6 +6,7 @@
 //  main actor, protože operace řídí UI.
 //
 
+import AudioEngine
 import Foundation
 import SpeedRampEngine
 
@@ -99,6 +100,11 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
     /// `duration` a `measuredFrameRate` jsou u fotky nula a validace je
     /// nevymáhá. Vyrábět přes `Asset.still(url:bookmark:)`.
     public var isStill: Bool
+    /// Mřížka dob hudby (fáze 14), kotvená ve ZDROJOVÉM čase souboru —
+    /// trim a přesun klipů s ní nehnou, stejné rozhodnutí jako u přepisu.
+    /// Volitelné pole, verze formátu se nezvedá. Zapisuj přes
+    /// `Project.setBeatGrid` — validuje tempo.
+    public var beatGrid: BeatGrid?
 
     public init(id: AssetID = AssetID(),
                 originalURL: URL,
@@ -110,7 +116,8 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
                 hasAudio: Bool = true,
                 isOffline: Bool = false,
                 transcript: [TranscriptSegment]? = nil,
-                isStill: Bool = false) {
+                isStill: Bool = false,
+                beatGrid: BeatGrid? = nil) {
         self.id = id
         self.originalURL = originalURL
         self.proxyURL = proxyURL
@@ -122,6 +129,7 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
         self.isOffline = isOffline
         self.transcript = transcript
         self.isStill = isStill
+        self.beatGrid = beatGrid
     }
 
     /// Fotka jako asset. Jediná správná cesta — nastavuje příznaky tak,
@@ -136,7 +144,7 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
     /// `false` a verze formátu se nezvedá (vzorec `Track.transitions`).
     private enum CodingKeys: String, CodingKey {
         case id, originalURL, proxyURL, bookmark, duration, measuredFrameRate
-        case hasVideo, hasAudio, isOffline, transcript, isStill
+        case hasVideo, hasAudio, isOffline, transcript, isStill, beatGrid
     }
 
     public init(from decoder: Decoder) throws {
@@ -152,6 +160,7 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
         isOffline = try c.decode(Bool.self, forKey: .isOffline)
         transcript = try c.decodeIfPresent([TranscriptSegment].self, forKey: .transcript)
         isStill = try c.decodeIfPresent(Bool.self, forKey: .isStill) ?? false
+        beatGrid = try c.decodeIfPresent(BeatGrid.self, forKey: .beatGrid)
     }
 
     /// Jediné místo v celém projektu, kde se rozhoduje, se kterým souborem

@@ -1,6 +1,6 @@
 # MediaProbe — naměřené vlastnosti testovacích klipů
 
-*Vygenerováno 2026-07-28T20:06:09Z nástrojem `MediaProbe`.*
+*Vygenerováno 2026-07-28T23:33:58Z nástrojem `MediaProbe`.*
 
 Klipy samotné jsou v `.gitignore` (jsou to gigabajty videa), takže tenhle
 soubor je jediný záznam o tom, na čem se měřilo. Negeneruj ho ručně —

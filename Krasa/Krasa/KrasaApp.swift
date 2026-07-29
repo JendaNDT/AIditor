@@ -49,6 +49,7 @@ struct KrasaApp: App {
                 // Fotky se PŘIDÁVAJÍ do rozdělané práce (fáze 12) —
                 // import klipů výše naproti tomu staví osu znovu.
                 Button("Přidat fotky…") { model.addPhotos() }
+                Button("Přidat hudbu…") { model.addMusic() }
             }
             CommandGroup(replacing: .saveItem) {
                 Button("Uložit projekt") { model.saveProject() }

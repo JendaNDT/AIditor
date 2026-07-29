@@ -249,8 +249,11 @@ public struct SnapCandidate: Hashable, Sendable {
         case playhead = 1
         /// Hrana jiného klipu.
         case clipEdge = 2
-        /// Marker, později i beat z hudby (fáze 6).
+        /// Marker (zatím nepoužitý).
         case marker = 3
+        /// Doba hudby (fáze 14). Slabší než hrana klipu — hrany se
+        /// zarovnávají přesně, doby jsou magnet, ne zákon.
+        case beat = 4
 
         public static func < (a: Kind, b: Kind) -> Bool { a.rawValue < b.rawValue }
     }
@@ -272,13 +275,17 @@ extension TimelineGeometry {
     ///   - excluding: klipy, které se právě táhnou — na vlastní hrany
     ///     se přichytávat nemá smysl a vyrobilo by to zaseknutí na místě.
     ///   - excludingTitles: totéž pro tažený titulek (fáze 11).
+    ///   - beats: doby hudby (fáze 14) — volající je bere
+    ///     z `Project.beatMarks()`; geometrie projekt nezná.
     public func snapCandidates(in timeline: Timeline,
                                playhead: Frames? = nil,
                                excluding: Set<ClipID> = [],
                                excludingTitles: Set<TitleClipID> = [],
-                               onlyTracks: Set<TrackID>? = nil) -> [SnapCandidate] {
+                               onlyTracks: Set<TrackID>? = nil,
+                               beats: [Frames] = []) -> [SnapCandidate] {
         var out: [SnapCandidate] = [SnapCandidate(frame: .zero, kind: .origin)]
         if let playhead { out.append(SnapCandidate(frame: playhead, kind: .playhead)) }
+        for beat in beats { out.append(SnapCandidate(frame: beat, kind: .beat)) }
 
         for track in timeline.tracks {
             if let onlyTracks, !onlyTracks.contains(track.id) { continue }
@@ -314,7 +321,7 @@ extension TimelineGeometry {
         for candidate in candidates {
             let distance = abs(x(for: candidate.frame) - x(for: frame))
             guard distance <= tolerancePoints else { continue }
-            if distance < bestDistance || (distance == bestDistance && candidate.kind < (best?.kind ?? .marker)) {
+            if distance < bestDistance || (distance == bestDistance && candidate.kind < (best?.kind ?? .beat)) {
                 best = candidate
                 bestDistance = distance
             }

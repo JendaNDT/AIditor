@@ -58,6 +58,10 @@ public enum TimelineError: Error, Hashable, Sendable {
     case colorGradeNeedsVideoTrack
     /// Intenzita presetu mimo 0–1.
     case invalidColorGrade
+    /// Mřížka dob patří jen assetu se zvukem (fáze 14).
+    case beatGridNeedsAudio
+    /// Mřížka dob s nesmyslným tempem nebo fází.
+    case invalidBeatGrid
 }
 
 // MARK: - Assety

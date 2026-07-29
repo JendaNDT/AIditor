@@ -378,7 +378,7 @@ Jména, datum, kapitoly, závěrečné poděkování — grafické titulky s če
 
 ---
 
-### FÁZE 13 — Barevné presety → v0.13
+### FÁZE 13 — Barevné presety → v0.13 ✅ HOTOVÁ 29. 07. 2026
 
 Jemný svatební vzhled, teplý film, čistá pleť, ČB — per klip, intenzita 0–100 %.
 
@@ -387,7 +387,7 @@ Jemný svatební vzhled, teplý film, čistá pleť, ČB — per klip, intenzita
 
 ---
 
-### FÁZE 14 — Hudební synchronizace → v0.14 (vlajková funkce)
+### FÁZE 14 — Hudební synchronizace → v0.14 (vlajková funkce) ✅ HOTOVÁ 29. 07. 2026
 
 Střihy a rychlosti reagující na hudbu. Sedí na hotové jádro: FFT máme vlastní (`AudioEngine`), rychlostní matematiku taky (`SpeedRampEngine`).
 
@@ -397,7 +397,7 @@ Střihy a rychlosti reagující na hudbu. Sedí na hotové jádro: FFT máme vla
 
 ---
 
-### FÁZE 15 — Analýzy kvality záběrů → v0.15
+### FÁZE 15 — Analýzy kvality záběrů → v0.15 ✅ HOTOVÁ 29. 07. 2026
 
 Nahrazuje původní fázi „AI analýza scén". Návrhová vrstva, žádné automatické zásahy.
 
@@ -407,12 +407,12 @@ Nahrazuje původní fázi „AI analýza scén". Návrhová vrstva, žádné aut
 
 ---
 
-### FÁZE 16 — Vymazlení a technické dluhy → v1.0-osobní
+### FÁZE 16 — Vymazlení a technické dluhy → v1.0-osobní ✅ HOTOVÁ 29. 07. 2026
 
 - Zvukové fade úchyty na klipech (nájezd/dojezd per klip přes `AVAudioMix` rampy).
 - Strop normalizace na **true peak (dBTP)** — 4× převzorkování ve špičkovém měření (`AudioEngine`), místo dnešní špičky vzorků.
 - Správa modelu Whisperu (zobrazit velikost, smazat, přemístit).
-- Zbylé drobnosti z koukanců a co vyleze při používání.
+- Zbylé drobnosti z koukanců a co vyleze při používání. *(Splaceno: zarážka trimu o rameno přechodu a výběr přechodu klikem do těla. Co vyleze při koukancích a na svatbě, se řeší AŽ POTOM — viz pravidlo kill-gate níže.)*
 
 ---
 

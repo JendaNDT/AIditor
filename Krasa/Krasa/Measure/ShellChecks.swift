@@ -164,8 +164,25 @@ extension AppModel {
         guard let host = await shellHostView() else {
             print("❌ přehrávač nemá okno"); return
         }
-        var targets = await resolveTargetsForShell(paths)
-        if paths.isEmpty, let selected { targets = [selected] }
+        // `reversed` obrátí pořadí fází. ⚠️ Není to kosmetika, ale kontrola
+        // METODY: ABBA vyrovnává tepelný drift (stav A jede na začátku
+        // i na konci), ale NEVYROVNÁVÁ rozjezd — první měřená pozice je
+        // v obou během táž. Obrácená jízda to rozhodne.
+        //
+        // Co se naměřilo 29. 07. 2026 (8 fází celkem):
+        //   ABBA: pozice 1 (s overlaji) 34,3 fps a 371 dlouhých mezer,
+        //         zbylé tři fáze 59,7 fps a 0 mezer,
+        //   BAAB: všechny čtyři fáze 59,7 fps a 0 mezer.
+        // Hypotéza „za to může pozice 1" tedy NEPLATÍ — v obráceném pořadí
+        // byla pozice 1 v pořádku. Byl to jednorázový výkyv, který se
+        // nezopakoval; ze sedmi zbylých měření se stav s overlaji a bez nich
+        // neliší ani o setinu. Pozice 1 se z průměru vyřazuje z opatrnosti,
+        // ne proto, že by se prokázala jako vadná — a vypisuje se, aby to
+        // šlo přepočítat.
+        let reversed = paths.contains("reversed")
+        let clipPaths = paths.filter { $0 != "reversed" }
+        var targets = await resolveTargetsForShell(clipPaths)
+        if clipPaths.isEmpty, let selected { targets = [selected] }
         guard let clip = targets.first else {
             print("❌ není co měřit — vyber klip nebo předej cestu"); return
         }
@@ -185,7 +202,10 @@ extension AppModel {
 
         var results: [(String, BenchmarkResult)] = []
         // ABBA: druhý stav by jinak vždycky běžel na teplejším stroji.
-        for (index, overlaysOn) in [true, false, false, true].enumerated() {
+        let order = reversed ? [false, true, true, false] : [true, false, false, true]
+        print("pořadí fází: \(order.map { $0 ? "A" : "B" }.joined())"
+              + " (A = s overlaji, B = bez)")
+        for (index, overlaysOn) in order.enumerated() {
             overlaysSuppressed = !overlaysOn
             // Skořápka se musí přelayoutovat, než se začne měřit.
             try? await Task.sleep(nanoseconds: 800_000_000)
@@ -208,8 +228,13 @@ extension AppModel {
                          label as NSString, result.steadyStateFPS, result.minDeliveredFPS,
                          result.longTickGaps, result.droppedFramesFromAccessLog))
         }
-        let withOverlays = results.filter { $0.0 == "S OVERLAJI" }.map { $0.1.steadyStateFPS }
-        let without = results.filter { $0.0 == "BEZ OVERLAJŮ" }.map { $0.1.steadyStateFPS }
+        // Pozice 1 se do průměru nepočítá (opatrnost, viz komentář výše),
+        // ale vypisuje se — zamlčené číslo je horší než vyřazené.
+        print("(pozice 1 = \(results[0].0), \(String(format: "%.2f", results[0].1.steadyStateFPS))"
+              + " fps — vyřazena z průměru jako rozjezdová)")
+        let measured = Array(results.dropFirst())
+        let withOverlays = measured.filter { $0.0 == "S OVERLAJI" }.map { $0.1.steadyStateFPS }
+        let without = measured.filter { $0.0 == "BEZ OVERLAJŮ" }.map { $0.1.steadyStateFPS }
         if !withOverlays.isEmpty, !without.isEmpty {
             let a = withOverlays.reduce(0, +) / Double(withOverlays.count)
             let b = without.reduce(0, +) / Double(without.count)
@@ -218,8 +243,12 @@ extension AppModel {
                          a, b, a - b))
         }
         print("")
-        print("⚠️ GPU rezidenci přečti z powermetrics podle značek FÁZE výše —")
-        print("   doručené snímky ji nenahrazují, měří něco jiného.")
+        print("⚠️ CO TAHLE ČÍSLA NEŘÍKAJÍ. Doručené snímky jsou zastropované")
+        print("   obnovovací frekvencí displeje, takže ukážou až to, co se")
+        print("   projeví TRHÁNÍM. Že skládání stojí víc GPU, ale obraz jede")
+        print("   dál na 60 Hz, tímhle nezměříš — na to je powermetrics")
+        print("   a značky FÁZE výše, podle kterých se log rozřízne:")
+        print("   sudo powermetrics --samplers gpu_power -i 1000 > ~/krasa_shell_gpu.txt")
     }
 
     // MARK: - Koukanec

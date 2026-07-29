@@ -176,6 +176,31 @@ co měření nemohlo.**
 **Regrese beze změny:** `--timeline-bench` 2000 klipů, **0 vypadlých tiků**, medián práce 0,78 ms
 (kritérium fáze 2 drží) · `--select-check` a `--range-check` prošly celé.
 
+**Riziko R2 změřeno (`--shell-gpu`, dvě jízdy po čtyřech fázích):**
+
+| pořadí | poz. 1 | poz. 2 | poz. 3 | poz. 4 |
+|---|---|---|---|---|
+| **ABBA** (A = s overlaji) | **34,31** fps, 371 mezer | 59,67 | 59,75 | **59,67**, 0 mezer |
+| **BAAB** | 59,67 | 59,67 | 59,67 | 59,67 |
+
+Ze sedmi ustálených měření se stav **s overlaji a bez nich neliší ani o setinu** (59,67 vs 59,67).
+Ta jedna vybočená hodnota se **nezopakovala**: tentýž stav dal v pozici 4 první jízdy 59,67 fps
+a nula dlouhých mezer.
+
+⚠️ **Moje první vysvětlení bylo špatné a druhá jízda ho vyvrátilo.** Napsal jsem, že za to může
+rozjezdová pozice 1 — v obráceném pořadí byla pozice 1 v pořádku. Byl to jednorázový výkyv, ne
+vlastnost pozice ani overlajů. Pozice 1 se z průměru vyřazuje z opatrnosti, ne proto, že by se
+prokázala jako vadná, a **vypisuje se**, aby to šlo přepočítat.
+
+⚠️ **Co tím ale NENÍ zodpovězené.** Doručené snímky jsou zastropované 60Hz displejem, takže ukážou
+až to, co se projeví trháním. **Vlastní otázka R2 — kolik GPU stojí trvale skládaný náhled — se
+tímhle změřit nedá**; na to je `powermetrics` a ten potřebuje `sudo`. Kontrola proto tiskne značky
+`FÁZE n/4 START/KONEC` s časy, aby šel log rozříznout. **Otevřená položka pro autora:** pustit
+`sudo powermetrics --samplers gpu_power -i 1000 > ~/krasa_shell_gpu.txt` vedle `--shell-gpu`
+a doplnit číslo sem. Do té doby platí: overlaye **neprokazatelně nestojí plynulost**, o rezidenci
+nevíme nic. Ústupová cesta (mizení overlajů po ~2 s nečinnosti) je popsaná v 2.3 a zůstává
+připravená — `overlaysSuppressed` je už zapojené.
+
 **Tmavý režim natvrdo:** okno dostává `.darkAqua`, z `TimelinePalette` a `RampEditorPalette` zmizelo
 **22 světlých hodnot**. Obal `NSColor(name:dynamicProvider:)` zůstal — vrací pořád totéž, ale drží
 jméno v debuggeru a jedno místo, kam by se světlá varianta vracela.

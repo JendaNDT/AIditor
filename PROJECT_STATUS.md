@@ -51,6 +51,19 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
   - **Tmavý režim natvrdo:** okno dostává `.darkAqua`, z `TimelinePalette` a `RampEditorPalette`
     zmizelo **22 světlých hodnot**. Inertní `viewDidChangeEffectiveAppearance` zůstalo — odstraní
     ho M4, který do těch souborů sahá kvůli výškám stop.
+  - **Riziko R2 (overlaye leží NA obraze, takže náhled musí být trvale skládaný) změřeno
+    `--shell-gpu`, dvě jízdy po čtyřech fázích:** ze **sedmi ustálených měření se stav s overlaji
+    a bez nich neliší ani o setinu** (59,67 vs 59,67 fps, 0 dlouhých mezer). Jedna vybočená hodnota
+    (34,31 fps, 371 mezer) padla v první měřené fázi první jízdy a **nezopakovala se** — tentýž stav
+    dal v pozici 4 téže jízdy 59,67 a nulu.
+    ⚠️ **První vysvětlení („může za to rozjezdová pozice 1") druhá jízda VYVRÁTILA** — v obráceném
+    pořadí byla pozice 1 v pořádku. Byl to jednorázový výkyv; pozice 1 se z průměru vyřazuje
+    z opatrnosti, ne prokazatelně, a vypisuje se.
+    ⚠️ **Vlastní otázka R2 tím zodpovězená NENÍ.** Doručené snímky jsou zastropované 60Hz displejem,
+    takže ukážou až trhání — kolik GPU stojí skládání, se jimi změřit nedá. Na to je `powermetrics`
+    (potřebuje `sudo`, proto to nespustí kód). Kontrola tiskne značky `FÁZE n/4 START/KONEC`, aby šel
+    log rozříznout. **Otevřená položka pro autora.** Ústupová cesta (mizení overlajů po ~2 s
+    nečinnosti) zůstává připravená — `overlaysSuppressed` je zapojené.
   - **Regrese:** `--timeline-bench` **0 vypadlých tiků** na 2000 klipech (kritérium fáze 2 drží),
     `--select-check` i `--range-check` prošly celé.
   - *Koukanec rukou (v seznamu): puntíky v toolbaru, rail, pilulka transportu, ⌘4, ⌃⌘F tam a zpět.*

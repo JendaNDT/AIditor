@@ -2164,6 +2164,50 @@ final class AppModel: ObservableObject {
               : "❌ klávesy nedošly: LL→\(afterL)×, J→\(afterJ)×, K→\(afterK)×")
     }
 
+    /// CLI ukázka fáze 17 (`--jkl-demo`): dlouhá osa, rychlost 2× a osa
+    /// ujíždějící za hlavou. Koukanec pro oko a screenshot; měří `--jkl-check`.
+    func runShuttleDemo() async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        var project = Project.empty()
+        project.addAsset(source)
+        let available = project.timeline.availableFrames(from: source.duration).count
+        do {
+            var start = 0
+            while start + 90 <= min(available, 900) {
+                let clip = Clip(assetID: source.id, timelineStart: Frames(start),
+                                duration: Frames(90),
+                                sourceStart: project.timeline.sourceTime(Frames(start)))
+                try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+                start += 90
+            }
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        var geometry = timeline.geometry
+        geometry.setZoom(4)
+        timeline.geometry = geometry
+        timeline.project = project
+
+        if let host = await waitForPlayerWindow() {
+            host.window?.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        for _ in 0..<40 where builtTimeline == nil {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        controller.seek(to: .zero)
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        controller.shuttle(.forward)
+        controller.shuttle(.forward)          // 2× — indikátor v transportu
+        status = "Přehrávání: " + controller.shuttleDescription
+        try? await Task.sleep(nanoseconds: 25_000_000_000)
+        controller.setShuttleRate(0)
+    }
+
     /// CLI ukázka fáze 16 (`--fade-demo`): zvukový klip s klíny fade.
     func runFadeDemo() async {
         guard let source = timeline.project.assets
@@ -3172,6 +3216,8 @@ struct ContentView: View {
                     await model.runTransitionSelectionDemo()
                 } else if arguments.contains("--jkl-check") {
                     await model.verifyShuttleAndFollow()
+                } else if arguments.contains("--jkl-demo") {
+                    await model.runShuttleDemo()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

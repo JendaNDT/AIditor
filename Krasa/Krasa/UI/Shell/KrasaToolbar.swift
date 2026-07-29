@@ -26,6 +26,9 @@ struct KrasaToolbar: View {
 
             Spacer(minLength: 12)
 
+            // Čip běžících analýz (M2). Kreslí se jen když něco běží.
+            AnalysisChip(analysis: model.analysis)
+
             ChromeButton(title: "Rampa ⌘4",
                          style: model.panelVisible ? .active : .normal) {
                 model.panelVisible.toggle()

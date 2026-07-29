@@ -48,6 +48,7 @@
 		F18200000000000000000006 /* StatusBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000006 /* StatusBar.swift */; };
 		F18200000000000000000007 /* LegacySettingsPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000007 /* LegacySettingsPanel.swift */; };
 		F18200000000000000000008 /* ShellChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000008 /* ShellChecks.swift */; };
+		F18200000000000000000009 /* AnalysisProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000009 /* AnalysisProgress.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -88,6 +89,7 @@
 		F18100000000000000000006 /* StatusBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBar.swift; sourceTree = "<group>"; };
 		F18100000000000000000007 /* LegacySettingsPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacySettingsPanel.swift; sourceTree = "<group>"; };
 		F18100000000000000000008 /* ShellChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellChecks.swift; sourceTree = "<group>"; };
+		F18100000000000000000009 /* AnalysisProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisProgress.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -201,6 +203,7 @@
 				F18100000000000000000004 /* IconRail.swift */,
 				F18100000000000000000005 /* ViewerPane.swift */,
 				F18100000000000000000006 /* StatusBar.swift */,
+				F18100000000000000000009 /* AnalysisProgress.swift */,
 				F18100000000000000000007 /* LegacySettingsPanel.swift */,
 			);
 			path = Shell;
@@ -321,6 +324,7 @@
 				F18200000000000000000004 /* IconRail.swift in Sources */,
 				F18200000000000000000005 /* ViewerPane.swift in Sources */,
 				F18200000000000000000006 /* StatusBar.swift in Sources */,
+				F18200000000000000000009 /* AnalysisProgress.swift in Sources */,
 				F18200000000000000000007 /* LegacySettingsPanel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

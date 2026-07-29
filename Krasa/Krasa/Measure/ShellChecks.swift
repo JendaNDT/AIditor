@@ -251,24 +251,126 @@ extension AppModel {
         print("   sudo powermetrics --samplers gpu_power -i 1000 > ~/krasa_shell_gpu.txt")
     }
 
+    // MARK: - Stav běžících analýz (modul 2)
+
+    /// Kontrola fáze 18, modulu 2 (`--status-check`).
+    ///
+    /// Ptá se na tři věci, a každá odpovídá jedné chybě, kterou by uživatel
+    /// poznal až tím, že by appce přestal věřit:
+    ///  A) proteče postup celou smyčkou (0 → N pro obě dimenze)?
+    ///  B) je čip v toolbaru vidět, DOKUD se pracuje, a zmizí, až se doprací?
+    ///  C) nezůstane po doběhnutí viset žádný běžící stav? Čip, který tvrdí
+    ///     „analyzuju", když se nic neděje, je horší než žádný čip.
+    func verifyAnalysisStatus() async {
+        // Vzorky se vyprázdní, aby se smyčka opravdu rozjela. Disková cache
+        // zůstává — analýza pak bude rychlá, ale PŘECHODY projde všechny,
+        // a přesně ty se tu měří.
+        timeline.sharpnessSamples = [:]
+        timeline.emptinessSamples = [:]
+
+        let pending = timeline.project.assets.filter { $0.hasVideo && !$0.isStill }
+        guard !pending.isEmpty else {
+            print("❌ projekt nemá video assety — není co analyzovat"); return
+        }
+        print("=== A) postup smyčkou (\(pending.count) assetů) ===")
+
+        analysis.logsTransitions = true
+        var chipSeenWhileRunning = false
+        var maxSharpness = 0
+
+        startSharpnessAnalysis(force: true)
+        guard analysis.total == pending.count else {
+            print("❌ celkový počet \(analysis.total), čekáno \(pending.count)"); return
+        }
+
+        let deadline = Date().addingTimeInterval(600)
+        while Date() < deadline {
+            if analysis.chipText != nil { chipSeenWhileRunning = true }
+            maxSharpness = max(maxSharpness, analysis.sharpnessDone)
+            if analysis.log.last == "finish" { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        // Log ze SMYČKY se zmrazí hned — ruční zkouška čipu v části B do něj
+        // jinak přidá vlastní přechody a část C by měřila je, ne smyčku.
+        let loopLog = analysis.log
+
+        var failures = 0
+        func check(_ ok: Bool, _ text: String) {
+            if !ok { failures += 1 }
+            print("\(ok ? "✅" : "❌") \(text)")
+        }
+
+        check(analysis.sharpnessDone == pending.count,
+              "ostrost hotová pro \(analysis.sharpnessDone)/\(pending.count)")
+        check(analysis.emptinessDone == pending.count,
+              "hluchá místa hotová pro \(analysis.emptinessDone)/\(pending.count)")
+
+        print("")
+        print("=== B) čip v toolbaru ===")
+        // ⚠️ Vzorkované pozorování je jen INFORMACE, ne kritérium.
+        // Vzorkuje se po 20 ms a při teplé diskové cache trvá jeden krok
+        // smyčky zlomek toho — čip pak proklouzne mezi vzorky, i když se
+        // zobrazil správně. První verze tohohle na to spadla: kontrola
+        // hlásila chybu podle toho, jestli byla cache studená.
+        print("ℹ️ čip zachycen vzorkováním: \(chipSeenWhileRunning ? "ano" : "ne")"
+              + " (při teplé cache smí proklouznout — není to kritérium)")
+
+        // Kritérium je vlastnost stavu, ne štěstí při vzorkování:
+        // čip je vidět PRÁVĚ TEHDY, když něco běží.
+        analysis.started(.sharpness, name: "kontrola.mp4")
+        check(analysis.chipText != nil && analysis.isRunning,
+              "s běžící dimenzí je čip vidět (\(analysis.chipText ?? "nil"))")
+        analysis.finish()
+        check(analysis.chipText == nil && !analysis.isRunning,
+              "bez běžící dimenze čip zmizí")
+
+        check(analysis.statusText == "Kvalita \(pending.count)/\(pending.count)",
+              "stavový řádek hlásí „\(analysis.statusText ?? "nic")\"")
+
+        print("")
+        print("=== C) nic nezůstalo viset ===")
+        check(!analysis.isRunning, "žádná dimenze už neběží")   // platí i po zkoušce v B)
+        check(analysis.currentName == nil, "jméno zpracovávaného souboru uklizené")
+
+        // Každý „start" musí mít svůj „done" — visící start znamená, že
+        // smyčka někde vypadla a čip by zamrzl na tom souboru.
+        let starts = loopLog.filter { $0.hasPrefix("start ") }.count
+        let dones = loopLog.filter { $0.hasPrefix("done ") }.count
+        check(starts == dones && starts == pending.count * 2,
+              "\(starts) startů = \(dones) dokončení (čekáno \(pending.count * 2) od obou dimenzí)")
+        check(loopLog.last == "finish", "poslední přechod smyčky je „finish\"")
+
+        print("")
+        print("přechody smyčky (\(loopLog.count)):")
+        for line in loopLog.prefix(8) { print("   \(line)") }
+        if loopLog.count > 8 { print("   … a dalších \(loopLog.count - 8)") }
+
+        analysis.logsTransitions = false
+        print("")
+        print(failures == 0 ? "✅ STAV ANALÝZ SEDÍ" : "❌ neshod: \(failures)")
+    }
+
     // MARK: - Koukanec
 
     /// Postaví osu s klipy, presetem a rampou, aby bylo vidět chrome
     /// i čipy nad obrazem. Nic neměří — je to pro oko a screenshot.
     func runShellDemo() async {
-        guard let source = timeline.project.assets
-            .filter({ $0.hasVideo && !$0.isStill })
-            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+        // Všechny video assety, ne jeden — osa pak vypadá jako v návrhu
+        // (různá jména klipů) a analýzy mají co počítat, takže je čip
+        // v toolbaru vidět dost dlouho na to, aby šel vyfotit.
+        let sources = timeline.project.assets.filter { $0.hasVideo && !$0.isStill }
+        guard !sources.isEmpty else {
             print("❌ žádný video asset"); return
         }
         var project = Project.empty()
-        project.addAsset(source)
         var firstClip: ClipID?
         do {
-            for (index, start) in [0, 90, 180, 270].enumerated() {
-                let clip = Clip(assetID: source.id, timelineStart: Frames(start),
+            for (index, source) in sources.enumerated() {
+                project.addAsset(source)
+                let clip = Clip(assetID: source.id, timelineStart: Frames(index * 90),
                                 duration: Frames(90),
-                                sourceStart: project.timeline.sourceTime(Frames(index * 120)))
+                                sourceStart: project.timeline.sourceTime(.zero))
                 try project.insert(clip, onTrack: project.timeline.tracks[0].id)
                 if firstClip == nil { firstClip = clip.id }
             }
@@ -288,6 +390,13 @@ extension AppModel {
             timeline.toggleClassicRamp(firstClip)
         }
         status = "Rampa 1× → 0,25× nastavena · ⌘Z vrátí"
+
+        // Analýzy naostro (M2) — ať je vidět čip v toolbaru a tečka ve
+        // stavovém řádku. Vzorky se vyprázdní, aby se smyčka rozjela;
+        // disková cache zůstává, takže to reálně stojí jen čtení z disku.
+        timeline.sharpnessSamples = [:]
+        timeline.emptinessSamples = [:]
+        startSharpnessAnalysis(force: true)
 
         if let host = await shellHostView() {
             host.window?.makeKeyAndOrderFront(nil)

@@ -46,6 +46,10 @@ final class AppModel: ObservableObject {
     /// hlasitost neměří, a měřidlo, které si čísla vymýšlí, je horší
     /// než měřidlo, které přizná, že ještě nic neví.
     @Published var lastLoudness: LoudnessReadout?
+    /// Postup analýz kvality (fáze 18, modul 2). Vlastní objekt, ne pole
+    /// v modelu — čip i stavový řádek na něj koukají zvlášť, a kdyby seděl
+    /// v `AppModelu`, překresloval by se s ním každý řádek stavu.
+    let analysis = AnalysisProgress()
 
     let importer = MediaImporter()
     let controller = PlaybackController()
@@ -348,8 +352,10 @@ final class AppModel: ObservableObject {
     /// zadarmo. Fotky se přeskakují (jeden snímek nemá co „rozmazat
     /// pohybem" a hluchost je věc střihu, ne fotky) a pod CLI měřeními
     /// se nespouští (soupeřila by o stroj).
-    func startSharpnessAnalysis() {
-        guard !CommandLine.arguments.dropFirst().contains(where: { $0.hasPrefix("--") })
+    /// `force` obchází vypnutí pod CLI — potřebuje ho `--status-check`,
+    /// který právě tuhle smyčku měří.
+    func startSharpnessAnalysis(force: Bool = false) {
+        guard force || !CommandLine.arguments.dropFirst().contains(where: { $0.hasPrefix("--") })
         else { return }
         let pending = timeline.project.assets.filter {
             $0.hasVideo && !$0.isStill
@@ -357,17 +363,30 @@ final class AppModel: ObservableObject {
                     || timeline.emptinessSamples[$0.id] == nil)
         }
         guard !pending.isEmpty else { return }
+        analysis.begin(total: pending.count)
         Task { [weak self] in
+            // ⚠️ `defer`, ne zavolání na konci těla. Kdyby smyčka spadla
+            // nebo se úloha zrušila, čip v toolbaru by zůstal viset a
+            // tvrdil, že se pracuje — a uživatel by čekal na něco, co
+            // nikdy nedoběhne. Hlídá to `--status-check`.
+            defer { self?.analysis.finish() }
             for asset in pending {
                 let url = asset.url(usingProxies: false)
+                let name = asset.originalURL.lastPathComponent
+
+                self?.analysis.started(.sharpness, name: name)
                 if let samples = await SharpnessStore.shared.samples(for: url),
                    !samples.isEmpty {
                     self?.timeline.sharpnessSamples[asset.id] = samples
                 }
+                self?.analysis.finished(.sharpness)
+
+                self?.analysis.started(.emptiness, name: name)
                 if let samples = await EmptinessStore.shared.samples(for: url),
                    !samples.isEmpty {
                     self?.timeline.emptinessSamples[asset.id] = samples
                 }
+                self?.analysis.finished(.emptiness)
             }
         }
     }
@@ -3714,6 +3733,8 @@ struct ContentView: View {
                     await model.runShellGPUComparison(only: Array(explicit))
                 } else if arguments.contains("--shell-demo") {
                     await model.runShellDemo()
+                } else if arguments.contains("--status-check") {
+                    await model.verifyAnalysisStatus()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

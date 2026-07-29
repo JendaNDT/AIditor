@@ -211,6 +211,35 @@ těch souborů stejně sahá kvůli výškám stop — vytrhávat je teď by zna
 který o kreslení osy není. Editor rychlostní křivky sedí v panelu 452 px, ale jeho vnitřní layout je
 pořád ten z pásu 132 px a nahoře se zařezává; přestaví ho **M7**.
 
+### ✅ M2 — stavový řádek a čip běžících analýz (29. 07. 2026)
+
+**Postaveno:** `UI/Shell/AnalysisProgress.swift` (stav + `AnalysisChip`), přepsaný `StatusBar.swift`
+se třemi tečkami (kvalita · proxy · model přepisu), čip zapojený do toolbaru.
+
+**Proč postup nežije ve storech.** `SharpnessStore` a `EmptinessStore` jsou actory nad JEDNÍM
+souborem — o tom, že se zpracovává třetí asset z pěti, nevědí a vědět nemají. „3/5" je stav
+**smyčky**, kterou drží `AppModel`, takže postup patří vedle ní. Do storů by se musel protlačit
+shora, aby ho mohly hlásit zpátky dolů.
+
+**⚠️ `defer`, ne zavolání na konci těla.** Kdyby smyčka spadla nebo se úloha zrušila, čip by zůstal
+viset a tvrdil, že se pracuje. Přesně na to se ptá část C kontroly.
+
+**Ověřeno `--status-check`:** 5 assetů, obě dimenze **5/5**, **10 startů = 10 dokončení**, po
+doběhnutí `running == nil`, `chipText == nil`, jméno souboru uklizené, poslední přechod smyčky
+„finish". **Ověřeno screenshotem:** čip „Analyzuju hluchá místa · 3/5" v toolbaru a oranžová tečka
+„Hluchá místa 3/5" ve stavovém řádku.
+
+**⚠️ Kontrola „čip byl vidět" musela přestat být vzorkovací.** První verze vzorkovala `chipText`
+po 20 ms a hlásila chybu podle toho, jestli byla disková cache studená — se studenou prošla,
+s teplou spadla, protože krok smyčky trval kratší dobu než perioda vzorkování. Kritériem je teď
+**vlastnost stavu** (čip je vidět právě tehdy, když něco běží), vzorkované pozorování zůstalo jako
+informační řádek. Ověřeno v obou režimech cache.
+
+**Regrese:** `--timeline-bench` **0 vypadlých tiků**, `--shell-check` beze změny.
+
+**Přiznaná mez M2:** tečka proxy se ukáže, až proxy existují; u projektu bez nich je levá strana
+řádku prázdná. Je to záměr — tečka „Proxy 0/0" by uživatele naučila řádek nečíst.
+
 ---
 
 ## 5. Roadmapa

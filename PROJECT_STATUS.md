@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (FÁZE 18 ROZJETÁ — modul 1 hotový: nová skořápka okna)*
+*Naposled aktualizováno: 29. 07. 2026 (FÁZE 18 ROZJETÁ — hotové moduly 1 a 2)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,9 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (453, 29
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 2 — stavový řádek a čip běžících analýz.** Plán celé fáze je ve `FAZE_18_UI.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 3 — lišta osy: přepínače vrstev, citlivost, výřez, zoom.** Plán celé fáze je ve `FAZE_18_UI.md`.
 
-**Pořadí odsud:** fáze 18 (M1 ✅ → M2 → M3 → M7 → M8 → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
+**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 → M7 → M8 → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
 ⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
 
@@ -26,6 +26,26 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
+
+✅ **Modul 2 — stav běžících analýz (29. 07. 2026).**
+
+  - **`AnalysisProgress` + `AnalysisChip`:** analýzy kvality z fáze 15 běžely od svého vzniku
+    **úplně bez UI** — `startSharpnessAnalysis()` se rozjelo po importu a uživatel se o něm dozvěděl
+    tak, že se na klipech samy objevily proužky. Teď je v toolbaru čip „Analyzuju hluchá místa · 3/5"
+    (kreslí se JEN když něco běží) a ve stavovém řádku tři tečky: kvalita, proxy, model přepisu.
+  - **Postup nežije ve storech, ale u smyčky.** `SharpnessStore` i `EmptinessStore` jsou actory nad
+    jedním souborem — „3/5" je stav smyčky v `AppModelu`, ne stavu úložiště.
+  - **⚠️ `defer { analysis.finish() }`,** ne volání na konci těla: po pádu nebo zrušení úlohy by čip
+    zůstal viset a tvrdil, že se pracuje.
+  - **Ověřeno `--status-check`:** obě dimenze **5/5**, **10 startů = 10 dokončení**, po doběhnutí
+    nic nevisí (`running`, `chipText`, jméno souboru — vše uklizené). Screenshot ukazuje čip
+    i oranžovou tečku ve stavovém řádku.
+  - **⚠️ Kontrola viditelnosti čipu musela přestat být vzorkovací.** První verze vzorkovala po 20 ms
+    a hlásila chybu podle toho, jestli byla disková cache studená (s teplou byl krok smyčky kratší
+    než perioda vzorkování). Kritérium je teď **vlastnost stavu** — čip je vidět právě tehdy, když
+    něco běží — a vzorkované pozorování zůstalo jako informační řádek. Ověřeno s oběma stavy cache.
+  - **Regrese:** `--timeline-bench` 0 vypadlých tiků, `--shell-check` beze změny.
+  - *Koukanec rukou (v seznamu): čip při importu většího množství klipů, tečky ve stavovém řádku.*
 
 ✅ **Modul 1 — nový rám okna (29. 07. 2026).**
 

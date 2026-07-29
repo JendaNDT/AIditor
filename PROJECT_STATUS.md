@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 14: modul 1 hotový — BeatGrid v AudioEngine)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 14: moduly 1–2 hotové — hudební mapa na ose a magnet na doby)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,18 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (365, 28
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 14 — hudební synchronizace, modul 2** — hudební mapa na ose: analýza hudebního klipu na A2 (`BeatDetector` nad `MonoAudioReader`, výsledek k assetu jako `Asset.beatGrid` — vzorec `transcript`), doby jako značky v pravítku a **magnetické přichytávání** střihů a klipů na doby = nový druh kandidáta v `TimelineGeometry` (otestovatelné bez UI; síla kandidáta mezi „hrana klipu" a „mřížka snímků"). Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 14 — hudební synchronizace, modul 3 (dopasování na dobu): FÁZE 14 SE JÍM UZAVŘE.** „Přizpůsobit klip" = konstantní změna rychlosti v mezích 90–115 %, ⚠️ **vždy nad limitem čistého zpomalení** (`výstupFps/zdrojFps` — žlutá zóna platí i tady); „rampa na úder" = preset `SpeedRampEngine` končící zpomalením přesně na době. **Při velké odchylce nevynucovat** — nabídnout trim nebo jiný bod (zásada přiznaných mezí). Detail v `IMPLEMENTACNI_PLAN.md`.
 
-## 🚧 FÁZE 14 — hudební synchronizace (modul 1 HOTOVÝ 29. 07. 2026)
+## 🚧 FÁZE 14 — hudební synchronizace (moduly 1–2 HOTOVÉ 29. 07. 2026)
+
+✅ **Modul 2 — hudební mapa na ose a magnet na doby (29. 07. 2026).**
+
+  - **`TimelineModel` má novou závislost `AudioEngine`** (oba čistý Swift, přeložitelnost na Linuxu drží) — `Asset.beatGrid: BeatGrid?` je kotvená ve ZDROJOVÉM čase souboru jako přepis: trim/přesun klipu s dobami nehnou, drží se na hudbě. Volitelné pole, verze formátu se nezvedá. `setBeatGrid` validuje (jen asset se zvukem, konečné tempo); **`beatMarks()`** promítá doby přes klipy zvukových stop inverzí `sourceOffset` (vzorec `subtitleCues` — funguje i pod rampou), deduplikuje a řadí. **+10 testů, celkem 375, 0 selhání.**
+  - **Magnet:** nový druh kandidáta `SnapCandidate.Kind.beat` — SLABŠÍ než hrana klipu (hrany se zarovnávají přesně, doby jsou magnet, ne zákon; plán: síla mezi hranou a mřížkou snímků). `snapCandidates` bere `beats:` od volajícího (geometrie projekt nezná); zapojené v `TimelineInteraction.begin` (tažení klipů) i v tažení titulků.
+  - **Import: menu Soubor → „Přidat hudbu…"** — klip celé skladby na A2 za poslední klip stopy, pak na pozadí `MonoAudioReader` (mono 24 kHz — krok obálky ~10,7 ms jako na 48 kHz, ale FFT poloviční) → `BeatDetector.analyze` → mřížka k assetu (`setBeatGrid` na controlleru, jeden undo krok). Status hlásí BPM a jistotu; **nízká jistota (< 30 %) se PŘIZNÁVÁ**, nenalezené tempo taky („u ambientní hudby je to v pořádku").
+  - **Pravítko:** jantarové rysky dob při spodní hraně (`TimelinePalette.beat` — nová barva, s ničím se neplete), „raz" taktu vyšší a plný. Počítá se při kreslení — bez hudby je `beatMarks()` okamžitý early-out, scroll benchmark fáze 2 nedotčený.
+  - **Ověřeno CLI `--music-check` kvantitativně:** klikový WAV 120 BPM toutéž cestou jako hudba uživatele → mřížka **120,02 BPM, jistota 90 %, fáze 0,502 s**; 24 značek na ose s **největší odchylkou 1 snímek od ideální mřížky 15 snímků BEZ kumulativního driftu** (přesně to má regrese v detektoru zabíjet; jednotlivá rozteč smí o snímek uhnout — 120,02 ≠ 120,00 a kontrola to nepředstírá); raz každé 4 doby; magnet přitáhl snímek vedle doby s druhem `.beat`. **Ověřeno screenshotem (`--music-demo`):** klik 110 BPM → status „110,0 BPM (jistota 93 %)", jantarové doby v pravítku sedí na transientech vlny klipu na A2.
+  - *Koukanec rukou (v seznamu): Přidat hudbu… na reálné skladbě, doby v pravítku, magnet při tažení.*
 
 ✅ **Modul 1 — `BeatGrid` + `BeatDetector` v `AudioEngine` (29. 07. 2026).** Čistý Swift bez závislostí (vlastní FFT z fáze 7), **+16 testů, celkem 48 v balíčku, 0 selhání**; vše prošlo napoprvé.
 
@@ -172,7 +181,7 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 2. ✅ **F11 — texty a titulky + stopa T1** (HOTOVÁ 29. 07.; obě splátky fáze 8 splacené, export přes `frameDecorator` místo CoreAnimationTool — viz oprava v plánu)
 3. ✅ **F12 — fotky a Ken Burns** (HOTOVÁ 29. 07.; fotka přes „still movie" mezisoubor, freeze frame jako fotka)
 4. ✅ **F13 — barevné presety** (HOTOVÁ 29. 07.; vlastní `ColorVideoCompositor` ověřený `--color-check`, GPU skok ~24 %, UI v inspektoru)
-5. 🚧 **F14 — hudební synchronizace** (beat-grid na vlastní FFT, magnet na doby, dopasování tempa 90–115 % s respektem k limitu zpomalení — VLAJKOVÁ) **← PRÁVĚ TADY** (modul 1 hotový: `BeatGrid`+`BeatDetector` v `AudioEngine`, ±0,1 BPM na klikových stopách; zbývá modul 2 mapa+magnet a modul 3 dopasování)
+5. 🚧 **F14 — hudební synchronizace** (beat-grid na vlastní FFT, magnet na doby, dopasování tempa 90–115 % s respektem k limitu zpomalení — VLAJKOVÁ) **← PRÁVĚ TADY** (moduly 1–2 hotové: detekce ±0,1 BPM, `Asset.beatGrid`, doby v pravítku, magnet `.beat`; zbývá modul 3 dopasování na dobu)
 6. **F15 — analýzy kvality** (neostrost, ticho/prázdno; jen návrhy, nikdy automatický střih)
 7. **F16 — vymazlení** (zvukové fade úchyty, dBTP strop, správa Whisper modelu)
 
@@ -184,6 +193,7 @@ Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou p�
 - [ ] **Fotky a Ken Burns (F12):** Soubor → Přidat fotky… položí fotky na konec V1 (5 s); fotka hraje v náhledu při přehrávání i scrubování (aspect-fit s pruhy); délka fotky jde natáhnout tažením okraje bez omezení; inspektor fotky (výběr klipu fotky) přepíná Bez pohybu / Nájezd / Odjezd a zoom mění pohyb v náhledu; pravý klik na video klip → Zmrazit snímek udělá fotku na konci osy shodnou se snímkem pod hlavou; na fotce jsou rampa/sync/přepis vypnuté s vysvětlením; export vypadá jako náhled (fotka, pohyb i pruhy).
 - [ ] **Texty a T1 (F11):** pravý klik na volné místo T1 → Přidat titulek (obsazené místo vypnuté s vysvětlením); nový titulek se vybere a v inspektoru jde hned psát — text se mění v náhledu při psaní; šablony mění vzhled (jména velká patková přes střed), zarovnání funguje; tažení těla přesouvá se zarážkou o sousedy, okraje trimují, Shift vypíná přichytávání, Escape ruší, Delete maže, ⌘Z vrací; klik na zelený pásek řeči → inspektor přepisu, úprava textu se propíše do titulku v náhledu, prázdný text úsek smaže; titulek za posledním klipem prodlouží film (přes černou); exportovaný film má titulky na stejných místech a se stejným vzhledem jako náhled.
 - [ ] **Barevné presety (F13, po modulu 3):** preset na klipu se projeví v náhledu při přehrávání i scrubování; intenzita mění sílu plynule; přehrávání s presety na 4K ose je plynulé; export vypadá jako náhled; preset + prolínačka + Ken Burns dohromady fungují.
+- [ ] **Hudba a doby (F14, po modulu 3):** Soubor → Přidat hudbu… položí skladbu na A2 a status řekne BPM s jistotou; jantarové doby v pravítku sedí na hudbě („raz" vyšší); tažení klipu se přichytává na doby (slaběji než na hrany, Shift vypíná); u ambientní hudby se tempo poctivě nenajde; dopasování klipu na dobu (modul 3) funguje a respektuje žlutou zónu.
 - [ ] **Dotaz při zavírání (F5):** změna v projektu → ⌘Q ukáže Uložit/Neukládat/Zrušit (Escape ruší); týž dotaz po výběru souboru při ⌘O a importu; „Uložit" u neuloženého projektu přes „Uložit jako" — zrušení panelu ruší i zavírání.
 - [ ] **Hlasitost stop (F7):** posuvník v hlavičce A1/A2 mění hlasitost ZA BĚHU přehrávání bez zastavení; M ztlumí a vrátí; ⌘Z vrací tažení jedním krokem; hodnoty přežijí uložení a otevření projektu.
 - [ ] **Normalizace exportu (F7):** volba profilu u tlačítka exportu; po exportu status hlásí „Hlasitost X → cíl (gain ±Y dB)", případně poctivé omezení špičkami.

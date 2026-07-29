@@ -133,10 +133,10 @@ Referenční hodnota: ramp 1,0 → 0,25 → 1,0 přes 5 s spotřebuje **přesně
 Testy pustíš přes `cd SpeedRampEngine && swift test`.
 
 ### `TimelineModel/`
-Logika, geometrie a interakce časové osy. Čistý Swift, jediná závislost
-`SpeedRampEngine` (také čistý Swift), **žádné AVFoundation ani AppKit** —
-přeloží se a otestuje i na Linuxu. **365 testů, ověřeno; 28 invariantů ve
-`validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
+Logika, geometrie a interakce časové osy. Čistý Swift, závislosti
+`SpeedRampEngine` a od F14 `AudioEngine` (oba také čistý Swift), **žádné
+AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **375
+testů, ověřeno; 28 invariantů ve `validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
 křivku (uzly kotvené ve zdrojovém čase) a `rampPlaybackPlan` vydává
 segmentaci v celých tickách pro `scaleTimeRange`. Od vylepšovacích fází
 navíc:
@@ -162,6 +162,12 @@ navíc:
   Split/duplicate/ocásek overwrite preset dědí — POZOR, ta tři místa staví
   `Clip` výslovným konstruktorem: nové pole klipu se tam musí předat ručně,
   jinak se potichu ztratí (testy to hlídají).
+- **Hudba (F14):** `Asset.beatGrid` (typ `BeatGrid` z AudioEngine) kotvená
+  ve ZDROJOVÉM čase — trim/přesun s dobami nehnou; `setBeatGrid` (jen asset
+  se zvukem), `beatMarks()` promítá doby na osu inverzí `sourceOffset`
+  (vzorec `subtitleCues`). Magnet: `SnapCandidate.Kind.beat` — SLABŠÍ než
+  hrana klipu; `snapCandidates(beats:)` dostává doby od volajícího,
+  geometrie projekt nezná.
 
 ```swift
 var project = Project.empty()                        // V1 + A1 + A2 + T1

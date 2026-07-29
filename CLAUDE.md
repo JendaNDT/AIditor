@@ -282,5 +282,6 @@ Vstup se NEOŘEZÁVÁ — 32-bit float zdroje (DJI Mic, Zoom F3) nesou hodnoty p
 - **Licencování a freemium — odloženo 28. 07. 2026 na pokyn autora: aplikace bude zatím FREE.** Ceny a PRO verze ve specifikaci (1 490 Kč) neplatí. Kill-gate 2 přeformulován v plánu na „deset cizích lidí ji použije" místo „prodat".
 - **Svatební asistent (checklist, záběrový plán, BPM plánovač) — škrtnut 28. 07. 2026 na pokyn autora.** Produkt je čistě videoeditor; specifikace (sekce 4.4) ho sice obsahuje, ale platí plán. Pravidlo „záběry na zpomalení toč na 120 fps" tím nezaniká — říká ho žlutá zóna v editoru křivek a duplikace snímků musí zůstat v UI přiznaná.
 - Optical flow dopočet mezisnímků — škrtnuto, je to výzkumný problém.
-- Rozpoznávání obličejů — až za v1.0 a jen po projití právního a licenčního gate (viz plán, podmíněná fáze 19).
+- **Stabilizace obrazu už škrtnutá NENÍ** — 29. 07. 2026 ji autor zařadil jako fázi 21 (třetí vlna). Výhrady ale platí: „gumový obraz" z rolling shutteru globální transformací opravit nejde, proto v1 jen AFINNÍ registrace (ne homografie), korekce se aplikuje ve VLASTNÍM compositoru (per-snímková transformace přes instrukce = tisíce instrukcí na klip), ořez je viditelný a fáze začíná spikem s právem přestat.
+- Rozpoznávání obličejů — až za v1.0 a jen po projití právního a licenčního gate (viz plán, podmíněná fáze 23).
 - Freeze frame a zpětné přehrávání v `SpeedRampEngine` — rozbilo by invertibilitu mapování.

@@ -428,17 +428,94 @@ Při tom se ověří i kritérium fáze 4 (plynulost na 200GB reálném materiá
 
 ---
 
+## Třetí vlna: fáze 17–21 (sestaveno 29. 07. 2026)
+
+Sestaveno z návrhu vylepšení po dokončení fází 10–16, na základě průzkumu kódu — ne z přání, ale z toho, co v appce po dostavění plánu opravdu chybí. Tři pravidla, která tuhle vlnu drží pohromadě:
+
+1. **Fáze 17 je JEDINÁ, která smí přijít před kill-gate.** Nejsou to funkce, jsou to chybějící základy ovládání. Bez nich bude svatba bolet z důvodů, které s produktem nemají nic společného.
+2. **Pořadí 18–21 není závazné.** Kill-gate ho smí přeházet: co bude na svatbě bolet, jde nahoru. To je celý smysl toho, že se svatba stříhá dřív, než se tyhle fáze postaví.
+3. **Každá fáze má kvantitativní ověření** (CLI kontrola se změřenými čísly), stejně jako fáze 10–16. Screenshot je doplněk, ne důkaz.
+
+### FÁZE 17 — Ergonomie střihu → v1.1 (PŘED kill-gate)
+
+Cíl: appka, ve které se dá strávit den, ne jen předvést funkce. Všechno níže je díra ověřená v kódu, ne domněnka.
+
+- **Modul 1 — osa sleduje hlavu + JKL.**
+  - **Auto-scroll STRÁNKOVACÍ, ne plynulé centrování.** Když hlava opustí pravý okraj, skočí se tak, aby seděla v levé třetině. Plynulé centrování překresluje osu na každý tik hlavy (30×/s) — přesně to, čemu se fáze 2 vyhnula zúžením odběrů — a opticky je nepříjemné. Logika do modelu jako čistá funkce (`TimelineGeometry.scrollToKeep(playhead:in:)`), testovatelná bez UI.
+  - ⚠️ **Auto-scroll se MUSÍ vypnout, když uživatel scrubuje nebo táhne klip** (`isUserScrubbing`, běžící interakce). Jinak si appka s uživatelem přetahují scroll.
+  - **JKL:** L zrychluje 1→2→4→8×, J totéž pozpátku, K pauza; jde to na `AVPlayer.rate`. ⚠️ Zpětné přehrávání není samozřejmost — `AVPlayerItem.canPlayReverse` a `canPlayFastReverse` (macOS 10.8+) se musí ZEPTAT a při `false` spadnout na krokování po snímcích. U 4K HEVC bez proxy čekej trhání (dekódování pozpátku od klíčového snímku — tentýž důvod, proč je proxy o scrubování); u ProRes proxy je reverse levný, protože je intra-only.
+    <https://developer.apple.com/documentation/avfoundation/avplayeritem/canplayreverse>
+- **Modul 2 — výběr a schránka.**
+  - **Multi-výběr:** shift-klik rozšiřuje, ⌘-klik přepíná, tažení v prázdné ploše = rámečkový výběr. Do modelu čistá funkce „které klipy leží v obdélníku".
+  - **Schránka ⌘C/⌘X/⌘V:** vkládá se na hlavu, na stopu téhož druhu. ⚠️ Svázané dvojice se kopírují JAKO DVOJICE a s čerstvým `LinkID` — jinak by tři klipy sdílely jednu vazbu a `validate()` ohlásí `brokenLink`. Je to táž past, kterou už jednou chytil split svázaného páru (fáze 2, krok 9).
+  - **Hromadné operace:** barevný preset, fade i rampa se aplikují na CELÝ výběr. Tohle je vlastní odměna fáze — bez ní jsou funkce z F13 a F16 na projektu s dvěma sty klipy nepoužitelné.
+- **Modul 3 — chronologie a export rozsahu.**
+  - **Čas natočení:** `AVAsset.load(.creationDate)` → `AVMetadataItem?` → `.dateValue`. ⚠️ Synchronní `asset.creationDate` je od macOS 13 deprecated. Když metadata chybí, spadnout na datum souboru a ŘÍCT to (přiznané meze).
+    <https://developer.apple.com/documentation/avfoundation/avasset/creationdate>
+  - **Řazení podle času** v sidebaru a příkaz „Uspořádat chronologicky" na ose. Dnes se řadí podle JMÉNA — u jedné kamery to projde (název je timestamp), u druhé kamery nebo telefonu hostů se chronologie rozsype. Svatba je chronologická událost.
+  - **Export rozsahu:** in/out na ose, exportuje se jen výřez. Kontrola kusu filmu bez čekání na celek.
+
+**Hotovo když:** přehrání dvacetiminutové osy nevyžaduje sáhnout na scroll; preset na deset klipů je jedno kliknutí; klipy ze dvou kamer se poskládají v pořadí, ve kterém se natočily.
+
+### FÁZE 18 — Druhá obrazová stopa (V2) → v1.2
+
+Největší funkční díra: dnes je JEDNA obrazová stopa, takže neexistuje B-roll, druhá kamera ani obraz nad obrazem.
+
+**Dobrá zpráva z průzkumu kódu:** vrstvení kompozice UŽ UMÍ — `CompositionBuilder.computeSpans` iteruje stopy pozpátku („pozdější stopa osy překrývá dřívější") a vrstvy instrukce se skládají odpředu dozadu. Vzniklo to pro A/B rozklad přechodů a pro V2 to platí beze změny.
+
+- **Modul 1 — technický dluh: konec domněnky `tracks[0]`.** Aplikace si na šesti místech domýšlí V1 = `tracks[0]` a A1 = `tracks[1]` (zapsáno u `Project.empty` od fáze 11). S druhou obrazovou stopou to praskne. Náhrada: pojmenované přístupové cesty (`firstVideoTrack`, `firstAudioTrack`, `titleTracks`) a test, který drží projekt s V2 vloženou PŘED V1.
+- **Modul 2 — přidání a odebrání stopy v UI.** Model `addTrack`/`removeTrack` existuje. Odebrání stopy s klipy se ptá; minimum je jedna obrazová a jedna zvuková stopa.
+- **Modul 3 — vrstvení v kompozici a exportu.** ⚠️ **Kritická oprava:** video kompozice dnes vzniká jen kvůli přechodu, Ken Burns nebo presetu. **Překryv dvou obrazových stop ji musí vynutit taky** — jinak si AVFoundation vybere stopu sama a výsledek je nepředvídatelný. v1 = plné překrytí (horní stopa zakrývá spodní); obraz v obraze (měřítko a pozice) je samostatná položka backlogu, ne součást téhle fáze.
+- **Ověření `--v2-check`:** export, kde klip na V2 překrývá V1 — změřený snímek v překryvu musí odpovídat zdroji z V2, snímek mimo překryv zdroji z V1.
+
+### FÁZE 19 — Ducking hudby pod řečí + jednotná obálka mixu → v1.3
+
+Nejotravnější ruční operace svatebního filmu. Všechny díly existují: přepis říká, KDE se mluví, mix umí volume rampy, `LoudnessMeter` umí měřit.
+
+- **Modul 1 — model.** Z přepisů klipů na řečových stopách se spočítají „duck úseky" pro cílovou stopu (typicky A2 s hudbou): hloubka (výchozí −12 dB), náběh ~200 ms, doběh ~600 ms a **spojování úseků bližších než ~1 s**. To poslední je podstatné: bez něj by hudba mezi větami pumpovala nahoru a dolů a bylo by to horší než bez duckingu. Čistá funkce s testy na kotvách (překryv, krátké mezery, řeč přes celý klip).
+- **Modul 2 — jednotná obálka mixu.** ⚠️ Dnes se do `AVMutableAudioMixInputParameters` sypou rampy ze tří nezávislých zdrojů (hlasitost stopy, crossfade, fade po klipech) a drží to pravidlo „hrana pod crossfadem fade nedostane". S duckingem jako čtvrtým zdrojem to přestane jít uhlídat. Správné řešení: spočítat pro každou stopu kompozice **JEDNU po částech lineární obálku** ze všech zdrojů a vydat ji jako uspořádanou sekvenci ramp. Je to úklid, který udělá mix správný konstrukcí místo pravidly — a je předpokladem, ne vedlejším produktem.
+- **Ověření `--duck-check`:** export hudby s řečí; RMS hudebního pásma během řeči proti RMS mimo ni, a kontrola, že se hlasitost vrací (nezůstane stažená).
+
+### FÁZE 20 — Multikamera, markery a třídění materiálu → v1.4
+
+Tři nezávislé věci, které dohromady dělají práci s velkým materiálem snesitelnou. Každá stojí na něčem hotovém.
+
+- **Modul 1 — synchronizace dvou KAMER podle zvuku.** `WaveformSync` už páruje klopák s kamerou na vzorek přesně; dvě kamery jsou totéž zadání s jiným vstupem. Výsledek posune klip na V2 tak, aby zvuky seděly. Nízká jistota se hlásí dialogem — pravidlo z fáze 7 platí beze změny.
+- **Modul 2 — markery.** `SnapCandidate.Kind.marker` je v modelu připravený a dosud nepoužitý. Marker patří OSE (ne stopě): čas, jméno, barva. M ho položí na hlavu, kreslí se v pravítku, přichytávání dostane zadarmo, seznam umí skákat. Při procházení hodin materiálu je to způsob, jak si dělat poznámky („polibek", „proslov"), aniž bys musel stříhat.
+- **Modul 3 — třídění a navigace podle kvality.** Fáze 15 už spočítala ostrost i hluchá místa a drží je v cache. Nad hotovými daty: filtr v sidebaru („jen ostré klipy"), skok na další problém klávesou, souhrn na klipu („12 s neostrého").
+
+### FÁZE 21 — Stabilizace obrazu → v1.5 — **SPIKE PRVNÍ, s právem přestat**
+
+**Zařazeno na výslovné přání autora 29. 07. 2026.** Do té doby byla podmíněná a plán ji odkládal se třemi výhradami. Ty výhrady NEZANIKLY: „gumový obraz" (vlnění z rolling shutteru globální transformací opravit NELZE), nutnost předvýpočtu, a možnost, že gimbal řeší problém líp než software. Proto fáze **začíná měřením, ne stavbou** — a modul 1 smí celou fázi zastavit.
+
+⚠️ **Stabilizace je jediná funkce v celém plánu, která umí obraz ZHORŠIT.** Z toho plyne: výchozí stav vypnuto, ořez viditelný v UI, a zásahy se přiznávají.
+
+**Technická cesta (API ověřená proti dokumentaci 29. 07. 2026):**
+- **Analýza pohybu:** Vision, `VNTranslationalImageRegistrationRequest` → `VNImageTranslationAlignmentObservation.alignmentTransform` (`CGAffineTransform`), macOS 10.13+. Homografická varianta (`VNHomographicImageRegistrationRequest` → `VNImageHomographicAlignmentObservation`) existuje, ale pro v1 se NEPOUŽIJE: perspektivní warp je přesně ta cesta ke gumovému obrazu.
+  <https://developer.apple.com/documentation/vision/vntranslationalimageregistrationrequest>
+  <https://developer.apple.com/documentation/vision/vnimagetranslationalignmentobservation>
+- **Vyhlazení:** z transformací sousedních snímků se složí absolutní dráha kamery, vyhladí se klouzavým oknem (~1 s) a korekce = vyhlazená dráha minus původní.
+- ⚠️ **Kde se korekce APLIKUJE, je architektonicky nejdůležitější rozhodnutí téhle fáze.** Per-snímková transformace by přes instrukce video kompozice znamenala jednu instrukci na snímek — tisíce instrukcí na klip. Správné místo je **vlastní compositor** (`ColorVideoCompositor` z fáze 13), který dostává `compositionTime` a transformaci si najde v tabulce. Pořadí uvnitř compositoru: **stabilizace → ořez → aspect-fit → barevný preset → průhlednost.**
+- **Ořez:** pevné rameno, výchozí 10 % (zoom 1,11×), nastavitelné 5–20 %, VIDITELNÉ v UI. Korekce se o rameno zaráží; když se zaráží často, řekne se to (vzorec žluté zóny z limitu zpomalení).
+- **Kde běží:** nad proxy nebo podvzorkovaným obrazem ~480×270 (192×108 z fáze 15 je na registraci málo), na pozadí, s cache otiskem — vzorec `SharpnessStore` včetně verze výpočtu v otisku.
+
+**Moduly:**
+- **Modul 1 — SPIKE.** Syntetické video se ZNÁMÝM třesem (statický bohatý obraz posouvaný známou funkcí) → analýza → změřený zbytkový pohyb. **Kritéria k pokračování: zbytkový pohyb klesne aspoň 5×, analýza běží aspoň v reálném čase nad proxy, a na reálném svatebním záběru není okem vidět vlnění.** Když neprojde, fáze KONČÍ a zapíše se proč. To je legitimní výsledek, ne selhání — přesně proto se spike dělá první.
+- **Modul 2 — `StabilizationStore` a model.** Tabulka transformací per asset s diskovou cache; `Clip.stabilization` (zapnuto, síla vyhlazení, ořezové rameno) jako volitelné pole, formát beze změny verze.
+- **Modul 3 — aplikace v compositoru a v exportu.** `--stab-check`: syntetický třes → po stabilizaci změřený zbytkový pohyb, PLUS kontrola, že nestabilizovaný klip projde nedotčený (vzorec pas-through z `--color-check`).
+- **Modul 4 — UI.** Přepínač a posuvníky v inspektoru, průběh analýzy na pozadí, přiznané meze při zaražení o ořez.
+
+---
+
 ## Podmíněné fáze (po kill-gate 1, podle chuti)
 
-### FÁZE 17 — Stabilizace obrazu — **PODMÍNĚNÁ**
+*(Stabilizace odsud 29. 07. 2026 ODEŠLA — autor ji zařadil do třetí vlny jako fázi 21.)*
 
-Z dokumentu; technicky poctivý návrh (trajektorie z bodových příznaků, vyhlazení, opačná transformace, přiznaný ořez), ale je to nejtěžší položka výběru — „gumový obraz" je reálné riziko a vyžaduje předvýpočet. Až po zkušenosti ze svatby: možná se ukáže, že gimbal/stativ problém řeší líp než software.
-
-### FÁZE 18 — Detekce momentů (bez biometrie) — **PODMÍNĚNÁ**
+### FÁZE 22 — Detekce momentů (bez biometrie) — **PODMÍNĚNÁ**
 
 Polibek, potlesk, tanec přes Vision detekci (obličeje-DETEKCE, pózy, pohyb) + pravidla — bez rozpoznávání identity, takže bez právního gate. Přesnost nebude vysoká (dokument to u prstenů sám přiznává); dělat jen, když po svatbě bude jasné, že ruční procházení bolí.
 
-### FÁZE 19 — Rozpoznávání obličejů (8–12 týdnů) — **PODMÍNĚNÁ, tři gaty**
+### FÁZE 23 — Rozpoznávání obličejů (8–12 týdnů) — **PODMÍNĚNÁ, tři gaty**
 
 Tohle není funkce. Je to samostatný projekt uvnitř projektu.
 
@@ -458,9 +535,9 @@ To poslední není leštění. Ente na tom pracovalo 21 měsíců s placeným t�
 
 ---
 
-### FÁZE 20+ — Backlog
+### Backlog (nezařazené, bez čísla)
 
-Automatický reframe 16:9 → 9:16 (Vision + dynamický crop), masky a sledování objektu (rozmazání SPZ/obličeje), obraz v obraze, multicam UI (korelační sync už je hotový z fáze 7 — chybí jen přepínání úhlů), HDR end-to-end, slovenština, LUT soubory (.cube), generátor 48h teaseru, ducking hudby pod řečí a odšumění (`AVAudioEngine` — první skutečný důvod ho nasadit). Optical flow zůstává škrtnutý.
+Automatický reframe 16:9 → 9:16 (Vision + dynamický crop), masky a sledování objektu (rozmazání SPZ/obličeje), **obraz v obraze** (měřítko a pozice klipu na V2 — navazuje na fázi 18), přepínání úhlů multikamery (sync řeší fáze 20), HDR end-to-end, slovenština, LUT soubory (.cube), generátor 48h teaseru, odšumění (`AVAudioEngine` — první skutečný důvod ho nasadit), zvuková obálka po klipech nad rámec fade. Optical flow zůstává škrtnutý. *(Ducking odsud 29. 07. 2026 odešel — je z něj fáze 19.)*
 
 **Z dokumentu vědomě NEpřevzato:** SQLite/Core Data místo projektového souboru (náš JSON formát je hotový, deterministický a verzovaný — migrace bez užitku), přestavba UI na čtyři pracovní režimy (velká přestavba bez jasného přínosu pro jednoho uživatele; jednotlivé prvky — inspektor, režim exportu — můžou přijít postupně) a „učení z potvrzení uživatele" u momentů (nejasná hodnota, dost práce).
 

@@ -13,9 +13,11 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (412, 29
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: KOUKANCE RUKOU, pak KILL-GATE 1.** Vývoj podle plánu skončil — žádná další fáze nečeká. Seznam koukanců je níže v sekci „Příští krok"; projdou se najednou a co při nich vyleze, to se opraví. Pak svatba.
+**➡️ PŘÍŠTÍ KROK: FÁZE 17 — ergonomie střihu** (modul 1: osa sleduje hlavu + JKL). Plán fází 0–16 je dostavěný; 29. 07. 2026 k němu přibyla **třetí vlna, fáze 17–21** (`IMPLEMENTACNI_PLAN.md`), sestavená z průzkumu kódu — co v appce po dostavění plánu opravdu chybí.
 
-⚠️ **Do kill-gate se nepřidávají funkce.** Kdyby při koukancích něco chybělo, zapiš to a rozhodni AŽ PO svatbě — plán tenhle bod formuluje jasně: „Zvládl jsi to, ale bolelo to → opravy toho, co bolelo. Žádné nové funkce, dokud to nebolí míň."
+**Pořadí odsud:** fáze 17 (ergonomie) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)** → fáze 18–21 v pořadí, které určí svatba.
+
+⚠️ **Do kill-gate se nepřidávají FUNKCE — fáze 17 je pojmenovaná výjimka a není funkce.** Auto-scroll za hlavou, JKL, kopírovat/vložit a multi-výběr jsou chybějící základy ovládání; bez nich bude svatba bolet z důvodů, které s produktem nesouvisejí (a hromadné operace navíc rozhodují o tom, jestli jsou presety z F13 na dvou stech klipech vůbec použitelné). Všechno ostatní — V2, ducking, multikamera, stabilizace — čeká AŽ ZA svatbu: „Zvládl jsi to, ale bolelo to → opravy toho, co bolelo. Žádné nové funkce, dokud to nebolí míň."
 
 ## ✅ FÁZE 16 — vymazlení a technické dluhy (HOTOVÁ 29. 07. 2026)
 
@@ -237,7 +239,15 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 6. ✅ **F15 — analýzy kvality** (HOTOVÁ 29. 07.; neostrost 93×, hluchá místa s pravidlem „dekorace není chyba", značky s klik=seek — jen návrhy, nikdy automatický střih)
 7. ✅ **F16 — vymazlení** (HOTOVÁ 29. 07.; zvukové fade úchyty, strop −1 dBTP, správa Whisper modelu, dvě drobnosti z koukanců F10)
 
-**⭐ Tím plánovaný vývoj skončil.** Zbývají koukance rukou (seznam níže) — projdou se najednou — a pak kill-gate.
+**⭐ Tím skončil plán fází 0–16.** Na něj navazuje **třetí vlna (fáze 17–21, sestavená 29. 07. 2026)** — detail v `IMPLEMENTACNI_PLAN.md`:
+
+8. **F17 — ergonomie střihu** (osa sleduje hlavu, JKL, schránka, multi-výběr a hromadné operace, chronologie, export rozsahu) **← PŘED kill-gate, jediná výjimka**
+9. **F18 — druhá obrazová stopa V2** (vrstvení kompozice už hotové z F10; chybí model, UI a vynucení video kompozice při překryvu)
+10. **F19 — ducking hudby pod řečí** + úklid mixu na jednu obálku na stopu
+11. **F20 — multikamera (sync dvou kamer), markery, třídění podle značek kvality**
+12. **F21 — stabilizace obrazu** — zařazena 29. 07. na přání autora; **začíná spikem s právem přestat** (gumový obraz je reálné riziko), aplikace ve vlastním compositoru, ořez viditelný
+
+Mezi F17 a F18 stojí koukance rukou (seznam níže) a kill-gate.
 
 **Seznam koukanců (odškrtávat po projití):**
 

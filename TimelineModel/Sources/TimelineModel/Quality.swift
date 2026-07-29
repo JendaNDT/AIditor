@@ -161,3 +161,142 @@ extension Project {
         return out
     }
 }
+
+// MARK: - Ticho a prázdno (fáze 15, modul 2)
+
+/// Vzorek „hluchosti": hlasitost + tři obrazové signály v čase zdroje.
+/// Pohyb se vklasifikaci v1 NEPOUŽÍVÁ (kapesní záběr se hýbe, dekorace
+/// stojí — pohyb hluchost neurčuje ani jedním směrem), ale měří se a
+/// ukládá: ladění prahů ho jednou může chtít a přepočítávat cache kvůli
+/// tomu by byla škoda.
+public struct EmptinessSample: Hashable, Codable, Sendable {
+    public let time: Double
+    /// RMS hlasitost v dBFS; soubor bez zvukové stopy dává −120 (ticho).
+    public let loudnessDB: Double
+    /// Střední luma 0–255.
+    public let brightness: Double
+    /// Entropie histogramu luma, 0–8 bitů.
+    public let entropy: Double
+    /// Střední |rozdíl| proti předchozímu vzorku, 0–255.
+    public let motion: Double
+
+    public init(time: Double, loudnessDB: Double, brightness: Double,
+                entropy: Double, motion: Double) {
+        self.time = time
+        self.loudnessDB = loudnessDB
+        self.brightness = brightness
+        self.entropy = entropy
+        self.motion = motion
+    }
+}
+
+/// Hluchý úsek promítnutý na osu — binární, žádné úrovně: buď je co
+/// stříhat, nebo ne. Rozhodnutí zůstává na uživateli (návrhová vrstva).
+public struct EmptySegment: Hashable, Sendable {
+    public let start: Frames
+    public let end: Frames
+}
+
+/// Čisté obrazové statistiky pro vzorkovače — v modelu kvůli testům
+/// (aplikace je volá nad podvzorkovanou luma rovinou).
+public enum LumaStats {
+
+    public static func brightness(luma: [UInt8]) -> Double {
+        guard !luma.isEmpty else { return 0 }
+        return Double(luma.reduce(0) { $0 + Int($1) }) / Double(luma.count)
+    }
+
+    /// Shannonova entropie histogramu, v bitech (0 = jednolitá plocha,
+    /// 8 = dokonale rozprostřené hodnoty).
+    public static func entropy(luma: [UInt8]) -> Double {
+        guard !luma.isEmpty else { return 0 }
+        var histogram = [Int](repeating: 0, count: 256)
+        for value in luma { histogram[Int(value)] += 1 }
+        let total = Double(luma.count)
+        var bits = 0.0
+        for count in histogram where count > 0 {
+            let p = Double(count) / total
+            bits -= p * log2(p)
+        }
+        return bits
+    }
+
+    /// Střední absolutní rozdíl dvou stejně velkých mřížek (pohyb).
+    public static func meanDifference(_ a: [UInt8], _ b: [UInt8]) -> Double {
+        guard !a.isEmpty, a.count == b.count else { return 0 }
+        var sum = 0
+        for i in a.indices { sum += abs(Int(a[i]) - Int(b[i])) }
+        return Double(sum) / Double(a.count)
+    }
+}
+
+extension Project {
+
+    /// Prahy hluchosti z citlivosti 0–1: ticho pod −50…−40 dBFS, tma pod
+    /// jas 30–50, prázdno pod entropii 3–4 bity. Konzervativní a čitelné.
+    static func emptinessThresholds(sensitivity: Double)
+        -> (quietDB: Double, darkLuma: Double, lowEntropy: Double) {
+        let s = min(max(sensitivity, 0), 1)
+        return (-50 + 10 * s, 30 + 20 * s, 3 + s)
+    }
+
+    /// Hluchá místa na klipech obrazových stop: TICHO **a zároveň**
+    /// prázdný obraz (tma NEBO nízká entropie). Tichý statický záběr na
+    /// dekoraci není chyba — je ostrý, prosvětlený a bohatý, obrazový
+    /// test jím neprojde (rozhodnutí plánu F15: kombinovat oba signály,
+    /// nikdy nehlásit jen z ticha).
+    ///
+    /// Minimální délka úseku výchozích 5 s (plán: 3–10) — hluché místo
+    /// je NUDA, ne mezera mezi dvěma větami.
+    public func emptinessMarks(samples: [AssetID: [EmptinessSample]],
+                               sensitivity: Double = 0.5,
+                               minimumDuration: Double = 5) -> [ClipID: [EmptySegment]] {
+        var out: [ClipID: [EmptySegment]] = [:]
+        let thresholds = Self.emptinessThresholds(sensitivity: sensitivity)
+
+        for track in timeline.tracks where track.kind == .video {
+            for clip in track.clips {
+                guard let assetSamples = samples[clip.assetID],
+                      assetSamples.count >= 2 else { continue }
+
+                let windowStart = clip.sourceStart.seconds
+                let windowEnd = (clip.sourceStart + sourceConsumption(of: clip)).seconds
+
+                func isEmpty(_ sample: EmptinessSample) -> Bool {
+                    sample.loudnessDB < thresholds.quietDB
+                        && (sample.brightness < thresholds.darkLuma
+                            || sample.entropy < thresholds.lowEntropy)
+                }
+
+                var segments: [EmptySegment] = []
+                var runStart: Double?
+
+                func close(at time: Double) {
+                    guard let start = runStart else { return }
+                    runStart = nil
+                    guard time - start >= minimumDuration else { return }
+                    let startFrame = clip.timelineStart + frameOffset(
+                        forSource: SourceTime(seconds: max(start, windowStart)), in: clip)
+                    let endFrame = clip.timelineStart + frameOffset(
+                        forSource: SourceTime(seconds: min(time, windowEnd)), in: clip)
+                    guard endFrame > startFrame else { return }
+                    segments.append(EmptySegment(start: startFrame,
+                                                 end: min(endFrame, clip.timelineEnd)))
+                }
+
+                for sample in assetSamples {
+                    guard sample.time >= windowStart, sample.time < windowEnd else { continue }
+                    if isEmpty(sample) {
+                        if runStart == nil { runStart = sample.time }
+                    } else {
+                        close(at: sample.time)
+                    }
+                }
+                close(at: windowEnd)
+
+                if !segments.isEmpty { out[clip.id] = segments }
+            }
+        }
+        return out
+    }
+}

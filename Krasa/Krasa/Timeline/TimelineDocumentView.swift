@@ -50,6 +50,9 @@ enum TimelinePalette {
     /// červená = rozmazaný. Zelená se nekreslí.
     static let qualitySoft = NSColor.systemOrange.withAlphaComponent(0.9)
     static let qualityBad = NSColor.systemRed
+    /// Hluché místo (ticho + prázdný obraz, F15/2) — šedá při SPODNÍ
+    /// hraně klipu: jiná dimenze než ostrost, jiná hrana i barva.
+    static let qualityEmpty = NSColor.systemGray
 
     /// Plocha pod stopami a za koncem projektu.
     static let background = adaptive("timelineBackground", dark: 0.09, light: 0.78)
@@ -175,6 +178,8 @@ final class ClipLayer: CALayer {
     /// Proužky kvality (fáze 15) při horní hraně klipu — recyklované
     /// indexem, značek jsou na klipu jednotky.
     var qualityLayers: [CALayer] = []
+    /// Proužky hluchosti (F15/2) při SPODNÍ hraně klipu.
+    var emptinessLayers: [CALayer] = []
 
     /// Odpojí všechny dlaždice — při recyklaci a při změně úrovně.
     func clearWaveTiles() {
@@ -184,18 +189,31 @@ final class ClipLayer: CALayer {
 
     /// Rozmístí proužky kvality; prázdné pole je všechny schová.
     func setQualityMarks(_ marks: [(x: Double, width: Double, color: CGColor)]) {
-        while qualityLayers.count < marks.count {
+        Self.layoutStrips(&qualityLayers, marks: marks, in: self, y: 1)
+    }
+
+    /// Totéž pro hluchost — při spodní hraně (výška vrstvy je známá
+    /// až po `frame`, proto se `y` počítá při každém rozmístění).
+    func setEmptinessMarks(_ marks: [(x: Double, width: Double, color: CGColor)]) {
+        Self.layoutStrips(&emptinessLayers, marks: marks, in: self,
+                          y: bounds.height - 5)
+    }
+
+    private static func layoutStrips(_ strips: inout [CALayer],
+                                     marks: [(x: Double, width: Double, color: CGColor)],
+                                     in parent: CALayer, y: Double) {
+        while strips.count < marks.count {
             let strip = CALayer()
             strip.cornerRadius = 1.5
-            addSublayer(strip)
-            qualityLayers.append(strip)
+            parent.addSublayer(strip)
+            strips.append(strip)
         }
-        for (index, strip) in qualityLayers.enumerated() {
+        for (index, strip) in strips.enumerated() {
             guard index < marks.count else { strip.isHidden = true; continue }
             let mark = marks[index]
             strip.isHidden = false
             strip.backgroundColor = mark.color
-            strip.frame = CGRect(x: mark.x, y: 1, width: mark.width, height: 4)
+            strip.frame = CGRect(x: mark.x, y: y, width: mark.width, height: 4)
         }
     }
 
@@ -409,11 +427,16 @@ final class TimelineDocumentView: NSView {
         qualityMarks = controller.sharpnessSamples.isEmpty
             ? [:]
             : project.qualityMarks(samples: controller.sharpnessSamples)
+        emptyMarks = controller.emptinessSamples.isEmpty
+            ? [:]
+            : project.emptinessMarks(samples: controller.emptinessSamples)
     }
 
     /// Problémové úseky ostrosti per klip (fáze 15) — přepočet patří do
     /// reloadu, scroll je jen mapuje na souřadnice.
     private var qualityMarks: [ClipID: [QualitySegment]] = [:]
+    /// Hluchá místa per klip (F15/2).
+    private var emptyMarks: [ClipID: [EmptySegment]] = [:]
 
     func rebuildLanes() {
         rebuildClipInfo()
@@ -523,6 +546,7 @@ final class TimelineDocumentView: NSView {
             layer.clearWaveTiles()
             layer.waveRung = 0
             layer.setQualityMarks([])
+            layer.setEmptinessMarks([])
             layer.removeFromSuperlayer()
             clipLayerPool.append(layer)
         }
@@ -702,23 +726,29 @@ final class TimelineDocumentView: NSView {
         applyQualityMarks(placement, to: layer)
     }
 
-    /// Proužky kvality (fáze 15): oranžová/červená při horní hraně klipu.
-    /// Zelená se nekreslí — ticho je dobrá zpráva, značka je jen tam, kde
-    /// stojí za to se podívat (klik = seek).
+    /// Proužky kvality (fáze 15): oranžová/červená při horní hraně klipu,
+    /// šedá hluchost při spodní. Zelená se nekreslí — ticho je dobrá
+    /// zpráva, značka je jen tam, kde stojí za to se podívat (klik = seek).
     private func applyQualityMarks(_ placement: TimelineLayout.Placement, to layer: ClipLayer) {
-        guard let segments = qualityMarks[placement.clipID], placement.width >= 16 else {
-            layer.setQualityMarks([])
-            return
-        }
         let geometry = controller.geometry
-        let marks = segments.map { segment in
-            (x: geometry.x(for: segment.start) - placement.x,
-             width: max(2, geometry.x(for: segment.end) - geometry.x(for: segment.start)),
-             color: (segment.level == .bad
-                        ? TimelinePalette.qualityBad
-                        : TimelinePalette.qualitySoft).cgColor)
+        func strips<S>(_ segments: [S]?, frames: (S) -> (Frames, Frames),
+                       color: (S) -> NSColor) -> [(x: Double, width: Double, color: CGColor)] {
+            guard let segments, placement.width >= 16 else { return [] }
+            return segments.map { segment in
+                let (start, end) = frames(segment)
+                return (x: geometry.x(for: start) - placement.x,
+                        width: max(2, geometry.x(for: end) - geometry.x(for: start)),
+                        color: color(segment).cgColor)
+            }
         }
-        layer.setQualityMarks(marks)
+        layer.setQualityMarks(strips(qualityMarks[placement.clipID],
+                                     frames: { ($0.start, $0.end) },
+                                     color: { $0.level == .bad
+                                         ? TimelinePalette.qualityBad
+                                         : TimelinePalette.qualitySoft }))
+        layer.setEmptinessMarks(strips(emptyMarks[placement.clipID],
+                                       frames: { ($0.start, $0.end) },
+                                       color: { _ in TimelinePalette.qualityEmpty }))
     }
 
     // MARK: - Vlnové průběhy (krok 10)
@@ -962,17 +992,26 @@ final class TimelineDocumentView: NSView {
         controller.selectClips([hit.clipID])
 
         // Klik do proužku kvality (fáze 15) = seek na začátek problému —
-        // značka je pozvánka „podívej se", ne dekorace. Jen horní pásek
-        // klipu, jinak by kolidoval s tažením.
-        if let segments = qualityMarks[hit.clipID],
-           let ti = controller.geometry.trackIndex(atY: point.y,
-                                                   in: controller.project.timeline),
-           point.y - controller.geometry.y(ofTrackAt: ti,
-                                           in: controller.project.timeline) <= 6 {
+        // značka je pozvánka „podívej se", ne dekorace. Jen krajní pásky
+        // klipu (nahoře ostrost, dole hluchost), jinak by kolidoval
+        // s tažením.
+        if let ti = controller.geometry.trackIndex(atY: point.y,
+                                                   in: controller.project.timeline) {
+            let timeline = controller.project.timeline
+            let trackTop = controller.geometry.y(ofTrackAt: ti, in: timeline)
+            let trackHeight = controller.geometry.height(of: timeline.tracks[ti].kind)
             let frame = controller.geometry.frame(atX: point.x)
-            if let segment = segments.first(where: {
-                frame >= $0.start && frame < $0.end
-            }) {
+            if point.y - trackTop <= 6,
+               let segment = qualityMarks[hit.clipID]?.first(where: {
+                   frame >= $0.start && frame < $0.end
+               }) {
+                controller.setPlayheadFromUser(segment.start)
+                return
+            }
+            if trackTop + trackHeight - point.y <= 6,
+               let segment = emptyMarks[hit.clipID]?.first(where: {
+                   frame >= $0.start && frame < $0.end
+               }) {
                 controller.setPlayheadFromUser(segment.start)
                 return
             }

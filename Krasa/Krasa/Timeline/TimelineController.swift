@@ -460,6 +460,9 @@ final class TimelineController: ObservableObject {
     /// Promítnutí na klipy dělá model (`qualityMarks`) při reloadu osy.
     @Published var sharpnessSamples: [AssetID: [SharpnessSample]] = [:]
 
+    /// Vzorky hluchosti (fáze 15, modul 2) — týž vzorec.
+    @Published var emptinessSamples: [AssetID: [EmptinessSample]] = [:]
+
     // MARK: - Synchronizace externího zvuku (fáze 7, modul 5)
 
     /// Kontextové menu klipu žádá synchronizaci — obslouží `AppModel`

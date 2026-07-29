@@ -107,49 +107,11 @@ actor SharpnessStore {
         return samples
     }
 
-    /// Luma rovina NV12 → blokový průměr na ~192 sloupců → rozptyl
-    /// Laplaciánu. Bloky se čtou přímo z roviny (s ohledem na
-    /// `bytesPerRow`), žádná mezikopie plného rozlišení.
+    /// Luma rovina NV12 → blokový podvzorek → rozptyl Laplaciánu.
     private static func lumaScore(of pixelBuffer: CVPixelBuffer) -> Double? {
-        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
-
-        guard let base = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) else { return nil }
-        let width = CVPixelBufferGetWidthOfPlane(pixelBuffer, 0)
-        let height = CVPixelBufferGetHeightOfPlane(pixelBuffer, 0)
-        let stride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
-        guard width > 2, height > 2 else { return nil }
-
-        let block = max(1, width / Int(analysisSize.width))
-        let outWidth = width / block
-        let outHeight = height / block
-        guard outWidth > 2, outHeight > 2 else { return nil }
-
-        let bytes = base.assumingMemoryBound(to: UInt8.self)
-        // Průměr bloku z PODVZORKU (~4×4 pixely na blok, ne všechny):
-        // šum ředí stejně a je to řádově méně čtení — plný průměr 4K
-        // bloků stál na 45s klipu přes 6 minut, tohle sekundy.
-        let tap = max(1, block / 4)
-        let tapsPerAxis = (block + tap - 1) / tap
-        var luma = [UInt8](repeating: 0, count: outWidth * outHeight)
-        for oy in 0..<outHeight {
-            for ox in 0..<outWidth {
-                var sum = 0
-                var dy = 0
-                while dy < block {
-                    let row = (oy * block + dy) * stride + ox * block
-                    var dx = 0
-                    while dx < block {
-                        sum += Int(bytes[row + dx])
-                        dx += tap
-                    }
-                    dy += tap
-                }
-                luma[oy * outWidth + ox] = UInt8(sum / (tapsPerAxis * tapsPerAxis))
-            }
-        }
-        return SharpnessMetric.laplacianVariance(luma: luma,
-                                                 width: outWidth, height: outHeight)
+        guard let grid = LumaSampler.downsampledLuma(of: pixelBuffer) else { return nil }
+        return SharpnessMetric.laplacianVariance(luma: grid.luma,
+                                                 width: grid.width, height: grid.height)
     }
 
     // MARK: - Disková mezipaměť
@@ -170,5 +132,55 @@ actor SharpnessStore {
         let digest = SHA256.hash(data: Data(fingerprint.utf8))
         let name = digest.map { String(format: "%02x", $0) }.joined()
         return directory.appendingPathComponent(name + ".json")
+    }
+}
+
+// MARK: - Sdílený podvzorkovač
+
+/// Blokový podvzorek luma roviny NV12 na ~192 sloupců — společný základ
+/// metrik kvality (ostrost F15/1, hluchost F15/2). Bloky se čtou přímo
+/// z roviny (s ohledem na `bytesPerRow`), žádná mezikopie plného rozlišení,
+/// a průměr bloku se počítá z PODVZORKU ~4×4 pixelů: šum ředí stejně
+/// a je to řádově méně čtení — plný průměr 4K bloků stál na 45s klipu
+/// přes 6 minut, tohle sekundy.
+enum LumaSampler {
+
+    static func downsampledLuma(of pixelBuffer: CVPixelBuffer)
+        -> (luma: [UInt8], width: Int, height: Int)? {
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+
+        guard let base = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) else { return nil }
+        let width = CVPixelBufferGetWidthOfPlane(pixelBuffer, 0)
+        let height = CVPixelBufferGetHeightOfPlane(pixelBuffer, 0)
+        let stride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
+        guard width > 2, height > 2 else { return nil }
+
+        let block = max(1, width / Int(SharpnessStore.analysisSize.width))
+        let outWidth = width / block
+        let outHeight = height / block
+        guard outWidth > 2, outHeight > 2 else { return nil }
+
+        let bytes = base.assumingMemoryBound(to: UInt8.self)
+        let tap = max(1, block / 4)
+        let tapsPerAxis = (block + tap - 1) / tap
+        var luma = [UInt8](repeating: 0, count: outWidth * outHeight)
+        for oy in 0..<outHeight {
+            for ox in 0..<outWidth {
+                var sum = 0
+                var dy = 0
+                while dy < block {
+                    let row = (oy * block + dy) * stride + ox * block
+                    var dx = 0
+                    while dx < block {
+                        sum += Int(bytes[row + dx])
+                        dx += tap
+                    }
+                    dy += tap
+                }
+                luma[oy * outWidth + ox] = UInt8(sum / (tapsPerAxis * tapsPerAxis))
+            }
+        }
+        return (luma, outWidth, outHeight)
     }
 }

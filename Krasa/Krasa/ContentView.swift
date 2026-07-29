@@ -307,22 +307,31 @@ final class AppModel: ObservableObject {
         startSharpnessAnalysis()
     }
 
-    /// Analýza ostrosti na pozadí (fáze 15, modul 1): pro video assety
-    /// projektu bez vzorků. Cache otiskem — druhé otevření je zadarmo.
-    /// Fotky se přeskakují (jeden snímek nemá co „rozmazat pohybem")
-    /// a pod CLI měřeními se nespouští (soupeřila by o stroj).
+    /// Analýzy kvality na pozadí (fáze 15): ostrost a hluchost pro video
+    /// assety projektu bez vzorků. Cache otiskem — druhé otevření je
+    /// zadarmo. Fotky se přeskakují (jeden snímek nemá co „rozmazat
+    /// pohybem" a hluchost je věc střihu, ne fotky) a pod CLI měřeními
+    /// se nespouští (soupeřila by o stroj).
     func startSharpnessAnalysis() {
         guard !CommandLine.arguments.dropFirst().contains(where: { $0.hasPrefix("--") })
         else { return }
         let pending = timeline.project.assets.filter {
-            $0.hasVideo && !$0.isStill && timeline.sharpnessSamples[$0.id] == nil
+            $0.hasVideo && !$0.isStill
+                && (timeline.sharpnessSamples[$0.id] == nil
+                    || timeline.emptinessSamples[$0.id] == nil)
         }
         guard !pending.isEmpty else { return }
         Task { [weak self] in
             for asset in pending {
-                guard let samples = await SharpnessStore.shared.samples(
-                    for: asset.url(usingProxies: false)), !samples.isEmpty else { continue }
-                self?.timeline.sharpnessSamples[asset.id] = samples
+                let url = asset.url(usingProxies: false)
+                if let samples = await SharpnessStore.shared.samples(for: url),
+                   !samples.isEmpty {
+                    self?.timeline.sharpnessSamples[asset.id] = samples
+                }
+                if let samples = await EmptinessStore.shared.samples(for: url),
+                   !samples.isEmpty {
+                    self?.timeline.emptinessSamples[asset.id] = samples
+                }
             }
         }
     }
@@ -1689,6 +1698,148 @@ final class AppModel: ObservableObject {
         try? await Task.sleep(nanoseconds: 25_000_000_000)
     }
 
+    /// CLI ověření hluchosti (fáze 15, modul 2): tři still movie
+    /// mezisoubory se ZNÁMOU pravdou — černý čtverec (tma), šumová
+    /// „dekorace" (bohatý obraz) a reálný klip (hlasitý zvuk sekery).
+    /// Still movie nemá zvukovou stopu = ticho z definice, takže:
+    /// černý → hluchý (ticho + tma), šumový → NE (dekorace — klíčové
+    /// pravidlo plánu), reálný klip → NE (zvuk žije).
+    func verifyEmptiness() async {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaEmptyCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        let blackURL = directory.appendingPathComponent("cerna.png")
+        let noiseURL = directory.appendingPathComponent("dekorace.png")
+        guard writeSquarePNG(to: blackURL, side: 1000,
+                             color: CGColor(gray: 0.02, alpha: 1)),
+              writeNoisePNG(to: noiseURL, side: 1000) else {
+            print("❌ syntetické fotky se nepodařilo zapsat"); return
+        }
+        let canvas = CGSize(width: 3840, height: 2160)
+        guard let blackMovie = try? await StillMovieStore.shared.movieURL(
+                forPhoto: blackURL, canvas: canvas),
+              let noiseMovie = try? await StillMovieStore.shared.movieURL(
+                forPhoto: noiseURL, canvas: canvas) else {
+            print("❌ still movie mezisoubory se nepodařilo vyrobit"); return
+        }
+        guard let blackSample = await EmptinessStore.shared.samples(for: blackMovie)?.first,
+              let noiseSample = await EmptinessStore.shared.samples(for: noiseMovie)?.first else {
+            print("❌ vzorky hluchosti nedorazily"); return
+        }
+        print(String(format: "černá: %.0f dBFS, jas %.0f, entropie %.2f b",
+                     blackSample.loudnessDB, blackSample.brightness, blackSample.entropy))
+        print(String(format: "dekorace: %.0f dBFS, jas %.0f, entropie %.2f b",
+                     noiseSample.loudnessDB, noiseSample.brightness, noiseSample.entropy))
+        let thresholds = (quietDB: -45.0, darkLuma: 40.0, lowEntropy: 3.5)
+        func isEmpty(_ s: EmptinessSample) -> Bool {
+            s.loudnessDB < thresholds.quietDB
+                && (s.brightness < thresholds.darkLuma || s.entropy < thresholds.lowEntropy)
+        }
+        print(isEmpty(blackSample)
+              ? "✓ tichá tma je hluché místo"
+              : "❌ tichá tma neprošla jako hluchá")
+        print(!isEmpty(noiseSample)
+              ? "✓ tichá dekorace s bohatým obrazem NENÍ hluché místo"
+              : "❌ dekorace se hlásí jako hluchá — pravidlo plánu porušeno")
+
+        // Reálný klip: sekera je hlasitá — ticho nesmí projít.
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        guard let real = await EmptinessStore.shared.samples(for: source.originalURL),
+              !real.isEmpty else {
+            print("❌ analýza reálného klipu selhala"); return
+        }
+        let expected = source.duration.seconds * EmptinessStore.samplesPerSecond
+        let emptyCount = real.filter(isEmpty).count
+        let meanDB = real.map(\.loudnessDB).reduce(0, +) / Double(real.count)
+        print(String(format: "reálný klip: %d vzorků (čekáno ~%.0f), průměr %.0f dBFS, hluchých %d",
+                     real.count, expected, meanDB, emptyCount))
+        print(abs(Double(real.count) - expected) <= 2
+              ? "✓ hustota vzorků sedí (1/s)"
+              : "❌ hustota vzorků nesedí")
+        print(emptyCount == 0
+              ? "✓ hlasitý klip nemá žádná hluchá místa"
+              : "⚠️ hlasitý klip má \(emptyCount) hluchých vzorků — zkontrolovat prahy")
+        print("EMPTY_CHECK_PATH=\(directory.path)")
+    }
+
+    /// CLI ukázka F15/2 (`--empty-demo`): klip se syntetickými vzorky —
+    /// šedý proužek hluchosti při spodní hraně, oranžový ostrosti nahoře.
+    func runEmptyDemo() async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        var project = Project.empty()
+        project.addAsset(source)
+        do {
+            var clip = try project.makeClip(assetID: source.id)
+            clip.duration = min(clip.duration, Frames(300))
+            try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        // Oddálit, ať jsou vidět OBĚ značky — kapsa leží až v 5.–10. sekundě.
+        var geometry = timeline.geometry
+        geometry.setZoom(2.5)
+        timeline.geometry = geometry
+        timeline.project = project
+        // Ostrost: měkký propad 1–3 s. Hluchost: kapsa 5–10 s.
+        timeline.sharpnessSamples[source.id] = stride(from: 0.0, to: 10, by: 1.0 / 3)
+            .map { t in
+                SharpnessSample(time: t, score: (t >= 1 && t < 3) ? 40 : 100)
+            }
+        timeline.emptinessSamples[source.id] = (0..<10).map { second in
+            let t = Double(second)
+            return t >= 5
+                ? EmptinessSample(time: t, loudnessDB: -60, brightness: 10,
+                                  entropy: 2, motion: 3)
+                : EmptinessSample(time: t, loudnessDB: -20, brightness: 120,
+                                  entropy: 6.5, motion: 8)
+        }
+        if let host = await waitForPlayerWindow() {
+            host.window?.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        try? await Task.sleep(nanoseconds: 25_000_000_000)
+    }
+
+    /// Šum jako PNG — „dekorace": bohatý, prosvětlený obraz s vysokou
+    /// entropií pro `--empty-check`.
+    private func writeNoisePNG(to url: URL, side: Int) -> Bool {
+        var state: UInt64 = 0x9E3779B9
+        func next() -> UInt8 {
+            state ^= state << 13; state ^= state >> 7; state ^= state << 17
+            return UInt8(truncatingIfNeeded: state)
+        }
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        for i in stride(from: 0, to: pixels.count, by: 4) {
+            pixels[i] = 255                       // alfa (little-endian BGRA)
+            pixels[i + 1] = next()
+            pixels[i + 2] = next()
+            pixels[i + 3] = next()
+        }
+        let ok = pixels.withUnsafeMutableBytes { buffer -> CGImage? in
+            guard let context = CGContext(
+                data: buffer.baseAddress, width: side, height: side,
+                bitsPerComponent: 8, bytesPerRow: side * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                    | CGBitmapInfo.byteOrder32Little.rawValue) else { return nil }
+            return context.makeImage()
+        }
+        guard let image = ok,
+              let destination = CGImageDestinationCreateWithURL(
+                url as CFURL, UTType.png.identifier as CFString, 1, nil) else { return false }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination)
+    }
+
     /// Šachovnice jako PNG, volitelně rozmazaná Gaussem — syntetická
     /// fotka se známou ostrostí pro `--sharp-check`.
     private func writeCheckerboardPNG(to url: URL, side: Int, blurRadius: Double) -> Bool {
@@ -2596,6 +2747,10 @@ struct ContentView: View {
                     await model.verifySharpness()
                 } else if arguments.contains("--sharp-demo") {
                     await model.runSharpDemo()
+                } else if arguments.contains("--empty-check") {
+                    await model.verifyEmptiness()
+                } else if arguments.contains("--empty-demo") {
+                    await model.runEmptyDemo()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

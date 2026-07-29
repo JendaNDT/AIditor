@@ -16,6 +16,7 @@
 		C3D4E5F60718293A4B5C6D7E /* StillMovieStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F60718293A4B5C6D7E8F /* StillMovieStore.swift */; };
 		E5F60718293A4B5C6D7E8F90 /* ColorCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60718293A4B5C6D7E8F9012 /* ColorCompositor.swift */; };
 		A1B2C3D4E5F6A7B8C9D0E1F2 /* SharpnessStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* SharpnessStore.swift */; };
+		C3D4E5F6A7B8C9D0E1F2A3B4 /* EmptinessStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F6A7B8C9D0E1F2A3B4C5 /* EmptinessStore.swift */; };
 		4B5D8B6164C2AA68F3B7B073 /* MediaImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAEE8DA94BE24BFA4C09F61 /* MediaImporter.swift */; };
 		10018FACF7C253DE3EA2AF0F /* VFRDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F5DB175B37741ADE928956 /* VFRDetector.swift */; };
 		B83C201C79F8240BBCBB539B /* PlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87BEF812E75F65304C3D45FF /* PlaybackController.swift */; };
@@ -51,6 +52,7 @@
 		D4E5F60718293A4B5C6D7E8F /* StillMovieStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StillMovieStore.swift; sourceTree = "<group>"; };
 		F60718293A4B5C6D7E8F9012 /* ColorCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorCompositor.swift; sourceTree = "<group>"; };
 		B2C3D4E5F6A7B8C9D0E1F2A3 /* SharpnessStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharpnessStore.swift; sourceTree = "<group>"; };
+		D4E5F6A7B8C9D0E1F2A3B4C5 /* EmptinessStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptinessStore.swift; sourceTree = "<group>"; };
 		DEAEE8DA94BE24BFA4C09F61 /* MediaImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaImporter.swift; sourceTree = "<group>"; };
 		60F5DB175B37741ADE928956 /* VFRDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VFRDetector.swift; sourceTree = "<group>"; };
 		87BEF812E75F65304C3D45FF /* PlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackController.swift; sourceTree = "<group>"; };
@@ -132,6 +134,7 @@
 				D4E5F60718293A4B5C6D7E8F /* StillMovieStore.swift */,
 				F60718293A4B5C6D7E8F9012 /* ColorCompositor.swift */,
 				B2C3D4E5F6A7B8C9D0E1F2A3 /* SharpnessStore.swift */,
+				D4E5F6A7B8C9D0E1F2A3B4C5 /* EmptinessStore.swift */,
 				AE10D10E501AE24B7C3F0907 /* MonoAudioReader.swift */,
 				AE10D10E501AE24B7C3F0909 /* TranscriptionService.swift */,
 				99311C7072B0DEAD06939D03 /* PlayerView.swift */,
@@ -252,6 +255,7 @@
 				C3D4E5F60718293A4B5C6D7E /* StillMovieStore.swift in Sources */,
 				E5F60718293A4B5C6D7E8F90 /* ColorCompositor.swift in Sources */,
 				A1B2C3D4E5F6A7B8C9D0E1F2 /* SharpnessStore.swift in Sources */,
+				C3D4E5F6A7B8C9D0E1F2A3B4 /* EmptinessStore.swift in Sources */,
 				4B5D8B6164C2AA68F3B7B073 /* MediaImporter.swift in Sources */,
 				10018FACF7C253DE3EA2AF0F /* VFRDetector.swift in Sources */,
 				B83C201C79F8240BBCBB539B /* PlaybackController.swift in Sources */,

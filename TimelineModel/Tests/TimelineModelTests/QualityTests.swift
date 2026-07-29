@@ -156,3 +156,125 @@ final class QualityTests: XCTestCase {
         XCTAssertNil(f.project.qualityMarks(samples: [f.assetID: dark])[clip])
     }
 }
+
+// MARK: - Ticho a prázdno (modul 2)
+
+final class EmptinessTests: XCTestCase {
+
+    // MARK: Obrazové statistiky
+
+    func testLumaStats() {
+        let flat = [UInt8](repeating: 128, count: 1000)
+        XCTAssertEqual(LumaStats.brightness(luma: flat), 128)
+        XCTAssertEqual(LumaStats.entropy(luma: flat), 0, "jednolitá plocha nemá informaci")
+
+        // Dvě hodnoty půl na půl = přesně 1 bit.
+        let twoTone = [UInt8]((0..<1000).map { $0 % 2 == 0 ? 16 : 235 })
+        XCTAssertEqual(LumaStats.entropy(luma: twoTone), 1, accuracy: 1e-9)
+
+        // Rovnoměrných 256 hodnot = plných 8 bitů.
+        let rich = [UInt8]((0..<2560).map { UInt8($0 % 256) })
+        XCTAssertEqual(LumaStats.entropy(luma: rich), 8, accuracy: 1e-9)
+
+        XCTAssertEqual(LumaStats.meanDifference(flat, flat), 0)
+        let shifted = [UInt8](repeating: 138, count: 1000)
+        XCTAssertEqual(LumaStats.meanDifference(flat, shifted), 10)
+    }
+
+    // MARK: Klasifikace
+
+    /// Vzorky 1/s po dobu 10 s se zadaným úsekem jiného charakteru.
+    private func series(_ base: EmptinessSample,
+                        override range: ClosedRange<Int>? = nil,
+                        with sample: EmptinessSample? = nil) -> [EmptinessSample] {
+        (0..<10).map { second in
+            let template = (range?.contains(second) == true && sample != nil) ? sample! : base
+            return EmptinessSample(time: Double(second),
+                                   loudnessDB: template.loudnessDB,
+                                   brightness: template.brightness,
+                                   entropy: template.entropy,
+                                   motion: template.motion)
+        }
+    }
+
+    private let livelyShot = EmptinessSample(   // normální záběr: zvuk i obraz
+        time: 0, loudnessDB: -20, brightness: 120, entropy: 6.5, motion: 8)
+    private let pocketShot = EmptinessSample(   // kapsa: ticho + tma
+        time: 0, loudnessDB: -60, brightness: 12, entropy: 2.1, motion: 15)
+    private let decorShot = EmptinessSample(    // dekorace: ticho, ale bohatý obraz
+        time: 0, loudnessDB: -60, brightness: 140, entropy: 6.8, motion: 0.2)
+    private let nightParty = EmptinessSample(   // tma, ale hluk — něco se děje
+        time: 0, loudnessDB: -15, brightness: 15, entropy: 3.2, motion: 20)
+
+    func testSilentDarkRunBecomesSegment() throws {
+        var f = Fixture()
+        let clip = try f.addClip(start: 0, duration: 300)
+        // Kapsa mezi 2.–8. sekundou (6 s ≥ minimum 5).
+        let marks = f.project.emptinessMarks(samples: [
+            f.assetID: series(livelyShot, override: 2...7, with: pocketShot),
+        ])
+        let segments = try XCTUnwrap(marks[clip])
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertEqual(segments[0].start, Frames(60))    // 2 s
+        XCTAssertEqual(segments[0].end, Frames(240))     // konec běhu = vzorek 8 s
+    }
+
+    func testSilentDecorationIsNotFlagged() throws {
+        // KLÍČOVÉ pravidlo plánu: ticho samo o sobě chybu nedělá.
+        var f = Fixture()
+        let clip = try f.addClip(start: 0, duration: 300)
+        let marks = f.project.emptinessMarks(samples: [
+            f.assetID: series(decorShot),
+        ])
+        XCTAssertNil(marks[clip], "tichá dekorace s bohatým obrazem není hluché místo")
+    }
+
+    func testLoudDarknessIsNotFlagged() throws {
+        var f = Fixture()
+        let clip = try f.addClip(start: 0, duration: 300)
+        let marks = f.project.emptinessMarks(samples: [
+            f.assetID: series(nightParty),
+        ])
+        XCTAssertNil(marks[clip], "tma s hlukem = večírek, ne kapsa")
+    }
+
+    func testShortEmptinessIsIgnored() throws {
+        var f = Fixture()
+        let clip = try f.addClip(start: 0, duration: 300)
+        // 3 s hluchosti < minimum 5 s.
+        let marks = f.project.emptinessMarks(samples: [
+            f.assetID: series(livelyShot, override: 4...6, with: pocketShot),
+        ])
+        XCTAssertNil(marks[clip])
+    }
+
+    func testSensitivityWidensThresholds() throws {
+        var f = Fixture()
+        let clip = try f.addClip(start: 0, duration: 300)
+        // Šero −47 dB / jas 45: na výchozí citlivosti (−45/40) neprojde,
+        // na citlivosti 1 (−40/50) ano.
+        let dim = EmptinessSample(time: 0, loudnessDB: -47, brightness: 45,
+                                  entropy: 5, motion: 1)
+        let dimmed = series(livelyShot, override: 1...8, with: dim)
+        XCTAssertNil(f.project.emptinessMarks(samples: [f.assetID: dimmed])[clip])
+        XCTAssertNotNil(f.project.emptinessMarks(samples: [f.assetID: dimmed],
+                                                 sensitivity: 1)[clip])
+    }
+
+    func testTrimmedClipWindow() throws {
+        var f = Fixture()
+        // Klip [0, 150), zdroj od 2 s: okno [2, 7). Kapsa 0–6 s zdroje
+        // se ořízne oknem → běh [2, 6) = 4 s < minimum 5 → nic;
+        // s minimem 3 s se nahlásí [0, 120).
+        let clip = Clip(assetID: f.assetID, timelineStart: .zero,
+                        duration: Frames(150),
+                        sourceStart: f.project.timeline.sourceTime(Frames(60)))
+        try f.project.insert(clip, onTrack: f.v1)
+        let dipped = series(livelyShot, override: 0...5, with: pocketShot)
+        XCTAssertNil(f.project.emptinessMarks(samples: [f.assetID: dipped])[clip.id])
+        let segments = try XCTUnwrap(f.project.emptinessMarks(
+            samples: [f.assetID: dipped], minimumDuration: 3)[clip.id])
+        XCTAssertEqual(segments[0].start, Frames(0))
+        XCTAssertEqual(segments[0].end, Frames(120))
+    }
+}

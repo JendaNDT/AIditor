@@ -283,4 +283,99 @@ final class GeometryTests: XCTestCase {
         let g = TimelineGeometry(pointsPerFrame: 2)
         XCTAssertEqual(g.contentWidth(of: f.project, trailingFrames: Frames(100)), 800)
     }
+
+    // MARK: Osa sleduje hlavu (fáze 17)
+
+    /// Hlava uprostřed okna se scrollem nehýbe. Tohle je ta podstatná
+    /// vlastnost: mezi skoky osa STOJÍ.
+    func testFollowDoesNothingWhilePlayheadIsVisible() {
+        let g = TimelineGeometry(pointsPerFrame: 4)
+        for frame in [Frames(30), Frames(60), Frames(100)] {          // 120–400 bodů
+            XCTAssertNil(g.scrollToKeep(playhead: frame, scrollX: 0,
+                                        viewportWidth: 800, maxScrollX: 10_000),
+                         "hlava na \(frame.count) je vidět, scroll se nesahá")
+        }
+    }
+
+    /// Vyjetí vpravo = skok o stránku tak, aby hlava dosedla do levé třetiny.
+    func testFollowJumpsSoPlayheadLandsInLeadingThird() {
+        let g = TimelineGeometry(pointsPerFrame: 4)
+        // Hlava na 900 bodů, okno 0–800 → je za pravou hranou.
+        let target = g.scrollToKeep(playhead: Frames(225), scrollX: 0,
+                                    viewportWidth: 800, maxScrollX: 10_000)
+        // 900 − 800/3 = 633,33
+        XCTAssertEqual(try XCTUnwrap(target), 900 - 800.0 / 3, accuracy: 0.001)
+        // A po skoku už je hlava v klidové zóně — jinak by se skákalo pořád.
+        XCTAssertNil(g.scrollToKeep(playhead: Frames(225), scrollX: try XCTUnwrap(target),
+                                    viewportWidth: 800, maxScrollX: 10_000))
+    }
+
+    /// Rezerva u hrany: skok přijde JEŠTĚ než hlava zmizí za okrajem.
+    /// Bez ní by se hlava při přehrávání ztrácela do hrany okna.
+    func testFollowTriggersBeforePlayheadReachesEdge() {
+        let g = TimelineGeometry(pointsPerFrame: 4)
+        // Okno 0–800, rezerva 16 → spouštěč na 784 bodů = snímek 196.
+        XCTAssertNil(g.scrollToKeep(playhead: Frames(196), scrollX: 0,
+                                    viewportWidth: 800, maxScrollX: 10_000),
+                     "přesně na hranici rezervy se ještě nescrolluje")
+        XCTAssertNotNil(g.scrollToKeep(playhead: Frames(197), scrollX: 0,
+                                       viewportWidth: 800, maxScrollX: 10_000))
+    }
+
+    /// Vyjetí VLEVO (skok zpět, přehrávání pozpátku) položí hlavu do pravé
+    /// třetiny — proti směru pohybu. Kdyby dosedla vlevo, další snímek
+    /// pozpátku by ji hned zase vystrčil a osa by skákala po snímcích.
+    func testFollowBackwardsLandsInTrailingThird() throws {
+        let g = TimelineGeometry(pointsPerFrame: 4)
+        // Okno 2000–2800, hlava na 1600 bodů (snímek 400) → před oknem.
+        let target = try XCTUnwrap(g.scrollToKeep(playhead: Frames(400), scrollX: 2000,
+                                                  viewportWidth: 800, maxScrollX: 10_000))
+        XCTAssertEqual(target, 1600 - 800.0 * 2 / 3, accuracy: 0.001)
+        XCTAssertNil(g.scrollToKeep(playhead: Frames(400), scrollX: target,
+                                    viewportWidth: 800, maxScrollX: 10_000))
+    }
+
+    /// Cíl se ořezává na rozsah scrollu — a když z ořezu vyjde tam, kde
+    /// stojíme, vrací se `nil` místo scrollu o nula bodů.
+    func testFollowClampsToScrollRange() {
+        let g = TimelineGeometry(pointsPerFrame: 4)
+        // Na začátku osy: hlava na snímku 2 (8 bodů), okno posunuté na 100.
+        // Cíl by byl záporný → ořez na 0.
+        XCTAssertEqual(g.scrollToKeep(playhead: Frames(2), scrollX: 100,
+                                      viewportWidth: 800, maxScrollX: 10_000), 0)
+        // Už stojíme na nule a hlava je vlevo mimo (nedosažitelná) → nic.
+        XCTAssertNil(g.scrollToKeep(playhead: Frames(-10), scrollX: 0,
+                                    viewportWidth: 800, maxScrollX: 10_000))
+        // Konec osy: cíl za maximem se ořízne a víc už se scrollovat nedá.
+        XCTAssertEqual(g.scrollToKeep(playhead: Frames(1000), scrollX: 500,
+                                      viewportWidth: 800, maxScrollX: 600), 600)
+        XCTAssertNil(g.scrollToKeep(playhead: Frames(1000), scrollX: 600,
+                                    viewportWidth: 800, maxScrollX: 600),
+                     "dál to nejde — hlava zůstane za hranou, ale scroll se netrhá")
+    }
+
+    /// Zoom mění, kolik snímků se do okna vejde — funkce počítá v BODECH,
+    /// takže při jiném `pointsPerFrame` vychází jiný spouštěč i cíl.
+    func testFollowRespectsZoom() throws {
+        let far = TimelineGeometry(pointsPerFrame: 0.5)
+        XCTAssertNil(far.scrollToKeep(playhead: Frames(1000), scrollX: 0,
+                                      viewportWidth: 800, maxScrollX: 10_000),
+                     "odzoomováno se snímek 1000 do okna vejde")
+        let close = TimelineGeometry(pointsPerFrame: 20)
+        let target = try XCTUnwrap(close.scrollToKeep(playhead: Frames(1000), scrollX: 0,
+                                                      viewportWidth: 800, maxScrollX: 100_000))
+        XCTAssertEqual(target, 20_000 - 800.0 / 3, accuracy: 0.001)
+    }
+
+    /// Degenerované vstupy nesmějí nic vrátit: nulové okno (osa ještě nemá
+    /// rozměr) ani nulový zoom.
+    func testFollowIgnoresDegenerateViewport() {
+        let g = TimelineGeometry(pointsPerFrame: 4)
+        XCTAssertNil(g.scrollToKeep(playhead: Frames(500), scrollX: 0,
+                                    viewportWidth: 0, maxScrollX: 10_000))
+        var zero = g
+        zero.pointsPerFrame = 0
+        XCTAssertNil(zero.scrollToKeep(playhead: Frames(500), scrollX: 0,
+                                       viewportWidth: 800, maxScrollX: 10_000))
+    }
 }

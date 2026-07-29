@@ -138,6 +138,60 @@ public struct TimelineGeometry: Hashable, Sendable {
     }
 }
 
+// MARK: - Osa sleduje hlavu (fáze 17)
+
+extension TimelineGeometry {
+
+    /// Kam posunout vodorovný scroll, aby přehrávací hlava zůstala vidět.
+    /// `nil` = hlava je vidět (nebo se s ní stejně nedá nic dělat) a scrollem
+    /// se NEHÝBE.
+    ///
+    /// ⚠️ **Stránkovací, ne plynulé centrování.** Držet hlavu ve středu okna
+    /// znamená přepsat scroll při každém tiku hlavy, tedy 30× za sekundu —
+    /// přesně ten druh odběru, kterému se fáze 2 vyhnula zúžením notifikací,
+    /// a opticky je to nepříjemné (obsah ujíždí pod stojící čárou). Takhle
+    /// osa stojí, dokud hlava nedojede k okraji, a pak PŘESKOČÍ o stránku.
+    ///
+    /// Hlava se po skoku umístí proti směru, kterým z okna vyjela: při jízdě
+    /// vpřed do levé třetiny (vpravo zbývá dvojnásobek stopáže, než dojde
+    /// k dalšímu skoku), při jízdě zpět do pravé třetiny. Kdyby se pokládala
+    /// vždy doleva, skákalo by se při přehrávání pozpátku po každém snímku.
+    ///
+    /// - Parameters:
+    ///   - scrollX: dnešní posun v bodech.
+    ///   - viewportWidth: šířka viditelné části v bodech.
+    ///   - maxScrollX: nejdál, kam scroll smí (šířka obsahu − šířka okna).
+    ///   - leadingFraction: kam v okně hlava po skoku dosedne.
+    ///   - edgeMargin: kolik bodů před hranou se skok spustí. Hlava má
+    ///     šířku a mezi dvěma tiky urazí kus cesty — bez rezervy by mizela
+    ///     do hrany, než se osa pohne.
+    public func scrollToKeep(playhead: Frames,
+                             scrollX: Double,
+                             viewportWidth: Double,
+                             maxScrollX: Double,
+                             leadingFraction: Double = 1.0 / 3.0,
+                             edgeMargin: Double = 16) -> Double? {
+        guard viewportWidth > 0, pointsPerFrame > 0 else { return nil }
+
+        let headX = x(for: playhead)
+        // Rezerva nesmí sežrat celé okno: u úzkého výřezu by se klidová zóna
+        // scvrkla na nic a osa by skákala pořád.
+        let margin = Swift.min(Swift.max(0, edgeMargin), viewportWidth / 4)
+        let ahead = headX > scrollX + viewportWidth - margin
+        let behind = headX < scrollX + margin
+        guard ahead || behind else { return nil }
+
+        let fraction = Swift.min(Swift.max(leadingFraction, 0), 1)
+        let target = headX - viewportWidth * (ahead ? fraction : 1 - fraction)
+        let clamped = Swift.min(Swift.max(target, 0), Swift.max(0, maxScrollX))
+
+        // Na začátku a na konci osy vyjde po ořezu tentýž posun, na kterém
+        // stojíme — scrollovat o nic je zbytečné překreslení.
+        guard abs(clamped - scrollX) >= 0.5 else { return nil }
+        return clamped
+    }
+}
+
 // MARK: - Viditelný rozsah a recyklace
 
 extension TimelineGeometry {

@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 15: modul 1 hotový — detekce neostrosti)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 15 HOTOVÁ — analýzy kvality)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -7,15 +7,23 @@ Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (v
 
 ## 📍 STAV (29. 07. 2026)
 
-**Fáze 0–9 HOTOVÉ (MVP) + vylepšovací fáze 10–14 HOTOVÉ; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → **hudba s dobami v pravítku, magnetem a dopasováním klipů na dobu** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a LUFS normalizací → export SRT.
+**Fáze 0–9 HOTOVÉ (MVP) + vylepšovací fáze 10–15 HOTOVÉ; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → **hudba s dobami v pravítku, magnetem a dopasováním klipů na dobu** → **analýzy kvality (neostrost, hluchá místa) se značkami na klipech** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a LUFS normalizací → export SRT.
 
 Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (365, 28 invariantů), `AudioEngine` (32), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 15 — analýzy kvality, modul 2 (ticho a prázdno): FÁZE 15 SE JÍM UZAVŘE.** RMS + přítomnost řeči (K-váhování máme) × jas/entropie/pohyb obrazu; minimální délka úseku 3–10 s; tichý statický záběr na dekoraci NENÍ chyba — kombinovat oba signály. Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 16 — vymazlení a technické dluhy (poslední před kill-gate).** Zvukové fade úchyty na klipech (nájezd/dojezd per klip přes `AVAudioMix` rampy); strop normalizace na true peak (dBTP, 4× převzorkování v `AudioEngine`); správa modelu Whisperu (velikost, smazání, přemístění); drobnosti z koukanců (trim zaražený přechodem tiše nepustí — duch nezčervená; přechod nejde vybrat klikem do těla). Detail v `IMPLEMENTACNI_PLAN.md`.
 
-## 🚧 FÁZE 15 — analýzy kvality záběrů (modul 1 HOTOVÝ 29. 07. 2026)
+## ✅ FÁZE 15 — analýzy kvality záběrů (HOTOVÁ 29. 07. 2026)
+
+✅ **Modul 2 — ticho a prázdno (29. 07. 2026): FÁZE 15 JE TÍM HOTOVÁ.**
+
+  - **Model (+7 testů, celkem 399):** `EmptinessSample` (hlasitost dBFS + jas + entropie + pohyb; pohyb se v klasifikaci v1 NEPOUŽÍVÁ — kapsa se hýbe, dekorace stojí, hluchost neurčuje ani jedním směrem — ale měří se a ukládá do cache pro budoucí ladění), `LumaStats` (jas/entropie/střední rozdíl — čisté funkce s testy na kotvách: jednolitá plocha 0 bitů, půl na půl 1 bit, rovnoměrné hodnoty 8 bitů) a `emptinessMarks`: hluché místo = **TICHO a zároveň prázdný obraz** (tma NEBO nízká entropie), minimum 5 s (plán: 3–10; hluché místo je nuda, ne mezera mezi větami). **Klíčové pravidlo plánu drží test i CLI: tichá dekorace s bohatým obrazem NENÍ chyba** — a tma s hlukem (večírek) taky ne.
+  - **`EmptinessStore`:** obraz týmž sekvenčním průchodem s decimací na 1/s (sdílený `LumaSampler` se `SharpnessStore`), zvuk mono 8 kHz přes `MonoAudioReader` (edit listy ctí) → RMS v oknech 1 s → dBFS; **soubor bez zvukové stopy je z definice ticho (−120)** — fotky a němé záběry rozhoduje obraz. Cache otiskem s verzí výpočtu.
+  - **UI:** šedé proužky při SPODNÍ hraně klipu (ostrost nahoře, hluchost dole — jiná dimenze, jiná hrana i barva), klik = seek na začátek úseku. Obojí přes společný `layoutStrips`.
+  - **Ověřeno `--empty-check`:** černý čtverec přes still movie (ticho + tma: −120 dBFS, jas 18, entropie 0,99 b) → hluchý ✓; šumová „dekorace" (jas 58, entropie 4,14 b) → NENÍ hluchá ✓; reálný klip se sekerou (průměr −38 dBFS, 45/45 vzorků) → **0 hluchých míst** ✓. **Screenshot (`--empty-demo`):** oranžový proužek ostrosti nahoře a šedý hluchosti dole na témže klipu, každý na svém místě.
+  - *Koukanec rukou (v seznamu F15): hluchá místa na reálném materiálu (kapsy, čekání), klik do šedého proužku.*
 
 ✅ **Modul 1 — detekce neostrosti (29. 07. 2026).** Návrhová vrstva: značky, klik = seek, ŽÁDNÉ automatické zásahy (rozhodnutí plánu).
 
@@ -200,8 +208,8 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 3. ✅ **F12 — fotky a Ken Burns** (HOTOVÁ 29. 07.; fotka přes „still movie" mezisoubor, freeze frame jako fotka)
 4. ✅ **F13 — barevné presety** (HOTOVÁ 29. 07.; vlastní `ColorVideoCompositor` ověřený `--color-check`, GPU skok ~24 %, UI v inspektoru)
 5. ✅ **F14 — hudební synchronizace** (HOTOVÁ 29. 07.; detekce ±0,1 BPM, doby v pravítku, magnet `.beat`, dopasování s přiznanými mezemi — VLAJKOVÁ)
-6. 🚧 **F15 — analýzy kvality** (neostrost, ticho/prázdno; jen návrhy, nikdy automatický střih) **← PRÁVĚ TADY** (modul 1 hotový: neostrost s metrikou 93×, značky na klipech, klik=seek; zbývá modul 2 ticho a prázdno)
-7. **F16 — vymazlení** (zvukové fade úchyty, dBTP strop, správa Whisper modelu)
+6. ✅ **F15 — analýzy kvality** (HOTOVÁ 29. 07.; neostrost 93×, hluchá místa s pravidlem „dekorace není chyba", značky s klik=seek — jen návrhy, nikdy automatický střih)
+7. **F16 — vymazlení** (zvukové fade úchyty, dBTP strop, správa Whisper modelu) **← PRÁVĚ TADY, poslední před kill-gate**
 
 Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou před kill-gate (seznam níže).
 
@@ -212,7 +220,7 @@ Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou p�
 - [ ] **Texty a T1 (F11):** pravý klik na volné místo T1 → Přidat titulek (obsazené místo vypnuté s vysvětlením); nový titulek se vybere a v inspektoru jde hned psát — text se mění v náhledu při psaní; šablony mění vzhled (jména velká patková přes střed), zarovnání funguje; tažení těla přesouvá se zarážkou o sousedy, okraje trimují, Shift vypíná přichytávání, Escape ruší, Delete maže, ⌘Z vrací; klik na zelený pásek řeči → inspektor přepisu, úprava textu se propíše do titulku v náhledu, prázdný text úsek smaže; titulek za posledním klipem prodlouží film (přes černou); exportovaný film má titulky na stejných místech a se stejným vzhledem jako náhled.
 - [ ] **Barevné presety (F13, po modulu 3):** preset na klipu se projeví v náhledu při přehrávání i scrubování; intenzita mění sílu plynule; přehrávání s presety na 4K ose je plynulé; export vypadá jako náhled; preset + prolínačka + Ken Burns dohromady fungují.
 - [ ] **Hudba a doby (F14, po modulu 3):** Soubor → Přidat hudbu… položí skladbu na A2 a status řekne BPM s jistotou; jantarové doby v pravítku sedí na hudbě („raz" vyšší); tažení klipu se přichytává na doby (slaběji než na hrany, Shift vypíná); u ambientní hudby se tempo poctivě nenajde; dopasování klipu na dobu (modul 3) funguje a respektuje žlutou zónu.
-- [ ] **Analýzy kvality (F15):** po importu se na rozmazaných úsecích klipů objeví oranžové/červené proužky (chvíli to trvá — analýza jede na pozadí); klik do proužku skočí hlavou na začátek problému; ostrý klip proužky nemá.
+- [ ] **Analýzy kvality (F15):** po importu se na rozmazaných úsecích klipů objeví oranžové/červené proužky nahoře a na hluchých místech (ticho + tma/prázdno ≥ 5 s) šedé dole (chvíli to trvá — analýza jede na pozadí); klik do proužku skočí hlavou na začátek problému; ostrý/živý klip proužky nemá; tichý záběr na dekoraci se NEhlásí.
 - [ ] **Dotaz při zavírání (F5):** změna v projektu → ⌘Q ukáže Uložit/Neukládat/Zrušit (Escape ruší); týž dotaz po výběru souboru při ⌘O a importu; „Uložit" u neuloženého projektu přes „Uložit jako" — zrušení panelu ruší i zavírání.
 - [ ] **Hlasitost stop (F7):** posuvník v hlavičce A1/A2 mění hlasitost ZA BĚHU přehrávání bez zastavení; M ztlumí a vrátí; ⌘Z vrací tažení jedním krokem; hodnoty přežijí uložení a otevření projektu.
 - [ ] **Normalizace exportu (F7):** volba profilu u tlačítka exportu; po exportu status hlásí „Hlasitost X → cíl (gain ±Y dB)", případně poctivé omezení špičkami.

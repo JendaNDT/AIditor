@@ -135,7 +135,7 @@ Testy pustíš přes `cd SpeedRampEngine && swift test`.
 ### `TimelineModel/`
 Logika, geometrie a interakce časové osy. Čistý Swift, závislosti
 `SpeedRampEngine` a od F14 `AudioEngine` (oba také čistý Swift), **žádné
-AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **392
+AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **399
 testů, ověřeno; 28 invariantů ve `validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
 křivku (uzly kotvené ve zdrojovém čase) a `rampPlaybackPlan` vydává
 segmentaci v celých tickách pro `scaleTimeRange`. Od vylepšovacích fází
@@ -181,7 +181,12 @@ navíc:
   souboru NEUKLÁDAJÍ — drží je `SharpnessStore` (cache otiskem
   `v2|cesta|velikost|mtime`; verze výpočtu je součást otisku). ⚠️ Past:
   `frameDuration` škálovací kompozice výstup čtečky pod frekvencí zdroje
-  NEprořeďuje — vzorkuj decimací po dekódování.
+  NEprořeďuje — vzorkuj decimací po dekódování. Hluchá místa
+  (`emptinessMarks`): TICHO **a zároveň** prázdný obraz (tma NEBO nízká
+  entropie), minimum 5 s — tichá dekorace s bohatým obrazem NENÍ chyba
+  a soubor bez zvukové stopy je z definice ticho. Pohyb se měří a
+  ukládá, ale v klasifikaci v1 se nepoužívá (kapsa se hýbe, dekorace
+  stojí — hluchost neurčuje).
 
 ```swift
 var project = Project.empty()                        // V1 + A1 + A2 + T1

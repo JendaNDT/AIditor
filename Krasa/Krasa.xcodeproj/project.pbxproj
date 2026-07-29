@@ -47,6 +47,7 @@
 		F18200000000000000000005 /* ViewerPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000005 /* ViewerPane.swift */; };
 		F18200000000000000000006 /* StatusBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000006 /* StatusBar.swift */; };
 		F18200000000000000000007 /* LegacySettingsPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000007 /* LegacySettingsPanel.swift */; };
+		F18200000000000000000008 /* ShellChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000008 /* ShellChecks.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -86,6 +87,7 @@
 		F18100000000000000000005 /* ViewerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewerPane.swift; sourceTree = "<group>"; };
 		F18100000000000000000006 /* StatusBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBar.swift; sourceTree = "<group>"; };
 		F18100000000000000000007 /* LegacySettingsPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacySettingsPanel.swift; sourceTree = "<group>"; };
+		F18100000000000000000008 /* ShellChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellChecks.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -163,6 +165,7 @@
 				A457BB75BADC45205B9B3F69 /* SystemConditions.swift */,
 				5C2E8A4D1B7F30529E6D8C4A /* TimelineScrollBenchmark.swift */,
 				9168C630193BE62D64B5B960 /* PlaybackBenchmark.swift */,
+				F18100000000000000000008 /* ShellChecks.swift */,
 			);
 			path = Measure;
 			sourceTree = "<group>";
@@ -304,6 +307,7 @@
 				1F9F8B29E107494593AB0078 /* SystemConditions.swift in Sources */,
 				3A7D1E5C9F2B40618D3C7A5E /* TimelineScrollBenchmark.swift in Sources */,
 				D8D296ED416C1618E779BF80 /* PlaybackBenchmark.swift in Sources */,
+				F18200000000000000000008 /* ShellChecks.swift in Sources */,
 				2F71D6C304AB859E1D3E7F0A /* TimelineController.swift in Sources */,
 				A9E3B57C1F0842D6C7B93E15 /* TimelineDocumentView.swift in Sources */,
 				74CB19E8D3A05F2718BE6C40 /* TimelinePane.swift in Sources */,

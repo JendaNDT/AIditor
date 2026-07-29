@@ -110,6 +110,14 @@ struct AppShell: View {
             }
         }
         .background(KrasaUI.surfaceWindow)
+        // ⚠️ Bez tohohle si SwiftUI drží nahoře bezpečnou zónu titulkového
+        // pruhu a celá skořápka sjede o 32 bodů dolů — v okně, ve fullscreenu
+        // ne (tam titulkový pruh není). Naměřeno `--shell-check`: osa v okně
+        // začínala na 485 místo 453, ve fullscreenu na 509 správně.
+        //
+        // Návrh chce puntíky UVNITŘ toolbaru, takže se zóna ignoruje a místo
+        // pro ně dělá `ShellMode.toolbarLeading` (78 bodů v okně).
+        .ignoresSafeArea()
         // Minimální rozměr se při měření pouští k nule ze stejného důvodu
         // jako dřív u sidebaru: měřicí běh okno zmenšuje a tvrdé minimum
         // by mu v tom bránilo.

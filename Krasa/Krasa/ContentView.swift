@@ -3708,6 +3708,12 @@ struct ContentView: View {
                     await model.verifySelectionAndClipboard()
                 } else if arguments.contains("--range-check") {
                     await model.verifyChronologyAndRange()
+                } else if arguments.contains("--shell-check") {
+                    await model.verifyShellGeometry()
+                } else if arguments.contains("--shell-gpu") {
+                    await model.runShellGPUComparison(only: Array(explicit))
+                } else if arguments.contains("--shell-demo") {
+                    await model.runShellDemo()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

@@ -33,6 +33,14 @@ struct KrasaApp: App {
             ContentView(model: model)
                 .onAppear { appDelegate.model = model }
         }
+        // ⚠️ Bez tohohle zůstane nad obsahem 32bodový titulkový pruh a horní
+        // třetina toolbaru se pod ním schová — jméno projektu a horní půlky
+        // tlačítek nejsou vidět (chyceno screenshotem `--shell-demo`, fáze 18).
+        // Návrh chce puntíky UVNITŘ toolbaru; `.hiddenTitleBar` je přesně to:
+        // pruh zmizí, obsah jde k horní hraně a puntíky zůstanou nad ním.
+        // Místo pro ně dělá `ShellMode.toolbarLeading`.
+        // https://developer.apple.com/documentation/swiftui/hiddentitlebarwindowstyle
+        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {

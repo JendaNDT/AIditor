@@ -258,50 +258,6 @@ struct WindowConfigurator: NSViewRepresentable {
     }
 }
 
-// MARK: - Lišta osy (M1: jen rám a to, co je čtení stavu)
-
-/// Pás 32 px nad osou. Přepínače vrstev, citlivost a zoom sem doplní
-/// modul 3 — M1 drží rozměr a ukazuje jen to, co už dnes existuje jako
-/// stav (výřez a nápověda k přichytávání). Prázdné místo je schválně
-/// prázdné: falešná tlačítka, která nic nedělají, jsou horší než mezera.
-struct TimelineLayerBar: View {
-    @ObservedObject var model: AppModel
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Text("Na ose:")
-                .font(KrasaUI.Font.control)
-                .foregroundStyle(KrasaUI.textTertiary)
-
-            Spacer()
-
-            if let range = exportRangeText {
-                Text(range)
-                    .font(KrasaUI.Font.monoSmall)
-                    .foregroundStyle(KrasaUI.accent)
-            }
-
-            Text("Přichytávání · Shift vypne")
-                .font(KrasaUI.Font.control)
-                .foregroundStyle(KrasaUI.textTertiary)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: KrasaUI.Metric.timelineToolbarHeight)
-        .frame(maxWidth: .infinity)
-        .background(KrasaUI.surfaceChrome)
-    }
-
-    /// Kreslí se jen když je výřez opravdu výřez — pravidlo z fáze 17.
-    private var exportRangeText: String? {
-        let timeline = model.timeline
-        guard let inPoint = timeline.inPoint, let outPoint = timeline.outPoint,
-              outPoint > inPoint else { return nil }
-        let rate = timeline.project.timeline.frameRate
-        return "výřez \(Timecode(inPoint, frameRate: rate).shortText)"
-            + "–\(Timecode(outPoint, frameRate: rate).shortText)"
-    }
-}
-
 // MARK: - Připnutý panel (M1: hostí dosavadní inspektor)
 
 /// Panel vpravo od osy, 452 px. Modul 7 sem dá záložky Rychlost / Barva /

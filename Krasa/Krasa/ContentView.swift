@@ -67,7 +67,9 @@ final class AppModel: ObservableObject {
     private(set) weak var timelinePane: TimelinePane?
     /// Výkonový test osy staví projekt s 2000 klipy — kompozice z něj by se
     /// stavěla desítky sekund a s měřením scrollu nesouvisí.
-    private var skipsCompositionRebuild = false
+    /// Není `private`: od fáze 18 ho potřebuje i `--layers-check`, který
+    /// stojí ve vlastním souboru.
+    var skipsCompositionRebuild = false
 
     /// Pauza mezi běhy. Air je bezventilátorový — bez chladnutí měří druhý
     /// běh teplejší stroj, ne jiný stav.
@@ -3735,6 +3737,8 @@ struct ContentView: View {
                     await model.runShellDemo()
                 } else if arguments.contains("--status-check") {
                     await model.verifyAnalysisStatus()
+                } else if arguments.contains("--layers-check") {
+                    await model.verifyTimelineLayers()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

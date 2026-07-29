@@ -350,6 +350,22 @@ final class TimelineDocumentView: NSView {
     private let clipsContainer = CALayer()
     /// Vrstvy právě visící na ose, podle klipu.
     private var mountedClipLayers: [ClipID: ClipLayer] = [:]
+
+    /// Co je na nasazených klipech doopravdy nakreslené (fáze 18, modul 3).
+    ///
+    /// Měřicí okno pro `--layers-check`: přepínač vrstvy se ověřuje tím, že
+    /// se prvky přestanou KRESLIT, ne tím, že scroll zrychlí. Rychlost je
+    /// dnes pod šumem měření (vlna a proužky jsou levné) — mechanismus se
+    /// tím ověřit nedá, přítomností vrstev ano.
+    var drawnLayerCounts: (waveTiles: Int, qualityStrips: Int, emptinessStrips: Int) {
+        var tiles = 0, quality = 0, emptiness = 0
+        for layer in mountedClipLayers.values {
+            tiles += layer.waveTiles.count
+            quality += layer.qualityLayers.filter { !$0.isHidden }.count
+            emptiness += layer.emptinessLayers.filter { !$0.isHidden }.count
+        }
+        return (tiles, quality, emptiness)
+    }
     /// Fond odložených vrstev. Vrstva se nikdy nezahazuje, jen odpojuje —
     /// zakládání vrstev při každém scrollnutí je přesně to, čemu se recyklací
     /// předchází.
@@ -475,13 +491,17 @@ final class TimelineDocumentView: NSView {
         // Titulky z řeči pro pruh T1 — přepočet patří sem (reload), scroll
         // už jen mapuje hotové pole na souřadnice.
         speechCues = project.subtitleCues()
-        // Značky kvality (fáze 15) — bez vzorků okamžitý early-out.
-        qualityMarks = controller.sharpnessSamples.isEmpty
+        // Značky kvality (fáze 15) — bez vzorků okamžitý early-out, od fáze 18
+        // i s vypnutou vrstvou (modul 3). Citlivost přepočítává jen KLASIFIKACI
+        // hotových vzorků, nové vzorkování nespouští.
+        qualityMarks = (!controller.layers.qualityMarks || controller.sharpnessSamples.isEmpty)
             ? [:]
-            : project.qualityMarks(samples: controller.sharpnessSamples)
-        emptyMarks = controller.emptinessSamples.isEmpty
+            : project.qualityMarks(samples: controller.sharpnessSamples,
+                                   sensitivity: controller.qualitySensitivity)
+        emptyMarks = (!controller.layers.qualityMarks || controller.emptinessSamples.isEmpty)
             ? [:]
-            : project.emptinessMarks(samples: controller.emptinessSamples)
+            : project.emptinessMarks(samples: controller.emptinessSamples,
+                                     sensitivity: controller.qualitySensitivity)
     }
 
     /// Problémové úseky ostrosti per klip (fáze 15) — přepočet patří do
@@ -841,7 +861,8 @@ final class TimelineDocumentView: NSView {
     private func applyWaveform(_ placement: TimelineLayout.Placement, to layer: ClipLayer,
                                info: ClipDrawInfo?, visible: NSRect) {
         let pointsPerFrame = controller.geometry.pointsPerFrame
-        guard let info, info.kind == .audio,
+        guard controller.layers.waveforms,     // vypnutá vrstva (F18/M3)
+              let info, info.kind == .audio,
               placement.width >= 32,
               let asset = info.asset,
               let peaks = controller.waveforms.peaks(for: asset),
@@ -1234,7 +1255,7 @@ final class TimelineDocumentView: NSView {
         if titleDrag != nil {
             let point = convert(event.locationInWindow, from: nil)
             updateTitleDrag(atX: point.x,
-                            snapping: !event.modifierFlags.contains(.shift))
+                            snapping: snapping(for: event))
             return
         }
         guard controller.interaction.isDragging else { return }
@@ -1242,7 +1263,7 @@ final class TimelineDocumentView: NSView {
         let preview = controller.interaction.preview(
             atX: point.x, y: point.y,
             in: controller.project,
-            snapping: !event.modifierFlags.contains(.shift))
+            snapping: snapping(for: event))
         updateDragOverlay(preview)
     }
 
@@ -1317,6 +1338,13 @@ final class TimelineDocumentView: NSView {
     /// Náhled tažení titulku: model přeloží pozici kurzoru na zaraženou
     /// pozici/délku (`titleMovePreview` a spol.), duch ukáže výsledek.
     /// Model se nesahá.
+    /// Přichytávat? Globální přepínač z lišty osy A zároveň nedržený shift.
+    /// Dvě cesty k témuž rozhodnutí, ale jinak dlouhé: přepínač na celé
+    /// sezení, shift na jedno tažení.
+    private func snapping(for event: NSEvent) -> Bool {
+        controller.snappingEnabled && !event.modifierFlags.contains(.shift)
+    }
+
     private func updateTitleDrag(atX x: Double, snapping: Bool) {
         guard var drag = titleDrag else { return }
         let geometry = controller.geometry
@@ -1448,7 +1476,7 @@ final class TimelineDocumentView: NSView {
         let changed = (try? controller.interaction.commit(
             atX: point.x, y: point.y,
             into: &updated,
-            snapping: !event.modifierFlags.contains(.shift))) ?? false
+            snapping: snapping(for: event))) ?? false
 
         switch kind {
         case .move, .slip:
@@ -1547,6 +1575,14 @@ final class TimelineDocumentView: NSView {
         // s ⌘ — jinak by ⌘J spadlo sem. Zachytává se v ose, ne přes
         // `keyboardShortcut` v SwiftUI: shortcut bez modifikátoru by
         // střílel i při psaní textu titulku.
+        // ⇧Z: celá osa do okna. Taky na `keyDown` osy, ne na SwiftUI
+        // `keyboardShortcut` — „Z" je při psaní titulku pořád jen písmeno.
+        if event.modifierFlags.contains(.shift),
+           event.modifierFlags.intersection([.command, .option, .control]).isEmpty,
+           event.charactersIgnoringModifiers?.lowercased() == "z" {
+            controller.onFitRequest?()
+            return
+        }
         if event.modifierFlags.intersection([.command, .option, .control]).isEmpty {
             switch event.charactersIgnoringModifiers?.lowercased() {
             case "l": controller.onShuttle?(.forward); return

@@ -21,6 +21,22 @@ import AudioEngine
 import Foundation
 import TimelineModel
 
+/// Které informační vrstvy osa kreslí (fáze 18, modul 3).
+///
+/// ⚠️ Vypnutá vrstva znamená, že se **nepočítá**. Kdyby se jen skrývala,
+/// přepínač by nic neušetřil — a jediný důvod, proč existuje, je ubrat
+/// práci na dvacetiminutové ose. Rozhodnutí patří do `rebuildClipInfo`
+/// a `applyWaveform`, ne do neprůhlednosti vrstvy.
+struct TimelineLayers: Equatable {
+    /// Miniatury na klipech. Přijdou v modulu 5 — přepínač už existuje,
+    /// protože je to POJISTKA pro ně: kdyby srazily scroll benchmark, musí
+    /// jít vypnout, a vypínač nemá vznikat až ve chvíli, kdy je zle.
+    var thumbnails = true
+    var waveforms = true
+    var beats = true
+    var qualityMarks = true
+}
+
 @MainActor
 final class TimelineController: ObservableObject {
 
@@ -46,6 +62,10 @@ final class TimelineController: ObservableObject {
     /// Vlastní enum schválně: `TimelineController` je bez AVFoundation.
     enum ShuttleKey { case backward, pause, forward }
     var onShuttle: ((ShuttleKey) -> Void)?
+
+    /// ⇧Z — celá osa do okna (F18/M3). Zoom umí spočítat jen `TimelinePane`:
+    /// šířku výřezu zná scroll view, ne controller.
+    var onFitRequest: (() -> Void)?
 
     /// Hlavu právě táhne uživatel. Po tu dobu se ignorují aktualizace
     /// z přehrávače — obousměrná vazba se nikdy nesmí zapnout naráz
@@ -136,6 +156,39 @@ final class TimelineController: ObservableObject {
     var geometry: TimelineGeometry {
         get { interaction.geometry }
         set { interaction.geometry = newValue }
+    }
+
+    // MARK: - Vrstvy osy a citlivost analýz (fáze 18, modul 3)
+
+    /// Co se na ose kreslí. Vypnutá vrstva se **nepočítá**, ne jen neukazuje —
+    /// smysl přepínače je ušetřit práci při scrollu, ne ji udělat a schovat.
+    /// Stav sezení: do `Project` (a tedy do souboru) nepatří.
+    @Published var layers = TimelineLayers()
+
+    /// Přichytávání zapnuté globálně (F18/M3). Shift ho vypne pro JEDNO
+    /// tažení — dosud existovala jen ta shiftová cesta, takže kdo chtěl
+    /// hodinu stříhat bez magnetu, musel hodinu držet shift.
+    @Published var snappingEnabled = true
+
+    /// Citlivost klasifikace ostrosti a hluchých míst, 0–1 (fáze 15 měla
+    /// model, UI ne). Přepočítává ZNAČKY z hotových vzorků — **nové
+    /// vzorkování nespouští**, takže posuvník reaguje okamžitě.
+    ///
+    /// Přežívá restart (`UserDefaults`), ale ne projekt: je to nastavení
+    /// oka, ne vlastnost filmu.
+    @Published var qualitySensitivity: Double = TimelineController.storedSensitivity() {
+        didSet {
+            guard qualitySensitivity != oldValue else { return }
+            UserDefaults.standard.set(qualitySensitivity, forKey: Self.sensitivityKey)
+        }
+    }
+
+    private static let sensitivityKey = "cz.projektkrasa.qualitySensitivity"
+
+    private static func storedSensitivity() -> Double {
+        guard UserDefaults.standard.object(forKey: sensitivityKey) != nil else { return 0.5 }
+        let value = UserDefaults.standard.double(forKey: sensitivityKey)
+        return min(max(value, 0), 1)
     }
 
     // MARK: - Přehrávací hlava (krok 6)

@@ -126,6 +126,8 @@ final class TimelinePane: NSView {
             self, selector: #selector(liveScrollDidEnd(_:)),
             name: NSScrollView.didEndLiveScrollNotification, object: scrollView)
 
+        controller.onFitRequest = { [weak self] in self?.zoomToFit() }
+
         changeSubscriptions = [
             controller.$project
                 .removeDuplicates()
@@ -184,6 +186,21 @@ final class TimelinePane: NSView {
                 .sink { [weak self] _ in self?.reload() },
             controller.$emptinessSamples
                 .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.reload() },
+            // Vrstvy osy (fáze 18, modul 3). Reload i pravítko — doby se
+            // kreslí tam, zbytek tady.
+            controller.$layers
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    self?.reload()
+                    self?.rulerView.needsDisplay = true
+                },
+            // Citlivost klasifikace: přepočítá se jen mapování vzorků na
+            // značky, vzorky se nesahají — proto stačí reload.
+            controller.$qualitySensitivity
+                .removeDuplicates()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.reload() },
         ]
@@ -370,6 +387,26 @@ final class TimelinePane: NSView {
     }
 
     /// Změnila se sada stop nebo obsah projektu.
+    /// Zoom „celá osa do okna" (⇧Z, fáze 18/M3).
+    ///
+    /// Šířka výřezu se bere z `contentView`, ne z rámce pane — hlavičky stop
+    /// zabírají 104 bodů vlevo a bez toho by konec osy zůstal za pravou hranou.
+    /// Rezerva 8 bodů, aby poslední klip nekončil přesně na hraně.
+    ///
+    /// Prázdná osa se nezoomuje: `duration == 0` by dělilo nulou a `setZoom`
+    /// by hodnotu jen ořízl na maximum, tedy nesmyslné přiblížení.
+    func zoomToFit() {
+        let width = Double(scrollView.contentView.bounds.width) - 8
+        let frames = Double(controller.project.duration.count)
+        guard width > 0, frames > 0 else { return }
+        var geometry = controller.geometry
+        geometry.setZoom(width / frames)
+        controller.geometry = geometry
+        scrollView.contentView.scroll(to: .zero)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        syncChrome()
+    }
+
     func reload() {
         documentView.rebuildLanes()
         documentView.refreshClips()

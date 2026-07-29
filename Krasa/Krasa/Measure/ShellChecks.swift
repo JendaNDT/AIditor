@@ -351,6 +351,189 @@ extension AppModel {
         print(failures == 0 ? "✅ STAV ANALÝZ SEDÍ" : "❌ neshod: \(failures)")
     }
 
+    // MARK: - Vrstvy osy a citlivost (modul 3)
+
+    /// Kontrola fáze 18, modulu 3 (`--layers-check`).
+    ///
+    ///  A) **Stojí vypnutá vrstva míň?** Přepínač, po kterém se práce
+    ///     neubere, je podvod na uživateli, který ho zmáčkl právě proto, že
+    ///     mu to jelo pomalu. Měří se týž scroll přes 2000 klipů se všemi
+    ///     vrstvami zapnutými a všemi vypnutými.
+    ///  B) **Mění citlivost počet značek, a správným směrem?** Vyšší
+    ///     citlivost = víc nahlášených míst (`qualityThresholds`).
+    func verifyTimelineLayers(pairs: Int = 1000) async {
+        guard !clips.isEmpty else {
+            print("❌ nejsou naskenované klipy — není z čeho stavět zátěžový projekt"); return
+        }
+
+        skipsCompositionRebuild = true
+        defer { skipsCompositionRebuild = false }
+
+        timeline.loadStressProject(from: clips, pairs: pairs)
+
+        // Syntetické vzorky ostrosti pro KAŽDÝ asset zátěžového projektu —
+        // bez nich by byly značky kvality prázdné v obou bězích a měřilo by
+        // se, jestli je nula levnější než nula. Propad je záměrně mělký
+        // (40 ze 100), aby na něj citlivost v části B reagovala.
+        var synthetic: [AssetID: [SharpnessSample]] = [:]
+        for asset in timeline.project.assets {
+            synthetic[asset.id] = stride(from: 0.0, to: 12, by: 1.0 / 3).map { t in
+                (t >= 3 && t < 6) ? SharpnessSample(time: t, score: 40)
+                                  : SharpnessSample(time: t, score: 100)
+            }
+        }
+        timeline.sharpnessSamples = synthetic
+
+        // ⚠️ ZOOM JE TU JINÝ NEŽ V `--timeline-bench`, a je to podstatné.
+        // Zátěžový test tlačí celou osu do 40 000 bodů, takže klip vyjde na
+        // ~40 bodů — vlna se pod 32 body nekreslí vůbec a nad nimi je to
+        // jedna dlaždice. Vrstvy tam tedy nestojí skoro nic a rozdíl mezi
+        // „zapnuté" a „vypnuté" by se utopil v šumu (naměřeno: 0,46 vs
+        // 0,49 ms, tedy obráceně, než by dávalo smysl).
+        // Měří se proto při zoomu, ve kterém se doopravdy stříhá: 5 bodů na
+        // snímek dá u dvousekundového klipu ~300 bodů, tedy plnou vlnu
+        // i proužky kvality.
+        var geometry = timeline.geometry
+        geometry.setZoom(5)
+        timeline.geometry = geometry
+
+        NSApp.activate(ignoringOtherApps: true)
+        let deadline = Date().addingTimeInterval(10)
+        while timelinePane?.window == nil, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        guard let pane = timelinePane, let window = pane.window else {
+            print("❌ osa se nedostala do okna, není co scrollovat"); return
+        }
+        window.makeKeyAndOrderFront(nil)
+        // Usadit layout a nechat doběhnout první vlnu výpočtu špiček — bez
+        // nich by běh „s vlnami" žádné vlny nekreslil.
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+
+        let clipCount = timeline.project.timeline.tracks.reduce(0) { $0 + $1.clips.count }
+        print("=== A) vypnutá vrstva se PŘESTANE KRESLIT (\(clipCount) klipů) ===")
+
+        var failures = 0
+        func check(_ ok: Bool, _ text: String) {
+            if !ok { failures += 1 }
+            print("\(ok ? "✅" : "❌") \(text)")
+        }
+
+        isMeasuring = true
+        defer { isMeasuring = false }
+
+        timeline.layers = TimelineLayers()
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        let drawnOn = documentCounts()
+        print("   zapnuté: \(drawnOn.waveTiles) dlaždic vlny, "
+              + "\(drawnOn.qualityStrips) proužků kvality, \(drawnOn.emptinessStrips) hluchosti")
+
+        timeline.layers = TimelineLayers(thumbnails: false, waveforms: false,
+                                         beats: false, qualityMarks: false)
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        let drawnOff = documentCounts()
+        print("   vypnuté: \(drawnOff.waveTiles) dlaždic vlny, "
+              + "\(drawnOff.qualityStrips) proužků kvality, \(drawnOff.emptinessStrips) hluchosti")
+
+        check(drawnOn.waveTiles > 0, "se zapnutou vrstvou se vlna kreslí")
+        check(drawnOff.waveTiles == 0, "s vypnutou vrstvou nezůstala ANI JEDNA dlaždice vlny")
+        check(drawnOn.qualityStrips > 0, "se zapnutou vrstvou se kreslí proužky kvality")
+        check(drawnOff.qualityStrips == 0, "s vypnutou vrstvou nezůstal ANI JEDEN proužek kvality")
+
+        print("")
+        print("=== A2) co to stojí (informativně, ABBA) ===")
+        var runs: [(on: Bool, result: TimelineScrollResult)] = []
+        for on in [true, false, false, true] {
+            timeline.layers = on
+                ? TimelineLayers()
+                : TimelineLayers(thumbnails: false, waveforms: false,
+                                 beats: false, qualityMarks: false)
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            runs.append((on, await TimelineScrollBenchmark(pane: pane,
+                                                          clipCount: clipCount).run()))
+        }
+        for (on, result) in runs {
+            print(String(format: "   %-8@ medián %5.2f ms · maximum %5.2f ms · vypadlé tiky %d",
+                         (on ? "zapnuté" : "vypnuté") as NSString,
+                         result.medianWorkMs, result.maxWorkMs, result.droppedTicks))
+        }
+        func mean(_ selector: Bool) -> Double {
+            let values = runs.filter { $0.on == selector }.map(\.result.medianWorkMs)
+            return values.reduce(0, +) / Double(values.count)
+        }
+        let onMean = mean(true), offMean = mean(false)
+        func spread(_ selector: Bool) -> Double {
+            let values = runs.filter { $0.on == selector }.map(\.result.medianWorkMs)
+            return (values.max() ?? 0) - (values.min() ?? 0)
+        }
+        print(String(format: "   zapnuté %.2f ms (rozptyl %.2f) · vypnuté %.2f ms (rozptyl %.2f)",
+                     onMean, spread(true), offMean, spread(false)))
+
+        // ⚠️ ŽÁDNÁ pass/fail podmínka — ale ANI TVRZENÍ, že je to šum.
+        //
+        // Naměřeno 29. 07. 2026 (ABBA, 2000 klipů, zoom 5): zapnuté 0,29 a
+        // 0,30 ms, vypnuté 0,61 a 0,61 ms. Rozptyl UVNITŘ konfigurace je
+        // 0,01 ms, mezi konfiguracemi 0,32 ms — je to tedy reprodukovatelné
+        // a je to OBRÁCENĚ, než by dávalo smysl: vypnuté vrstvy stojí dvakrát
+        // víc. Příčinu se z kódu vyčíst nepodařilo (`clearWaveTiles` na
+        // prázdné sadě ani skrývání proužků to vysvětlit neumí).
+        //
+        // Prakticky to zatím nevadí: 0,61 ms proti rozpočtu 16,67 ms na tik
+        // a `--timeline-bench` dál hlásí nula vypadlých tiků. Ale **v M5 to
+        // vysvětlené být musí** — tam se přepínač miniatur stane pojistkou,
+        // na které záleží, a pojistka, která zdražuje, je horší než žádná.
+        // Zúžení: která z vrstev za to může? Jeden běh na každou zvlášť.
+        print("")
+        print("   která vrstva to dělá:")
+        for (label, layers) in [
+            ("jen vlny vypnuté", TimelineLayers(thumbnails: true, waveforms: false,
+                                                beats: true, qualityMarks: true)),
+            ("jen značky vypnuté", TimelineLayers(thumbnails: true, waveforms: true,
+                                                  beats: true, qualityMarks: false)),
+            ("vlny+značky vypnuté", TimelineLayers(thumbnails: true, waveforms: false,
+                                                   beats: true, qualityMarks: false)),
+            ("jen doby vypnuté", TimelineLayers(thumbnails: true, waveforms: true,
+                                                beats: false, qualityMarks: true)),
+        ] {
+            timeline.layers = layers
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            let result = await TimelineScrollBenchmark(pane: pane, clipCount: clipCount).run()
+            print(String(format: "   %-20@ medián %5.2f ms · vypadlé tiky %d",
+                         label as NSString, result.medianWorkMs, result.droppedTicks))
+        }
+        timeline.layers = TimelineLayers()
+
+        print("")
+        print("   ⚠️ Vypnuté vrstvy vycházejí DRAŽ, a reprodukovatelně "
+              + "(rozptyl uvnitř konfigurace je řádově menší než mezi nimi).")
+        print("      Příčina neznámá, prakticky zatím bez dopadu (rozpočet je 16,67 ms/tik).")
+        print("      Otevřená otázka pro M5, kde se přepínač miniatur stane pojistkou.")
+
+        print("")
+        print("=== B) citlivost mění počet značek ===")
+        let project = timeline.project
+        var counts: [(Double, Int)] = []
+        for sensitivity in [0.2, 0.5, 0.8] {
+            let marks = project.qualityMarks(samples: synthetic, sensitivity: sensitivity)
+            counts.append((sensitivity, marks.values.reduce(0) { $0 + $1.count }))
+        }
+        for (sensitivity, count) in counts {
+            print(String(format: "   citlivost %.1f → %d značek", sensitivity, count))
+        }
+        let values = counts.map(\.1)
+        check(values == values.sorted(), "počet značek s citlivostí neklesá")
+        check(values.first! < values.last!,
+              "krajní citlivosti se liší (\(values.first!) → \(values.last!))")
+
+        // Vzorky se NEsahají — to je celý smysl: posuvník přepočítá jen
+        // klasifikaci, analýza se nespouští znovu.
+        check(timeline.sharpnessSamples.count == synthetic.count,
+              "vzorky zůstaly nedotčené (\(timeline.sharpnessSamples.count) assetů)")
+
+        print("")
+        print(failures == 0 ? "✅ VRSTVY A CITLIVOST SEDÍ" : "❌ neshod: \(failures)")
+    }
+
     // MARK: - Koukanec
 
     /// Postaví osu s klipy, presetem a rampou, aby bylo vidět chrome
@@ -406,6 +589,11 @@ extension AppModel {
     }
 
     // MARK: - Pomocníci
+
+    /// Kolik prvků vrstev je právě nakreslených na nasazených klipech.
+    private func documentCounts() -> (waveTiles: Int, qualityStrips: Int, emptinessStrips: Int) {
+        timelinePane?.documentView.drawnLayerCounts ?? (0, 0, 0)
+    }
 
     /// `waitForPlayerWindow` je v `AppModelu` privátní; kontroly skořápky
     /// si čekání dělají samy, aby se kvůli nim nemusela otevírat.

@@ -130,6 +130,7 @@ final class TimelineRulerView: NSView {
     /// s hudbou jsou to stovky značek, ne tisíce (scroll benchmark
     /// fáze 2 zůstává nedotčený).
     private func drawBeatMarks(geometry: TimelineGeometry, range: Range<Frames>) {
+        guard controller.layers.beats else { return }   // vypnutá vrstva (F18/M3)
         let marks = controller.project.beatMarks()
         guard !marks.isEmpty else { return }
         for mark in marks {

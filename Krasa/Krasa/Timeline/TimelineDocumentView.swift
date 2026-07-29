@@ -46,6 +46,11 @@ enum TimelinePalette {
     /// neplete se s modrou/zelenou/fialovou/žlutou/terakotovou.
     static let beat = NSColor.systemOrange
 
+    /// Značky kvality na klipu (fáze 15): oranžová = měkký záběr,
+    /// červená = rozmazaný. Zelená se nekreslí.
+    static let qualitySoft = NSColor.systemOrange.withAlphaComponent(0.9)
+    static let qualityBad = NSColor.systemRed
+
     /// Plocha pod stopami a za koncem projektu.
     static let background = adaptive("timelineBackground", dark: 0.09, light: 0.78)
     /// Pruh obrazové stopy. Nejsvětlejší — obraz je hlavní.
@@ -167,10 +172,31 @@ final class ClipLayer: CALayer {
         addSublayer(title)
     }
 
+    /// Proužky kvality (fáze 15) při horní hraně klipu — recyklované
+    /// indexem, značek jsou na klipu jednotky.
+    var qualityLayers: [CALayer] = []
+
     /// Odpojí všechny dlaždice — při recyklaci a při změně úrovně.
     func clearWaveTiles() {
         for tile in waveTiles.values { tile.removeFromSuperlayer() }
         waveTiles = [:]
+    }
+
+    /// Rozmístí proužky kvality; prázdné pole je všechny schová.
+    func setQualityMarks(_ marks: [(x: Double, width: Double, color: CGColor)]) {
+        while qualityLayers.count < marks.count {
+            let strip = CALayer()
+            strip.cornerRadius = 1.5
+            addSublayer(strip)
+            qualityLayers.append(strip)
+        }
+        for (index, strip) in qualityLayers.enumerated() {
+            guard index < marks.count else { strip.isHidden = true; continue }
+            let mark = marks[index]
+            strip.isHidden = false
+            strip.backgroundColor = mark.color
+            strip.frame = CGRect(x: mark.x, y: 1, width: mark.width, height: 4)
+        }
     }
 
     /// Core Animation si přes tenhle init dělá kopie pro prezentační strom.
@@ -379,7 +405,15 @@ final class TimelineDocumentView: NSView {
         // Titulky z řeči pro pruh T1 — přepočet patří sem (reload), scroll
         // už jen mapuje hotové pole na souřadnice.
         speechCues = project.subtitleCues()
+        // Značky kvality (fáze 15) — bez vzorků okamžitý early-out.
+        qualityMarks = controller.sharpnessSamples.isEmpty
+            ? [:]
+            : project.qualityMarks(samples: controller.sharpnessSamples)
     }
+
+    /// Problémové úseky ostrosti per klip (fáze 15) — přepočet patří do
+    /// reloadu, scroll je jen mapuje na souřadnice.
+    private var qualityMarks: [ClipID: [QualitySegment]] = [:]
 
     func rebuildLanes() {
         rebuildClipInfo()
@@ -488,6 +522,7 @@ final class TimelineDocumentView: NSView {
             guard let layer = mountedClipLayers.removeValue(forKey: clipID) else { continue }
             layer.clearWaveTiles()
             layer.waveRung = 0
+            layer.setQualityMarks([])
             layer.removeFromSuperlayer()
             clipLayerPool.append(layer)
         }
@@ -664,6 +699,26 @@ final class TimelineDocumentView: NSView {
                                    width: max(0, placement.width - 12), height: 15)
 
         applyWaveform(placement, to: layer, info: info, visible: visible)
+        applyQualityMarks(placement, to: layer)
+    }
+
+    /// Proužky kvality (fáze 15): oranžová/červená při horní hraně klipu.
+    /// Zelená se nekreslí — ticho je dobrá zpráva, značka je jen tam, kde
+    /// stojí za to se podívat (klik = seek).
+    private func applyQualityMarks(_ placement: TimelineLayout.Placement, to layer: ClipLayer) {
+        guard let segments = qualityMarks[placement.clipID], placement.width >= 16 else {
+            layer.setQualityMarks([])
+            return
+        }
+        let geometry = controller.geometry
+        let marks = segments.map { segment in
+            (x: geometry.x(for: segment.start) - placement.x,
+             width: max(2, geometry.x(for: segment.end) - geometry.x(for: segment.start)),
+             color: (segment.level == .bad
+                        ? TimelinePalette.qualityBad
+                        : TimelinePalette.qualitySoft).cgColor)
+        }
+        layer.setQualityMarks(marks)
     }
 
     // MARK: - Vlnové průběhy (krok 10)
@@ -905,6 +960,23 @@ final class TimelineDocumentView: NSView {
         }
 
         controller.selectClips([hit.clipID])
+
+        // Klik do proužku kvality (fáze 15) = seek na začátek problému —
+        // značka je pozvánka „podívej se", ne dekorace. Jen horní pásek
+        // klipu, jinak by kolidoval s tažením.
+        if let segments = qualityMarks[hit.clipID],
+           let ti = controller.geometry.trackIndex(atY: point.y,
+                                                   in: controller.project.timeline),
+           point.y - controller.geometry.y(ofTrackAt: ti,
+                                           in: controller.project.timeline) <= 6 {
+            let frame = controller.geometry.frame(atX: point.x)
+            if let segment = segments.first(where: {
+                frame >= $0.start && frame < $0.end
+            }) {
+                controller.setPlayheadFromUser(segment.start)
+                return
+            }
+        }
 
         // Modifikátory (krok 9, návrh sekce 4): ⌥ na okraji = roll (operace
         // na hranici), ⌘ v těle = slip (operace na obsahu). Bez souseda

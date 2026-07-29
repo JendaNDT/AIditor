@@ -304,6 +304,27 @@ final class AppModel: ObservableObject {
         }
         clips = found.sorted { $0.name < $1.name }
         startProxyGeneration()
+        startSharpnessAnalysis()
+    }
+
+    /// Analýza ostrosti na pozadí (fáze 15, modul 1): pro video assety
+    /// projektu bez vzorků. Cache otiskem — druhé otevření je zadarmo.
+    /// Fotky se přeskakují (jeden snímek nemá co „rozmazat pohybem")
+    /// a pod CLI měřeními se nespouští (soupeřila by o stroj).
+    func startSharpnessAnalysis() {
+        guard !CommandLine.arguments.dropFirst().contains(where: { $0.hasPrefix("--") })
+        else { return }
+        let pending = timeline.project.assets.filter {
+            $0.hasVideo && !$0.isStill && timeline.sharpnessSamples[$0.id] == nil
+        }
+        guard !pending.isEmpty else { return }
+        Task { [weak self] in
+            for asset in pending {
+                guard let samples = await SharpnessStore.shared.samples(
+                    for: asset.url(usingProxies: false)), !samples.isEmpty else { continue }
+                self?.timeline.sharpnessSamples[asset.id] = samples
+            }
+        }
     }
 
     /// CLI ověření: uložit → načíst → porovnat. Timeline musí sedět do
@@ -1567,6 +1588,139 @@ final class AppModel: ObservableObject {
         return (try? data.write(to: url)) != nil
     }
 
+    /// CLI ověření detekce neostrosti (fáze 15, modul 1): dvě syntetické
+    /// fotky se ZNÁMOU pravdou — ostrá šachovnice a táž šachovnice
+    /// rozmazaná Gaussem — projdou přes still movie mezisoubory toutéž
+    /// cestou jako video (škálovací kompozice → NV12 → Laplaceova
+    /// metrika). Ostrá musí skórovat řádově výš. K tomu reálný klip:
+    /// počet vzorků ≈ délka × 3/s a druhé čtení jde z diskové cache.
+    func verifySharpness() async {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaSharpCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        let sharpURL = directory.appendingPathComponent("ostra.png")
+        let blurredURL = directory.appendingPathComponent("rozmazana.png")
+        guard writeCheckerboardPNG(to: sharpURL, side: 1000, blurRadius: 0),
+              writeCheckerboardPNG(to: blurredURL, side: 1000, blurRadius: 12) else {
+            print("❌ syntetické fotky se nepodařilo zapsat"); return
+        }
+
+        let canvas = CGSize(width: 3840, height: 2160)
+        guard let sharpMovie = try? await StillMovieStore.shared.movieURL(
+                forPhoto: sharpURL, canvas: canvas),
+              let blurredMovie = try? await StillMovieStore.shared.movieURL(
+                forPhoto: blurredURL, canvas: canvas) else {
+            print("❌ still movie mezisoubory se nepodařilo vyrobit"); return
+        }
+        guard let sharpSamples = await SharpnessStore.shared.samples(for: sharpMovie),
+              let blurredSamples = await SharpnessStore.shared.samples(for: blurredMovie),
+              let sharpScore = sharpSamples.first?.score,
+              let blurredScore = blurredSamples.first?.score else {
+            print("❌ vzorky ostrosti nedorazily"); return
+        }
+        print(String(format: "šachovnice: ostrá %.0f | rozmazaná %.0f (poměr %.1f×)",
+                     sharpScore, blurredScore,
+                     blurredScore > 0 ? sharpScore / blurredScore : .infinity))
+        print(sharpScore > blurredScore * 5
+              ? "✓ metrika rozezná ostrý obraz od rozmazaného řádově"
+              : "❌ metrika ostrost nerozeznává")
+
+        // Reálný klip: hustota vzorků a cache.
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        let started = Date()
+        guard let first = await SharpnessStore.shared.samples(for: source.originalURL) else {
+            print("❌ analýza reálného klipu selhala"); return
+        }
+        let firstTime = Date().timeIntervalSince(started)
+        let expected = source.duration.seconds * SharpnessStore.samplesPerSecond
+        print(String(format: "reálný klip: %d vzorků za %.1f s (čekáno ~%.0f)",
+                     first.count, firstTime, expected))
+        print(abs(Double(first.count) - expected) <= 3
+              ? "✓ hustota vzorků sedí (3/s)"
+              : "❌ hustota vzorků nesedí")
+
+        // Druhé čtení: nová instance store (paměť pryč) → jde z DISKU.
+        let freshStore = SharpnessStore()
+        let cachedStart = Date()
+        let second = await freshStore.samples(for: source.originalURL)
+        let cachedTime = Date().timeIntervalSince(cachedStart)
+        print(String(format: "druhé čtení: %.3f s", cachedTime))
+        print(second == first && cachedTime < max(0.5, firstTime / 4)
+              ? "✓ disková cache vrací totéž a řádově rychleji"
+              : "❌ cache nefunguje")
+        print("SHARP_CHECK_PATH=\(directory.path)")
+    }
+
+    /// CLI ukázka fáze 15 (`--sharp-demo`): reálný klip na V1 a syntetické
+    /// vzorky s propadem — oranžový a červený proužek na klipu. Koukanec
+    /// pro oko a screenshot.
+    func runSharpDemo() async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        var project = Project.empty()
+        project.addAsset(source)
+        do {
+            var clip = try project.makeClip(assetID: source.id)
+            clip.duration = min(clip.duration, Frames(300))
+            try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        timeline.project = project
+        // Syntetické vzorky: zdravých 100, měkký propad 2–4 s, tvrdý 6–8 s.
+        timeline.sharpnessSamples[source.id] = stride(from: 0.0, to: 10, by: 1.0 / 3)
+            .map { t in
+                if t >= 2, t < 4 { return SharpnessSample(time: t, score: 40) }
+                if t >= 6, t < 8 { return SharpnessSample(time: t, score: 10) }
+                return SharpnessSample(time: t, score: 100)
+            }
+        if let host = await waitForPlayerWindow() {
+            host.window?.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        try? await Task.sleep(nanoseconds: 25_000_000_000)
+    }
+
+    /// Šachovnice jako PNG, volitelně rozmazaná Gaussem — syntetická
+    /// fotka se známou ostrostí pro `--sharp-check`.
+    private func writeCheckerboardPNG(to url: URL, side: Int, blurRadius: Double) -> Bool {
+        guard let context = CGContext(
+            data: nil, width: side, height: side, bitsPerComponent: 8,
+            bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                | CGBitmapInfo.byteOrder32Little.rawValue) else { return false }
+        let cell = 25
+        for row in 0..<(side / cell) {
+            for column in 0..<(side / cell) where (row + column) % 2 == 0 {
+                context.setFillColor(CGColor(gray: 0.95, alpha: 1))
+                context.fill(CGRect(x: column * cell, y: row * cell,
+                                    width: cell, height: cell))
+            }
+        }
+        guard var image = context.makeImage() else { return false }
+
+        if blurRadius > 0 {
+            let blurred = CIImage(cgImage: image)
+                .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: blurRadius])
+                .cropped(to: CGRect(x: 0, y: 0, width: side, height: side))
+            guard let rendered = CIContext().createCGImage(blurred, from: blurred.extent)
+            else { return false }
+            image = rendered
+        }
+        guard let destination = CGImageDestinationCreateWithURL(
+            url as CFURL, UTType.png.identifier as CFString, 1, nil) else { return false }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination)
+    }
+
     /// Bílý čtverec jako PNG — syntetická fotka pro `--photo-check`.
     private func writeWhiteSquarePNG(to url: URL, side: Int) -> Bool {
         writeSquarePNG(to: url, side: side, color: CGColor(red: 1, green: 1, blue: 1, alpha: 1))
@@ -2006,6 +2160,7 @@ final class AppModel: ObservableObject {
         status = "\(clips.count) klipů. Vyber jeden a přehraj, nebo spusť měření."
         if selected == nil, let first = clips.first { await select(first) }
         startProxyGeneration()
+        startSharpnessAnalysis()
     }
 
     /// Proxy na pozadí — ale ne pod CLI měřeními, soupeřily by o stroj.
@@ -2437,6 +2592,10 @@ struct ContentView: View {
                     await model.verifyMusicImport()
                 } else if arguments.contains("--music-demo") {
                     await model.runMusicDemo()
+                } else if arguments.contains("--sharp-check") {
+                    await model.verifySharpness()
+                } else if arguments.contains("--sharp-demo") {
+                    await model.runSharpDemo()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

@@ -147,6 +147,12 @@ final class TimelinePane: NSView {
                 .dropFirst()
                 .throttle(for: .milliseconds(100), scheduler: DispatchQueue.main, latest: true)
                 .sink { [weak self] _ in self?.documentView.refreshClips() },
+            // Dopočítané vzorky ostrosti (fáze 15) — přijdou jednou za
+            // asset z pozadí, reload přepočítá značky kvality.
+            controller.$sharpnessSamples
+                .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.reload() },
         ]
     }
 

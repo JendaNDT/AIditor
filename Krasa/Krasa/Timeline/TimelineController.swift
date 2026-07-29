@@ -453,6 +453,13 @@ final class TimelineController: ObservableObject {
         project = updated
     }
 
+    // MARK: - Analýzy kvality (fáze 15)
+
+    /// Vzorky ostrosti per asset — plní je `AppModel` z diskové cache
+    /// (`SharpnessStore`), do projektového souboru se NEUKLÁDAJÍ.
+    /// Promítnutí na klipy dělá model (`qualityMarks`) při reloadu osy.
+    @Published var sharpnessSamples: [AssetID: [SharpnessSample]] = [:]
+
     // MARK: - Synchronizace externího zvuku (fáze 7, modul 5)
 
     /// Kontextové menu klipu žádá synchronizaci — obslouží `AppModel`

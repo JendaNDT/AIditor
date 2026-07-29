@@ -28,29 +28,36 @@ CLI kontrola s čísly → screenshot**.
 
 Bez nich se nedá začít — každé mění, co se bude psát.
 
-### 2.1 Kdy vůči KILL-GATE 1
+### 2.1 Kdy vůči KILL-GATE 1 — ✅ ROZHODNUTO 29. 07. 2026
 
-`PROJECT_STATUS.md` říká: *„Do kill-gate se nepřidávají funkce."* Tenhle plán jich přidává devět
+`PROJECT_STATUS.md` říkalo: *„Do kill-gate se nepřidávají funkce."* Tenhle plán jich přidává devět
 (knihovna, přetažení, přehled osy, dva fullscreeny, přepínače vrstev, citlivost, prázdný start,
 plovoucí náhled snímku). Materiál na svatbu je ~konec srpna 2026.
 
-**Doporučení: etapy A + C (moduly M1–M3, M7, M8) před svatbou, etapy B a D po ní.**
-Ty moduly nepřidávají žádnou funkci — jen zviditelňují, co už appka umí, a dávají křivce rychlosti
-místo. To je přesně to, co bude na svatbě bolet. Knihovna a fullscreen počkají: bez nich se svatba
-sestříhat dá, bez 452px panelu na křivku hůř.
+**Rozhodnutí autora: jede se všech 13 modulů PŘED svatbou.** Svatba se bude stříhat už v novém UI
+včetně knihovny a fullscreenů. Pravidlo „do kill-gate se nepřidávají funkce" je tím pro fázi 18
+**výslovně zrušené** — nahrazuje ho pravidlo níž.
 
-### 2.2 Světlý režim — zůstává, nebo padá?
+⚠️ **Co z toho plyne pro každý modul.** Do kill-gate půjde třináct sessions čerstvého kódu, který
+nikdo neodzkoušel rukou na skutečné zakázce. Regresní sada (sekce 7) proto **není doporučení, ale
+podmínka odevzdání každého modulu**, a moduly, které sahají na osu nebo na export, mají tvrdé brány
+s čísly (R1, R2, R4). Kdyby se některý modul nepovedl uzavřít brankou, **odloží se za svatbu on sám**,
+ne celá fáze — proto je pořadí sestavené tak, aby se dalo kdykoli useknout: ergonomické moduly jsou
+napřed, kosmetické vzadu.
+
+### 2.2 Světlý režim — ✅ ROZHODNUTO 29. 07. 2026: PADÁ
 
 Návrh má **jen tmavou variantu**. Dnešní kód má obě větve:
 `TimelineDocumentView.swift:33` a `RampEditorView.swift:30` volí přes
 `appearance.bestMatch(from: [.aqua, .darkAqua])`.
 
-Tři cesty: **(a)** okno natvrdo `NSAppearance(named: .darkAqua)`, světlá větev se smaže — nejlevnější,
-mínus je editor, který nectí systém; **(b)** světlá větev zůstane a doplní se o nové chrome tokeny —
-dvojnásobek palety navíc a nikdo ji neotestuje; **(c)** zůstane jak je a nové chrome bude jen tmavé —
-nejhorší, mix.
+**Rozhodnutí autora: okno bude natvrdo tmavé.** V M1 dostane `NSAppearance(named: .darkAqua)`
+a světlá větev v `TimelineDocumentView` i `RampEditorView` se smaže. Střihové aplikace jsou tmavé
+záměrně — světlé okolí posouvá vnímání jasu obrazu.
 
-**Doporučení: (a).** Střihové aplikace jsou tmavé záměrně — světlé okolí posouvá vnímání jasu obrazu.
+⚠️ Přepínač vzhledu tím **přestane fungovat**, i když ho systém nabídne. To je záměr, ne chyba —
+`viewDidChangeEffectiveAppearance` v obou view se stane zbytečným a odstraní se s ním, aby po sobě
+nenechal mrtvou cestu.
 
 ### 2.3 Pilulka transportu leží NA obraze — a to stojí GPU
 
@@ -361,17 +368,31 @@ Projekt má pravidlo, že se čísla měří, ne odhadují. Každý modul přid�
 
 ## 9. Souhrn
 
-| Etapa | Moduly | Sessions | Přidává funkce? | Kdy |
+Podle rozhodnutí z 2.1 jde **všech 13 modulů před svatbou**, v jednom sledu.
+
+| # | Modul | Etapa | Riziko | Brána |
 |---|---|---|---|---|
-| **A — rám a chrome** | M1–M3 | 3 | ne | **před svatbou** |
-| **C — panely** | M7–M8 | 2 | ne | **před svatbou** |
-| **B — osa** | M4–M6 | 3 | ano | po svatbě |
-| **C — knihovna** | M9 | 1 | ano | po svatbě |
-| **D — obrazovky** | M10–M13 | 4 | ano | po svatbě |
-| | **13** | **13** | | |
+| M1 | nový rám okna (+ tmavý režim natvrdo) | A | **R2, R4** | `--benchmark`, `--fullscreen`, `--shell-check` |
+| M2 | stavový řádek a čip analýz | A | nízké | `--status-check` |
+| M3 | lišta osy — vrstvy, citlivost, výřez, zoom | A | nízké | `--layers-check` |
+| M7 | panel 452 + záložka Rychlost | C | střední | `--panel-check` |
+| M8 | záložky Barva, Zvuk, Info | C | nízké | `--panel-check` |
+| M4 | výšky stop, hlavičky 104 | B | nízké | `--layout-check` |
+| M5 | **miniatury na klipech** | B | **R1 — nejvyšší** | `--timeline-bench`, `--thumb-check` |
+| M6 | přehled celé osy | B | střední | `--overview-check` |
+| M9 | knihovna médií a přetažení | C | střední | `--library-check` |
+| M10 | list exportu | D | střední | `--export-check`, `--export-ui-check` |
+| M11 | panel přepisu řeči | D | střední | `--transcript-ui-check` |
+| M12 | prázdný start | D | nízké | `--empty-start-check` |
+| M13 | fullscreen aplikace a náhledu | D | střední | `--fullscreen-ui-check` |
 
-**Doporučené pořadí: M1 → M2 → M3 → M7 → M8 → 🚧 KILL-GATE 1 → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13.**
+**Pořadí: M1 → M2 → M3 → M7 → M8 → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13 → 🚧 KILL-GATE 1.**
 
-Etapy A a C jsou pět sessions, po kterých je hotová celá potíž #2, #3 a #4 ze zadání a osa má
-přepínače vrstev. Zbytek počká na to, co řekne svatba — a je dost pravděpodobné, že přeskládá
-pořadí etapy D.
+Proč zrovna takhle, když se jede všechno: **ergonomie napřed, kosmetika vzadu.** Prvních pět modulů
+zavírá potíže #2, #3 a #4 ze zadání a nepřidává funkce — kdyby došel čas nebo se něco zadrhlo, jsou
+to ty, které na svatbě chybět nesmí. M5 (miniatury) je nejrizikovější kus celého plánu a jde až po
+M3, protože M3 dodává vypínač, kterým se dá zachránit, kdyby scroll benchmark spadl. Fullscreeny
+jsou poslední schválně: jsou nejvíc „na koukání" a nejmíň blokují střih.
+
+**Když modul neprojde svou bránou, odkládá se za svatbu on sám, ne celá fáze.** Pořadí je sestavené
+tak, aby se dalo useknout kdekoli za M8 a to, co je hotové, dávalo použitelnou aplikaci.

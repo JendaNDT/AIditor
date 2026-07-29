@@ -634,16 +634,18 @@ final class AppModel: ObservableObject {
                    let measured = scan.integratedLUFS {
                     var gainDB = LoudnessNormalization.gainDecibels(
                         measured: measured, target: profile.targetLUFS)
-                    // Strop: špička po zesílení ≤ −1 dBFS. Bez limiteru je
-                    // tohle jediná poctivá ochrana proti clippingu — a když
-                    // zasáhne, řekne se to, nezamlčí.
-                    if scan.samplePeak > 0 {
-                        let capDB = -1.0 - 20.0 * log10(Double(scan.samplePeak))
+                    // Strop: TRUE PEAK po zesílení ≤ −1 dBTP (fáze 16 —
+                    // špička vzorků mezivzorkové špičky neviděla a „strop
+                    // −1 dB" mohl v DA převodníku a AAC kodéru přetékat).
+                    // Bez limiteru je tohle jediná poctivá ochrana proti
+                    // clippingu — a když zasáhne, řekne se to, nezamlčí.
+                    if scan.truePeakLinear > 0 {
+                        let capDB = -1.0 - 20.0 * log10(scan.truePeakLinear)
                         if gainDB > capDB {
                             gainDB = capDB
                             loudnessNote = String(
                                 format: " Hlasitost %.1f LUFS, gain omezen špičkami na %+.1f dB"
-                                    + " — na cíl %.0f LUFS nedosáhl.",
+                                    + " (strop −1 dBTP) — na cíl %.0f LUFS nedosáhl.",
                                 measured, gainDB, profile.targetLUFS)
                         }
                     }

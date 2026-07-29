@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 16: modul 1 hotový — zvukové fade úchyty)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 16: moduly 1–2 hotové — fade úchyty a dBTP strop)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,15 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (365, 28
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 16, modul 2 — true peak strop normalizace (dBTP)** — 4× převzorkování ve špičkovém měření (`AudioEngine`, čistý Swift s testy na kotvách ITU-R BS.1770 — inter-sample špičky sinusu), zapojit do stropu normalizace exportu místo dnešní špičky vzorků. Pak modul 3: správa modelu Whisperu (velikost, smazání, přemístění) + drobnosti z koukanců (trim zaražený přechodem tiše nepustí — duch nezčervená; přechod nejde vybrat klikem do těla). Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 16, modul 3 (poslední modul vývoje před kill-gate)** — správa modelu Whisperu (zobrazit velikost, smazat, přemístit) + drobnosti z koukanců: trim/roll zaražený přechodem tiše nepustí (duch má zčervenat), přechod nejde vybrat klikem do těla. Detail v `IMPLEMENTACNI_PLAN.md`.
 
-## 🚧 FÁZE 16 — vymazlení a technické dluhy (modul 1 HOTOVÝ 29. 07. 2026)
+## 🚧 FÁZE 16 — vymazlení a technické dluhy (moduly 1–2 HOTOVÉ 29. 07. 2026)
+
+✅ **Modul 2 — true peak strop normalizace (29. 07. 2026).**
+
+  - **`TruePeakMeter` v `AudioEngine` (+6 testů, celkem 54):** 4× převzorkování polyfázovým okénkovaným sincem (Hann, 12 taps na fázi, prototyp 48 — princip ITU-R BS.1770-4 Annex 2; koeficienty se POČÍTAJÍ, neopisují — týž přístup jako K-váhování, každá fáze normalizovaná na jednotkový součet). Streamovaně, per kanál, s kruhovým oknem. **Kotvy v testech:** sinus fs/4 s fází π/4 — vzorky 0,707, true peak 1,0 (+3 dB, klasický mezivzorkový případ); 997 Hz beze změny; ticho −120; true peak ≥ špička vzorků na šumu; streamování po nepravidelných kusech = jednorázové měření; stereo najde špičku v kterémkoli kanále.
+  - **Zapojení:** `LoudnessScanner.Result.truePeakLinear` místo špičky vzorků (tentýž průchod, metr se jen přidal vedle `LoudnessMeter`), strop normalizace v exportu je teď poctivě **−1 dBTP** a status to říká.
+  - **⚠️ Změřený dopad na reálném materiálu (`--normalize-check`):** strop klesl z +5,9 dB na **+4,7 dB** — mezivzorkové špičky testovacích klipů jsou o **1,2 dB výš** než špičky vzorků, takže dřívější „−1 dB" export ve skutečnosti přetékal (přesně chyba, kterou plán touhle položkou řešil). Broadcast profil na tomhle materiálu už na cíl −23 LUFS nedosáhne a poctivě to hlásí — správné chování, ne regrese.
 
 ✅ **Modul 1 — zvukové fade úchyty (29. 07. 2026).**
 

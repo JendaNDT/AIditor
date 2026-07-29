@@ -25,10 +25,11 @@ enum LoudnessScanner {
     struct Result {
         /// Integrovaná hlasitost v LUFS; `nil` = samé ticho.
         let integratedLUFS: Double?
-        /// Špička vzorků, lineárně (1,0 = full scale). POZOR: špička
-        /// vzorků, ne true peak — mezivzorkové špičky nevidí. Pro strop
-        /// normalizace s rezervou −1 dB je to vědomé zjednodušení.
-        let samplePeak: Float
+        /// TRUE PEAK, lineárně (1,0 = full scale) — 4× převzorkování
+        /// (fáze 16, `TruePeakMeter`), vidí i mezivzorkové špičky.
+        /// Dřívější špička vzorků je podmnožina: true peak ≥ špička
+        /// vzorků vždy, takže strop normalizace jen zpřísněl.
+        let truePeakLinear: Double
     }
 
     /// Projede zvuk assetu a vrátí hlasitost + špičku. `nil` = asset
@@ -72,7 +73,7 @@ enum LoudnessScanner {
         }
 
         var meter = LoudnessMeter(sampleRate: sampleRate, channelCount: channels)
-        var peak: Float = 0
+        var peakMeter = TruePeakMeter(channelCount: channels)
 
         while let buffer = output.copyNextSampleBuffer() {
             guard let block = CMSampleBufferGetDataBuffer(buffer) else { continue }
@@ -84,10 +85,7 @@ enum LoudnessScanner {
                                            destination: $0.baseAddress!)
             }
             guard status == kCMBlockBufferNoErr else { continue }
-            for value in samples {
-                let magnitude = abs(value)
-                if magnitude > peak { peak = magnitude }
-            }
+            peakMeter.addInterleaved(samples)
             meter.addInterleaved(samples)
         }
 
@@ -95,6 +93,7 @@ enum LoudnessScanner {
             throw reader.error ?? NSError(domain: "LoudnessScanner", code: 3, userInfo: [
                 NSLocalizedDescriptionKey: "Čtení zvuku selhalo."])
         }
-        return Result(integratedLUFS: meter.integrated, samplePeak: peak)
+        return Result(integratedLUFS: meter.integrated,
+                      truePeakLinear: peakMeter.linearPeak)
     }
 }

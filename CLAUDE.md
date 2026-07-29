@@ -135,7 +135,7 @@ Testy pustíš přes `cd SpeedRampEngine && swift test`.
 ### `TimelineModel/`
 Logika, geometrie a interakce časové osy. Čistý Swift, závislosti
 `SpeedRampEngine` a od F14 `AudioEngine` (oba také čistý Swift), **žádné
-AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **384
+AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **392
 testů, ověřeno; 28 invariantů ve `validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
 křivku (uzly kotvené ve zdrojovém čase) a `rampPlaybackPlan` vydává
 segmentaci v celých tickách pro `scaleTimeRange`. Od vylepšovacích fází
@@ -174,6 +174,14 @@ navíc:
   (1+slow)/2). Chyby nesou RADU (`noBeatInReach(nearest:)`), UI je
   překládá do tooltipů vypnutých položek menu; o zapnutí položky
   rozhoduje zkušební běh operace na kopii projektu.
+- **Kvalita (F15):** `SharpnessMetric.laplacianVariance` + `qualityMarks
+  (samples:)` — klasifikace RELATIVNĚ k mediánu skóre CELÉHO assetu
+  (absolutní prahy nefungují; trim klasifikaci nemění), citlivost 0–1,
+  zákmity < 0,5 s a tma (medián 0) se nehlásí. Vzorky se do projektového
+  souboru NEUKLÁDAJÍ — drží je `SharpnessStore` (cache otiskem
+  `v2|cesta|velikost|mtime`; verze výpočtu je součást otisku). ⚠️ Past:
+  `frameDuration` škálovací kompozice výstup čtečky pod frekvencí zdroje
+  NEprořeďuje — vzorkuj decimací po dekódování.
 
 ```swift
 var project = Project.empty()                        // V1 + A1 + A2 + T1

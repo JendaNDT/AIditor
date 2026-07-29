@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  body { margin:0; background:#000; color:#e9eaec;
+         font-family:-apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; }
+  a { color:#ffc947; text-decoration:none; }
+  a:hover { color:#ffdd88; }
+</style>
+</helmet>
+
+<div style="width:1470px; height:900px; overflow:hidden; background:#000; position:relative; font-size:12px;">
+
+  <!-- obraz na celou obrazovku, pillarbox nahoře a dole (16:9 do 1470×900) -->
+  <div style="position:absolute; left:0; right:0; top:36px; height:827px; background:linear-gradient(160deg,#2b2f36,#12141a); display:flex; align-items:center; justify-content:center; color:#3f444b; font-size:12px;">
+    3840×2160 · 30 fps
+    <div style="position:absolute; left:0; right:0; top:30%; text-align:center; font-family:Georgia,'Times New Roman',serif; font-size:87px; font-weight:600; color:#fff; text-shadow:0 2px 7px rgba(0,0,0,.65);">Anna a Petr</div>
+  </div>
+
+  <!-- řečový titulek: velikost proti výšce obrazu, deska jako v okně;
+       poloha se řídí stavem overlaye — nad ovládáním nadskočí -->
+  <sc-if value="{{ isClean }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute; left:50%; transform:translateX(-50%); bottom:108px; background:rgba(0,0,0,.55); border-radius:8px; padding:9px 20px; font-size:31px; font-weight:600; color:#fff; text-align:center; max-width:70%;">a tímhle prstenem si tě beru</div>
+  </sc-if>
+  <sc-if value="{{ isControls }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute; left:50%; transform:translateX(-50%); bottom:212px; background:rgba(0,0,0,.55); border-radius:8px; padding:9px 20px; font-size:31px; font-weight:600; color:#fff; text-align:center; max-width:70%;">a tímhle prstenem si tě beru</div>
+  </sc-if>
+
+  <!-- ── ČISTÝ REŽIM: po 2 s se schová všechno, zůstane jen připomínka ── -->
+  <sc-if value="{{ isClean }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute; right:22px; top:58px; display:flex; align-items:center; gap:8px; padding:5px 10px; border-radius:16px; background:rgba(0,0,0,.42); opacity:.5;">
+      <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:#e9eaec;">00:00:08:22</span>
+      <span style="width:1px; height:12px; background:rgba(255,255,255,.25);"></span>
+      <span style="font-size:10px; color:#c9ccd1;">⎋ zpět do editoru</span>
+    </div>
+  </sc-if>
+
+  <!-- ── OVLÁDÁNÍ: myš se pohnula ── -->
+  <sc-if value="{{ isControls }}" hint-placeholder-val="{{ true }}">
+    <!-- horní pruh: co se právě přehrává a v jakém stavu -->
+    <div style="position:absolute; left:0; right:0; top:0; height:112px; background:linear-gradient(to bottom, rgba(0,0,0,.72), rgba(0,0,0,0)); display:flex; align-items:flex-start; padding:20px 24px; gap:14px;">
+      <div style="display:flex; flex-direction:column; gap:3px;">
+        <span style="font-size:15px; font-weight:600; letter-spacing:-.01em;">Svatba Anna a Petr</span>
+        <span style="font-size:11px; color:#9aa0a8;">20260725_203813.mp4 · V1 · rampa 1× → 0,25×</span>
+      </div>
+      <span style="flex:1;"></span>
+      <div style="display:flex; align-items:center; gap:7px;">
+        <span style="padding:3px 8px; border-radius:6px; background:rgba(0,0,0,.5); font-size:10px; color:#c9ccd1;">Proxy 1/2</span>
+        <span style="padding:3px 8px; border-radius:6px; background:rgba(0,0,0,.5); font-size:10px; color:#ffd88a;">Teplý film 62 %</span>
+        <span style="padding:3px 8px; border-radius:6px; background:rgba(0,0,0,.5); font-size:10px; color:#9aa0a8; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">−16,2 LUFS</span>
+        <span style="padding:3px 8px; border-radius:6px; background:rgba(255,255,255,.1); font-size:10px; color:#e9eaec;">⎋ zpět</span>
+      </div>
+    </div>
+
+    <!-- dolní pruh: scrub, transport, výřez -->
+    <div style="position:absolute; left:0; right:0; bottom:0; height:168px; background:linear-gradient(to top, rgba(0,0,0,.82), rgba(0,0,0,0)); display:flex; flex-direction:column; justify-content:flex-end; gap:14px; padding:0 28px 22px;">
+
+      <!-- scrub lišta s dobami hudby a výřezem -->
+      <div style="display:flex; align-items:center; gap:14px;">
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:22px; letter-spacing:-.01em; width:132px;">00:00:08:22</span>
+        <div style="flex:1; height:26px; position:relative;">
+          <div style="position:absolute; left:0; right:0; top:11px; height:4px; border-radius:2px; background:rgba(255,255,255,.18);"></div>
+          <div style="position:absolute; left:0; width:3.5%; top:11px; height:4px; border-radius:2px; background:#ff453b;"></div>
+          <div style="position:absolute; left:1.6%; right:89.6%; top:8px; height:10px; border-radius:3px; background:rgba(255,201,71,.28); border-left:2px solid #ffc947; border-right:2px solid #ffc947;"></div>
+          <div style="position:absolute; left:0; right:0; top:19px; height:6px; background:repeating-linear-gradient(90deg, rgba(255,159,10,.5) 0 1px, transparent 1px 26px);"></div>
+          <div style="position:absolute; left:3.5%; top:4px; width:4px; height:18px; border-radius:2px; background:#ff453b; box-shadow:0 0 0 3px rgba(255,69,59,.2);"></div>
+        </div>
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:#9aa0a8; width:96px; text-align:right;">−00:04:03:15</span>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:16px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="padding:5px 10px; border-radius:8px; background:rgba(255,255,255,.08); font-size:11px; color:#c9ccd1;">I 0:04</span>
+          <span style="padding:5px 10px; border-radius:8px; background:rgba(255,255,255,.08); font-size:11px; color:#c9ccd1;">O 0:26</span>
+          <span style="font-size:10px; color:#6b7280;">přehrávat jen výřez</span>
+        </div>
+        <span style="flex:1;"></span>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="width:34px; height:34px; border-radius:10px; background:rgba(255,255,255,.08); display:flex; align-items:center; justify-content:center; font-size:11px; color:#c9ccd1;">J</span>
+          <span style="width:34px; height:34px; border-radius:10px; background:rgba(255,255,255,.08); display:flex; align-items:center; justify-content:center; font-size:12px; color:#c9ccd1;">◀</span>
+          <span style="width:52px; height:52px; border-radius:50%; background:#f2f3f5; color:#111315; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700;">❚❚</span>
+          <span style="width:34px; height:34px; border-radius:10px; background:rgba(255,255,255,.08); display:flex; align-items:center; justify-content:center; font-size:12px; color:#c9ccd1;">▶</span>
+          <span style="width:34px; height:34px; border-radius:10px; background:rgba(255,255,255,.08); display:flex; align-items:center; justify-content:center; font-size:11px; color:#c9ccd1;">L</span>
+          <span style="padding:4px 9px; border-radius:7px; background:rgba(255,159,10,.16); color:#ff9f0a; font-size:11px; font-weight:600;">−2× krokováním</span>
+        </div>
+        <span style="flex:1;"></span>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="padding:5px 10px; border-radius:8px; background:rgba(255,255,255,.08); font-size:11px; color:#c9ccd1;">Titulky ✓</span>
+          <span style="padding:5px 10px; border-radius:8px; background:rgba(255,255,255,.08); font-size:11px; color:#c9ccd1;">Osa ⇧T</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ── OSA U SPODNÍ HRANY: ⇧T nebo myš do posledních 60 px ── -->
+  <sc-if value="{{ isTimeline }}" hint-placeholder-val="{{ false }}">
+    <!-- náhled snímku pod kurzorem: scrub bez opuštění fullscreenu -->
+    <div style="position:absolute; left:406px; bottom:150px; width:192px; display:flex; flex-direction:column; gap:5px; align-items:center;">
+      <div style="width:192px; height:108px; border-radius:8px; border:1px solid rgba(255,255,255,.22); background:linear-gradient(150deg,#44525d,#181c22); box-shadow:0 14px 30px rgba(0,0,0,.55);"></div>
+      <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:#e9eaec;">00:00:14:06</span>
+    </div>
+
+    <div style="position:absolute; left:0; right:0; bottom:0; height:146px; background:linear-gradient(to top, rgba(0,0,0,.9), rgba(0,0,0,.55) 70%, rgba(0,0,0,0)); display:flex; flex-direction:column; justify-content:flex-end; gap:10px; padding:0 24px 18px;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:18px;">00:00:08:22</span>
+        <span style="padding:3px 8px; border-radius:6px; background:rgba(255,255,255,.08); font-size:10px; color:#c9ccd1;">osa · ⇧T schová</span>
+        <span style="flex:1;"></span>
+        <span style="font-size:10px; color:#9aa0a8;">tažením scrubuješ · ⌥ krok po snímcích · klik do doby přiskočí na úder</span>
+      </div>
+
+      <!-- mini osa: obrazová stopa s miniaturami + zvuk pod ní -->
+      <div style="height:76px; border-radius:10px; background:rgba(14,15,17,.82); border:1px solid rgba(255,255,255,.1); position:relative; overflow:hidden;">
+        <div style="position:absolute; left:6px; right:6px; top:6px; height:40px; display:flex; gap:2px;">
+          <span style="width:14%; border-radius:4px; background:linear-gradient(150deg,#42505f,#1b2027);"></span>
+          <span style="width:16%; border-radius:4px; background:linear-gradient(150deg,#4b4438,#1f1c18);"></span>
+          <span style="width:24%; border-radius:4px; background:linear-gradient(150deg,#3b4a55,#181c22); border:1px solid rgba(255,201,71,.75); box-sizing:border-box;"></span>
+          <span style="width:12%; border-radius:4px; background:linear-gradient(150deg,#4a4450,#1d1a22);"></span>
+          <span style="width:18%; border-radius:4px; background:linear-gradient(150deg,#465060,#1c2129);"></span>
+        </div>
+        <div style="position:absolute; left:6px; right:6px; top:50px; height:12px; border-radius:3px; background:#29684d; overflow:hidden;">
+          <span style="position:absolute; left:0; right:0; top:2px; height:8px; background:repeating-linear-gradient(90deg, rgba(255,255,255,.3) 0 1px, transparent 1px 3px);"></span>
+        </div>
+        <div style="position:absolute; left:6px; right:6px; bottom:3px; height:5px; background:repeating-linear-gradient(90deg, rgba(255,159,10,.55) 0 1px, transparent 1px 24px);"></div>
+        <div style="position:absolute; left:2%; width:22%; top:0; bottom:0; background:rgba(255,201,71,.1); border-left:2px solid #ffc947; border-right:2px solid #ffc947;"></div>
+        <div style="position:absolute; left:34%; top:0; bottom:0; width:2px; background:#ff453b;"></div>
+        <div style="position:absolute; left:33.4%; top:0; width:12px; height:7px; border-radius:2px; background:#ff453b;"></div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1470,&quot;height&quot;:900},&quot;stav&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;cisty&quot;,&quot;ovladani&quot;,&quot;osa&quot;],&quot;default&quot;:&quot;ovladani&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const stav = this.props.stav ?? "ovladani";
+    return {
+      isClean: stav === "cisty",
+      isControls: stav === "ovladani",
+      isTimeline: stav === "osa",
+    };
+  }
+}
+
+</script>
+</body>
+</html>

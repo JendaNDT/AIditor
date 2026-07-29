@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  body { margin:0; background:#08090a; color:#e9eaec;
+         font-family:-apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; }
+  a { color:#ffc947; text-decoration:none; }
+  a:hover { color:#ffdd88; }
+</style>
+</helmet>
+
+<div style="width:1470px; height:900px; overflow:hidden; background:#0e0f11; display:flex; flex-direction:column; font-size:12px;">
+
+  <div style="height:46px; flex:none; box-sizing:border-box; background:#17181b; border-bottom:1px solid #24262b; display:flex; align-items:center; padding:0 14px; gap:12px;">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span style="width:11px; height:11px; border-radius:50%; background:#ff5f57;"></span>
+      <span style="width:11px; height:11px; border-radius:50%; background:#febc2e;"></span>
+      <span style="width:11px; height:11px; border-radius:50%; background:#28c840;"></span>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:1px; margin-left:10px; min-width:150px;">
+      <span style="font-size:13px; font-weight:600; letter-spacing:-.01em;">Svatba Anna a Petr</span>
+      <span style="font-size:9px; color:#6b7280;">uloženo 21:04 · 30 fps · přepis běží lokálně</span>
+    </div>
+    <div style="width:1px; height:26px; background:#24262b;"></div>
+    <div style="display:flex; gap:6px;">
+      <button style="height:28px; padding:0 12px; border-radius:8px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:12px;">Přidat média…</button>
+      <button style="height:28px; padding:0 12px; border-radius:8px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:12px;">Titulek</button>
+      <button style="height:28px; padding:0 12px; border-radius:8px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:12px;">Hudba</button>
+    </div>
+    <span style="flex:1;"></span>
+    <sc-if value="{{ isRunning }}" hint-placeholder-val="{{ false }}">
+      <div style="height:28px; display:flex; align-items:center; gap:8px; padding:0 10px; border-radius:8px; background:rgba(255,159,10,.11); border:1px solid rgba(255,159,10,.32);">
+        <span style="width:7px; height:7px; border-radius:50%; background:#ff9f0a;"></span>
+        <span style="font-size:11px; color:#ffbe5c;">Přepisuju řeč · 64 %</span>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isEditing }}" hint-placeholder-val="{{ true }}">
+      <div style="height:28px; display:flex; align-items:center; gap:8px; padding:0 10px; border-radius:8px; background:rgba(62,207,142,.1); border:1px solid rgba(62,207,142,.3);">
+        <span style="width:7px; height:7px; border-radius:50%; background:#3ecf8e;"></span>
+        <span style="font-size:11px; color:#8ce0bb;">Přepis hotový · 148 úseků</span>
+      </div>
+    </sc-if>
+    <button style="height:28px; padding:0 12px; border-radius:8px; border:1px solid #3a3f47; background:#23262b; color:#e9eaec; font-size:12px; display:flex; align-items:center; gap:7px;">Přepis <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#6b7280;">⌘5</span></button>
+    <button style="height:28px; padding:0 14px; border-radius:8px; border:1px solid #ffc947; background:#ffc947; color:#191a1c; font-size:12px; font-weight:600;">Exportovat…</button>
+  </div>
+
+  <div style="flex:1; display:flex; min-height:0;">
+
+    <!-- rail: aktivní Řeč -->
+    <div style="width:60px; flex:none; box-sizing:border-box; background:#131417; border-right:1px solid #24262b; display:flex; flex-direction:column; align-items:center; gap:6px; padding-top:10px;">
+      <div style="width:44px; height:44px; border-radius:11px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
+        <span style="width:16px; height:11px; border-radius:2px; border:1.5px solid #6b7280;"></span>
+        <span style="font-size:8px; color:#6b7280;">Média</span>
+      </div>
+      <div style="width:44px; height:44px; border-radius:11px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
+        <span style="width:16px; height:11px; border-radius:2px; border:1.5px solid #6b7280;"></span>
+        <span style="font-size:8px; color:#6b7280;">Text</span>
+      </div>
+      <div style="width:44px; height:44px; border-radius:11px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
+        <span style="width:12px; height:12px; border-radius:50%; border:1.5px solid #6b7280;"></span>
+        <span style="font-size:8px; color:#6b7280;">Barva</span>
+      </div>
+      <div style="width:44px; height:44px; border-radius:11px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
+        <span style="width:14px; height:10px; background:repeating-linear-gradient(90deg,#6b7280 0 1.5px, transparent 1.5px 4px);"></span>
+        <span style="font-size:8px; color:#6b7280;">Zvuk</span>
+      </div>
+      <div style="width:44px; height:44px; border-radius:11px; background:#2c3037; border:1px solid #3a3f47; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
+        <span style="width:13px; height:11px; border-radius:2px; border:1.5px solid #e9eaec; border-style:solid dashed;"></span>
+        <span style="font-size:8px; color:#c9ccd1;">Řeč</span>
+      </div>
+      <span style="flex:1;"></span>
+      <div style="width:44px; height:44px; border-radius:11px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; margin-bottom:10px;">
+        <span style="width:13px; height:13px; border-radius:50%; border:1.5px solid #6b7280;"></span>
+        <span style="font-size:8px; color:#6b7280;">Nast.</span>
+      </div>
+    </div>
+
+    <div style="flex:1; display:flex; flex-direction:column; min-width:0;">
+
+      <!-- horní pás -->
+      <div style="height:372px; flex:none; display:flex; min-width:0;">
+        <div style="flex:1; background:#08090a; position:relative; display:flex; align-items:center; justify-content:center; min-width:0; min-height:0; overflow:hidden; padding:16px;">
+          <div style="height:100%; max-height:100%; width:auto; max-width:100%; aspect-ratio:16/9; background:linear-gradient(160deg,#2b2f36,#12141a); position:relative; display:flex; align-items:center; justify-content:center; color:#4b5158; font-size:11px;">
+            náhled 3840×2160
+            <div style="position:absolute; left:50%; transform:translateX(-50%); bottom:14px; background:rgba(0,0,0,.55); border-radius:5px; padding:5px 12px; font-size:15px; font-weight:600; color:#fff; text-align:center; max-width:80%;">a tímhle prstenem si tě beru</div>
+            <div style="position:absolute; left:8px; top:8px; padding:2px 6px; border-radius:5px; background:rgba(0,0,0,.55); font-size:9px; color:#8ce0bb;">titulek z řeči · A1</div>
+          </div>
+        </div>
+
+        <div style="width:330px; flex:none; box-sizing:border-box; background:#131417; border-left:1px solid #24262b; display:flex; flex-direction:column; min-height:0;">
+          <div style="height:34px; flex:none; box-sizing:border-box; display:flex; align-items:center; padding:0 12px; gap:8px; border-bottom:1px solid #24262b;">
+            <span style="font-size:11px; font-weight:600;">Zdroje řeči</span>
+            <span style="flex:1;"></span>
+            <span style="font-size:10px; color:#6b7280;">přepis patří souboru</span>
+          </div>
+          <div style="flex:1; padding:10px; display:flex; flex-direction:column; gap:6px; min-height:0; overflow-y:auto;">
+            <div style="flex:none; display:flex; gap:9px; padding:8px; border-radius:9px; background:#23262b; border:1px solid #33373e;">
+              <div style="width:56px; height:32px; border-radius:5px; background:#1e2c26; flex:none; display:flex; align-items:center; justify-content:center;"><span style="width:40px; height:12px; background:repeating-linear-gradient(90deg, rgba(120,220,170,.55) 0 1px, transparent 1px 3px);"></span></div>
+              <div style="min-width:0; display:flex; flex-direction:column; gap:2px;">
+                <span style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">20260725_202947 · A1</span>
+                <span style="font-size:9px; color:#8ce0bb;">148 úseků · 12,3 min řeči</span>
+              </div>
+            </div>
+            <div style="flex:none; display:flex; gap:9px; padding:8px; border-radius:9px;">
+              <div style="width:56px; height:32px; border-radius:5px; background:#1e2c26; flex:none; display:flex; align-items:center; justify-content:center;"><span style="width:40px; height:12px; background:repeating-linear-gradient(90deg, rgba(120,220,170,.4) 0 1px, transparent 1px 4px);"></span></div>
+              <div style="min-width:0; display:flex; flex-direction:column; gap:2px;">
+                <span style="font-size:11px; font-weight:600;">klopák_Petr.wav</span>
+                <span style="font-size:9px; color:#6b7280;">bez přepisu · ⌘5 spustí</span>
+              </div>
+            </div>
+            <div style="flex:none; display:flex; gap:9px; padding:8px; border-radius:9px;">
+              <div style="width:56px; height:32px; border-radius:5px; background:#1e2c26; flex:none; display:flex; align-items:center; justify-content:center;"><span style="width:40px; height:12px; background:repeating-linear-gradient(90deg, rgba(120,220,170,.4) 0 1px, transparent 1px 5px);"></span></div>
+              <div style="min-width:0; display:flex; flex-direction:column; gap:2px;">
+                <span style="font-size:11px; font-weight:600;">20260725_203901</span>
+                <span style="font-size:9px; color:#6b7280;">bez přepisu</span>
+              </div>
+            </div>
+          </div>
+          <div style="flex:none; padding:9px 12px; border-top:1px solid #24262b; display:flex; flex-direction:column; gap:5px;">
+            <div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#6b7280;">
+              <span style="width:7px; height:7px; border-radius:50%; background:#3ecf8e;"></span>Model large-v3 · 1,62 GB
+              <span style="flex:1;"></span>
+              <span style="color:#9aa0a8;">Spravovat…</span>
+            </div>
+            <span style="font-size:10px; color:#6b7280;">Přepis běží ve stroji — nic se nikam neposílá.</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:32px; flex:none; box-sizing:border-box; background:#17181b; border-top:1px solid #24262b; border-bottom:1px solid #24262b; display:flex; align-items:center; padding:0 12px; gap:7px;">
+        <span style="font-size:10px; color:#6b7280;">Na ose:</span>
+        <span style="padding:4px 9px; border-radius:6px; background:#2c3037; border:1px solid #3a3f47; font-size:10px; font-weight:600;">Pásky řeči</span>
+        <span style="padding:4px 9px; border-radius:6px; background:#2c3037; border:1px solid #3a3f47; font-size:10px; font-weight:600;">Vlny</span>
+        <span style="padding:4px 9px; border-radius:6px; background:#1b1d21; border:1px solid #24262b; font-size:10px; color:#9aa0a8;">Miniatury</span>
+        <span style="padding:4px 9px; border-radius:6px; background:#1b1d21; border:1px solid #24262b; font-size:10px; color:#9aa0a8;">Doby</span>
+        <span style="flex:1;"></span>
+        <span style="font-size:10px; color:#6b7280;">klik do pásku vybere úsek · ⏎ potvrdí text</span>
+      </div>
+
+      <!-- osa + panel přepisu -->
+      <div style="flex:1; display:flex; min-height:0; background:#0f1013;">
+        <div style="flex:1; display:flex; flex-direction:column; min-width:0; min-height:0;">
+          <div style="height:26px; flex:none; box-sizing:border-box; display:flex;">
+            <div style="width:104px; flex:none; background:#17181b; border-right:1px solid #24262b;"></div>
+            <div style="flex:1; background:#17181b; border-bottom:1px solid #24262b; position:relative; overflow:hidden;">
+              <span style="position:absolute; left:0; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:60px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <span style="position:absolute; left:120px; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:180px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <span style="position:absolute; left:240px; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:300px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <span style="position:absolute; left:360px; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:420px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <span style="position:absolute; left:480px; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:540px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <span style="position:absolute; left:600px; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:660px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <span style="position:absolute; left:720px; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <div style="position:absolute; left:3px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:00:00</div>
+              <div style="position:absolute; left:123px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:04:00</div>
+              <div style="position:absolute; left:243px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:08:00</div>
+              <div style="position:absolute; left:363px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:12:00</div>
+              <div style="position:absolute; left:483px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:16:00</div>
+              <div style="position:absolute; left:603px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:20:00</div>
+              <div style="position:absolute; left:723px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:24:00</div>
+            </div>
+          </div>
+
+          <div style="flex:1; display:flex; min-height:0;">
+            <div style="width:104px; flex:none; box-sizing:border-box; background:#131417; border-right:1px solid #24262b; display:flex; flex-direction:column; gap:3px; padding-top:3px;">
+              <div style="height:136px; flex:none; box-sizing:border-box; overflow:hidden; background:#1b1d21; border-radius:0 7px 7px 0; padding:7px 8px; display:flex; flex-direction:column; justify-content:space-between;">
+                <span style="font-size:11px; font-weight:600;">V1</span>
+                <span style="font-size:9px; color:#6b7280;">obraz</span>
+              </div>
+              <div style="height:78px; flex:none; box-sizing:border-box; overflow:hidden; background:#23262b; border:1px solid #33373e; border-left:none; border-radius:0 7px 7px 0; padding:7px 8px; display:flex; flex-direction:column; justify-content:space-between;">
+                <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:11px; font-weight:600;">A1</span><span style="font-size:9px; color:#8ce0bb;">řeč · přepsáno</span></div>
+                <div style="display:flex; align-items:center; gap:5px;">
+                  <span style="width:19px; height:15px; border-radius:4px; background:#23262b; border:1px solid #33373e; font-size:8px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;">M</span>
+                  <span style="flex:1; height:3px; border-radius:2px; background:#2f3238; position:relative;"><span style="position:absolute; left:0; top:0; bottom:0; width:80%; background:#3ecf8e; border-radius:2px;"></span></span>
+                </div>
+              </div>
+              <div style="height:78px; flex:none; box-sizing:border-box; overflow:hidden; background:#1b1d21; border-radius:0 7px 7px 0; padding:7px 8px; display:flex; flex-direction:column; justify-content:space-between;">
+                <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:11px; font-weight:600;">A2</span><span style="font-size:9px; color:#6b7280;">hudba</span></div>
+                <div style="display:flex; align-items:center; gap:5px;">
+                  <span style="width:19px; height:15px; border-radius:4px; background:#23262b; border:1px solid #33373e; font-size:8px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; color:#6b7280;">M</span>
+                  <span style="flex:1; height:3px; border-radius:2px; background:#2f3238; position:relative;"><span style="position:absolute; left:0; top:0; bottom:0; width:45%; background:#3ecf8e; border-radius:2px;"></span></span>
+                </div>
+              </div>
+              <div style="height:40px; flex:none; box-sizing:border-box; overflow:hidden; background:#1b1d21; border-radius:0 7px 7px 0; padding:0 8px; display:flex; align-items:center; gap:6px;">
+                <span style="font-size:11px; font-weight:600;">T1</span><span style="font-size:9px; color:#6b7280;">titulky</span>
+              </div>
+            </div>
+
+            <div style="flex:1; position:relative; background:#0f1013; overflow:hidden;">
+              <div style="position:absolute; left:4px; top:3px; width:324px; height:136px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#3a578c; overflow:hidden;">
+                <div style="position:absolute; left:0; right:0; bottom:0; height:96px; display:flex;">
+                  <span style="flex:1; background:linear-gradient(150deg,#42505f,#1b2027);"></span>
+                  <span style="flex:1; background:linear-gradient(150deg,#3a4a5a,#191d24);"></span>
+                  <span style="flex:1; background:linear-gradient(150deg,#465060,#1c2129);"></span>
+                </div>
+                <div style="position:absolute; left:5px; top:5px; right:5px; font-size:11px; font-weight:500; color:#f0f0f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">20260725_202947.mp4 · obřad</div>
+              </div>
+              <div style="position:absolute; left:330px; top:3px; width:250px; height:136px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#3a578c; overflow:hidden;">
+                <div style="position:absolute; left:0; right:0; bottom:0; height:96px; background:linear-gradient(150deg,#3b4a55,#181c22);"></div>
+                <div style="position:absolute; left:5px; top:5px; font-size:11px; font-weight:500; color:#f0f0f0;">20260725_203813.mp4</div>
+              </div>
+
+              <!-- A1: vlna + zvýrazněný úsek řeči pod hlavou -->
+              <div style="position:absolute; left:4px; top:142px; width:576px; height:78px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#29684d; overflow:hidden;">
+                <div style="position:absolute; left:0; right:0; top:22px; height:38px; background:repeating-linear-gradient(90deg, rgba(255,255,255,.36) 0 1px, transparent 1px 3px);"></div>
+                <div style="position:absolute; left:5px; top:3px; font-size:11px; font-weight:500; color:#f0f0f0;">20260725_202947.mp4</div>
+                <div style="position:absolute; left:196px; top:0; bottom:0; width:96px; background:rgba(255,201,71,.14); border-left:1px solid rgba(255,201,71,.7); border-right:1px solid rgba(255,201,71,.7);"></div>
+              </div>
+
+              <div style="position:absolute; left:4px; top:223px; width:700px; height:78px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#29684d; overflow:hidden;">
+                <div style="position:absolute; left:0; right:0; top:20px; height:40px; background:repeating-linear-gradient(90deg, rgba(255,255,255,.26) 0 1px, transparent 1px 3px);"></div>
+                <div style="position:absolute; left:5px; top:3px; font-size:11px; font-weight:500; color:#f0f0f0;">Podklad_hudba.m4a</div>
+              </div>
+
+              <!-- T1: grafický titulek + pásky řeči, vybraný žlutě -->
+              <div style="position:absolute; left:20px; top:304px; width:130px; height:40px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#8c5233; display:flex; align-items:center; padding:0 8px;">
+                <span style="font-size:10px; font-weight:500; color:#f5ece6;">Anna a Petr</span>
+              </div>
+              <div style="position:absolute; left:170px; top:336px; width:22px; height:5px; border-radius:2px; background:rgba(41,105,77,.7);"></div>
+              <div style="position:absolute; left:196px; top:336px; width:96px; height:5px; border-radius:2px; background:#ffc947;"></div>
+              <div style="position:absolute; left:296px; top:336px; width:40px; height:5px; border-radius:2px; background:rgba(41,105,77,.7);"></div>
+              <div style="position:absolute; left:340px; top:336px; width:64px; height:5px; border-radius:2px; background:rgba(41,105,77,.7);"></div>
+              <div style="position:absolute; left:408px; top:336px; width:28px; height:5px; border-radius:2px; background:rgba(41,105,77,.7);"></div>
+              <div style="position:absolute; left:440px; top:336px; width:78px; height:5px; border-radius:2px; background:rgba(41,105,77,.7);"></div>
+
+              <div style="position:absolute; left:212px; top:0; bottom:0; width:2px; background:#ff453b;"></div>
+              <div style="position:absolute; left:206px; top:0; width:14px; height:8px; border-radius:2px; background:#ff453b;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── PANEL PŘEPISU ─────────────────────────────────── -->
+        <div style="width:452px; flex:none; box-sizing:border-box; background:#16181c; border-left:1px solid #24262b; display:flex; flex-direction:column; overflow:hidden;">
+
+          <div style="height:34px; flex:none; box-sizing:border-box; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid #24262b;">
+            <span style="font-size:11px; font-weight:600;">Přepis řeči · A1</span>
+            <span style="font-size:10px; color:#6b7280;">čeština · large-v3</span>
+            <span style="flex:1;"></span>
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#6b7280;">⌘5 skryje</span>
+          </div>
+
+          <!-- STAV: PŘEPIS BĚŽÍ -->
+          <sc-if value="{{ isRunning }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1; padding:12px; display:flex; flex-direction:column; gap:12px; min-height:0; overflow-y:auto;">
+            <div style="flex:none; display:flex; flex-direction:column; gap:8px;">
+              <div style="display:flex; align-items:baseline; gap:10px;">
+                <span style="font-size:20px; font-weight:600;">64 %</span>
+                <span style="font-size:11px; color:#9aa0a8;">2:41 ze 4:12 · zbývá asi 40 s</span>
+              </div>
+              <div style="height:6px; border-radius:3px; background:#24262b; position:relative; overflow:hidden;">
+                <span style="position:absolute; left:0; top:0; bottom:0; width:64%; border-radius:3px; background:#ffc947;"></span>
+              </div>
+            </div>
+
+            <div style="flex:none; display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; align-items:center; gap:9px; font-size:11px;">
+                <span style="width:15px; height:15px; border-radius:50%; background:rgba(62,207,142,.16); color:#3ecf8e; font-size:9px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;">✓</span>
+                <span style="color:#c9ccd1;">Model načten</span>
+                <span style="flex:1;"></span>
+                <span style="font-size:10px; color:#6b7280;">1,62 GB · z disku</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:9px; font-size:11px;">
+                <span style="width:15px; height:15px; border-radius:50%; background:rgba(255,201,71,.18); border:1px solid rgba(255,201,71,.5);"></span>
+                <span style="font-weight:600;">Rozpoznávám řeč</span>
+                <span style="flex:1;"></span>
+                <span style="font-size:10px; color:#6b7280;">94 úseků hotovo</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:9px; font-size:11px; opacity:.55;">
+                <span style="width:15px; height:15px; border-radius:50%; border:1px solid #3a3f47;"></span>
+                <span style="color:#9aa0a8;">Promítnutí na T1</span>
+              </div>
+            </div>
+
+            <!-- úseky přitékají průběžně, ať je vidět kvalita -->
+            <div style="flex:1; min-height:0; display:flex; flex-direction:column; gap:5px; overflow-y:auto;">
+              <div style="flex:none; display:flex; gap:9px; padding:7px 9px; border-radius:8px; background:#1b1d21;">
+                <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#6b7280; flex:none;">2:31</span>
+                <span style="font-size:11px; line-height:1.4; color:#c9ccd1;">a slibuji ti, že tě budu ctít</span>
+              </div>
+              <div style="flex:none; display:flex; gap:9px; padding:7px 9px; border-radius:8px; background:#1b1d21;">
+                <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#6b7280; flex:none;">2:36</span>
+                <span style="font-size:11px; line-height:1.4; color:#c9ccd1;">v dobrém i ve zlém</span>
+              </div>
+              <div style="flex:none; display:flex; gap:9px; padding:7px 9px; border-radius:8px; background:#1b1d21; opacity:.6;">
+                <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#6b7280; flex:none;">2:41</span>
+                <span style="font-size:11px; line-height:1.4; color:#9aa0a8;">a tímhle prstenem…</span>
+              </div>
+            </div>
+
+            <div style="flex:none; font-size:10px; line-height:1.45; color:#6b7280; text-wrap:pretty;">Běží ve stroji, nic neodchází do sítě. Stříhat můžeš dál — úseky se doplňují na T1 průběžně.</div>
+          </div>
+          <div style="flex:none; box-sizing:border-box; padding:10px 12px; border-top:1px solid #24262b; display:flex; gap:8px;">
+            <button style="flex:1; height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; color:#c9ccd1; font-size:11px;">Zrušit přepis</button>
+            <button style="flex:1; height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; color:#c9ccd1; font-size:11px;">Skrýt na pozadí</button>
+          </div>
+          </sc-if>
+
+          <!-- STAV: EDITACE HOTOVÉHO PŘEPISU -->
+          <sc-if value="{{ isEditing }}" hint-placeholder-val="{{ true }}">
+          <div style="flex:none; box-sizing:border-box; padding:9px 12px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #24262b;">
+            <span style="flex:1; height:24px; border-radius:6px; background:#1b1d21; border:1px solid #24262b; display:flex; align-items:center; padding:0 8px; font-size:11px; color:#6b7280;">Hledat v přepisu</span>
+            <span style="padding:4px 8px; border-radius:6px; background:#2c3037; border:1px solid #3a3f47; font-size:10px; font-weight:600;">jen pod hlavou</span>
+          </div>
+
+          <div style="flex:1; padding:8px 12px; display:flex; flex-direction:column; gap:4px; min-height:0; overflow-y:auto;">
+            <div style="flex:none; display:flex; gap:9px; padding:7px 9px; border-radius:8px;">
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#6b7280; flex:none; width:30px;">0:06</span>
+              <span style="font-size:11px; line-height:1.4; color:#c9ccd1;">sešli jsme se tu dnes</span>
+            </div>
+            <div style="flex:none; display:flex; gap:9px; padding:7px 9px; border-radius:8px;">
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#6b7280; flex:none; width:30px;">0:09</span>
+              <span style="font-size:11px; line-height:1.4; color:#c9ccd1;">abychom byli svědky</span>
+            </div>
+
+            <!-- vybraný úsek: editace na místě -->
+            <div style="flex:none; display:flex; flex-direction:column; gap:7px; padding:9px; border-radius:9px; background:#1e2024; border:1px solid #ffc947;">
+              <div style="display:flex; align-items:center; gap:9px;">
+                <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#ffc947;">0:11 → 0:14</span>
+                <span style="flex:1;"></span>
+                <span style="font-size:9px; color:#6b7280;">⏎ potvrdí · prázdné smaže</span>
+              </div>
+              <div style="min-height:44px; border-radius:6px; background:#131417; border:1px solid #3a3f47; padding:7px 8px; font-size:12px; line-height:1.45; color:#e9eaec;">a tímhle prstenem si tě beru<span style="display:inline-block; width:1px; height:14px; background:#ffc947; vertical-align:-2px; margin-left:1px;"></span></div>
+              <div style="display:flex; gap:6px;">
+                <button style="height:24px; padding:0 9px; border-radius:6px; border:1px solid #2f3238; background:#23262b; color:#c9ccd1; font-size:10px;">Rozdělit v kurzoru</button>
+                <button style="height:24px; padding:0 9px; border-radius:6px; border:1px solid #2f3238; background:#23262b; color:#c9ccd1; font-size:10px;">Smazat úsek</button>
+                <span style="flex:1;"></span>
+                <span style="font-size:9px; color:#6b7280;">platí pro všechny klipy ze zdroje</span>
+              </div>
+            </div>
+
+            <div style="flex:none; display:flex; gap:9px; padding:7px 9px; border-radius:8px;">
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#6b7280; flex:none; width:30px;">0:15</span>
+              <span style="font-size:11px; line-height:1.4; color:#c9ccd1;">za svou ženu</span>
+            </div>
+            <div style="flex:none; display:flex; gap:9px; padding:7px 9px; border-radius:8px;">
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#6b7280; flex:none; width:30px;">0:19</span>
+              <span style="font-size:11px; line-height:1.4; color:#c9ccd1;">a budu ti oporou</span>
+            </div>
+            <div style="flex:none; display:flex; gap:9px; padding:7px 9px; border-radius:8px;">
+              <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#6b7280; flex:none; width:30px;">0:23</span>
+              <span style="font-size:11px; line-height:1.4; color:#9aa0a8;">(nesrozumitelné)</span>
+            </div>
+          </div>
+
+          <div style="flex:none; box-sizing:border-box; padding:10px 12px; border-top:1px solid #24262b; display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa0a8;">
+              <span style="padding:3px 7px; border-radius:5px; background:rgba(62,207,142,.14); color:#3ecf8e; font-weight:600;">148 úseků</span>
+              <span>12,3 min řeči · 3 ručně upravené</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button style="flex:1; height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:11px;">Přepsat znovu od hlavy</button>
+              <button style="flex:1; height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:11px;">Uložit .srt…</button>
+            </div>
+          </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="height:26px; flex:none; box-sizing:border-box; background:#17181b; border-top:1px solid #24262b; display:flex; align-items:center; padding:0 12px; gap:14px; font-size:10px; color:#9aa0a8;">
+        <span style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:#3ecf8e;"></span>Model přepisu 1,62 GB · lokálně</span>
+        <span style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:#3ecf8e;"></span>Proxy 5/5</span>
+        <span style="flex:1;"></span>
+        <span>Text úseku upraven · ⌘Z vrátí</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1470,&quot;height&quot;:900},&quot;stav&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;prubeh&quot;,&quot;editace&quot;],&quot;default&quot;:&quot;editace&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const stav = this.props.stav ?? "editace";
+    return { isRunning: stav === "prubeh", isEditing: stav === "editace" };
+  }
+}
+
+</script>
+</body>
+</html>

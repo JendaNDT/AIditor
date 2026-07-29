@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  body { margin:0; background:#08090a; color:#e9eaec;
+         font-family:-apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; }
+  a { color:#ffc947; text-decoration:none; }
+  a:hover { color:#ffdd88; }
+</style>
+</helmet>
+
+<div style="width:1470px; height:900px; overflow:hidden; background:#0e0f11; display:flex; flex-direction:column; font-size:12px;">
+
+  <!-- ── TOOLBAR ─────────────────────────────────────────────── -->
+  <div style="height:46px; flex:none; box-sizing:border-box; background:#17181b; border-bottom:1px solid #24262b; display:flex; align-items:center; padding:0 14px; gap:12px;">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span style="width:11px; height:11px; border-radius:50%; background:#ff5f57;"></span>
+      <span style="width:11px; height:11px; border-radius:50%; background:#febc2e;"></span>
+      <span style="width:11px; height:11px; border-radius:50%; background:#28c840;"></span>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:1px; margin-left:10px; min-width:150px;">
+      <span style="font-size:13px; font-weight:600; letter-spacing:-.01em;">Svatba Anna a Petr</span>
+      <span style="font-size:9px; color:#6b7280;">uloženo 21:04 · 30 fps · 3840×2160 · proxy</span>
+    </div>
+    <div style="width:1px; height:26px; background:#24262b;"></div>
+    <div style="display:flex; gap:6px;">
+      <button style="height:28px; padding:0 12px; border-radius:8px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:12px;">Přidat média…</button>
+      <button style="height:28px; padding:0 12px; border-radius:8px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:12px;">Titulek</button>
+      <button style="height:28px; padding:0 12px; border-radius:8px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:12px;">Hudba</button>
+      <button style="height:28px; padding:0 12px; border-radius:8px; border:1px solid #2f3238; background:#1e2024; color:#c9ccd1; font-size:12px;">Zmrazit snímek</button>
+    </div>
+    <span style="flex:1;"></span>
+    <div style="height:28px; display:flex; align-items:center; gap:8px; padding:0 10px; border-radius:8px; background:rgba(255,159,10,.11); border:1px solid rgba(255,159,10,.32);">
+      <span style="width:7px; height:7px; border-radius:50%; background:#ff9f0a;"></span>
+      <span style="font-size:11px; color:#ffbe5c;">Analyzuju kvalitu · 3/5</span>
+    </div>
+    <button style="height:28px; padding:0 12px; border-radius:8px; border:1px solid #3a3f47; background:#23262b; color:#e9eaec; font-size:12px; display:flex; align-items:center; gap:7px;">Rampa <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#6b7280;">⌘4</span></button>
+    <button style="height:28px; padding:0 14px; border-radius:8px; border:1px solid #ffc947; background:#ffc947; color:#191a1c; font-size:12px; font-weight:600;">Exportovat…</button>
+  </div>
+
+  <div style="flex:1; display:flex; min-height:0;">
+
+    <!-- ── RAIL ──────────────────────────────────────────────── -->
+    <div style="width:60px; flex:none; box-sizing:border-box; background:#131417; border-right:1px solid #24262b; display:flex; flex-direction:column; align-items:center; gap:6px; padding-top:10px;">
+      <div style="width:44px; height:44px; border-radius:11px; background:#2c3037; border:1px solid #3a3f47; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
+        <span style="width:16px; height:11px; border-radius:2px; background:#e9eaec;"></span>
+        <span style="font-size:8px; color:#c9ccd1;">Média</span>
+      </div>
+      <div style="width:44px; height:44px; border-radius:11px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
+        <span style="width:16px; height:11px; border-radius:2px; border:1.5px solid #6b7280;"></span>
+        <span style="font-size:8px; color:#6b7280;">Text</span>
+      </div>
+      <div style="width:44px; height:44px; border-radius:11px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
+        <span style="width:12px; height:12px; border-radius:50%; border:1.5px solid #6b7280;"></span>
+        <span style="font-size:8px; color:#6b7280;">Barva</span>
+      </div>
+      <div style="width:44px; height:44px; border-radius:11px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
+        <span style="width:14px; height:10px; background:repeating-linear-gradient(90deg,#6b7280 0 1.5px, transparent 1.5px 4px);"></span>
+        <span style="font-size:8px; color:#6b7280;">Zvuk</span>
+      </div>
+      <div style="width:44px; height:44px; border-radius:11px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;">
+        <span style="width:13px; height:11px; border-radius:2px; border:1.5px solid #6b7280; border-style:solid dashed;"></span>
+        <span style="font-size:8px; color:#6b7280;">Řeč</span>
+      </div>
+      <span style="flex:1;"></span>
+      <div style="width:44px; height:44px; border-radius:11px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; margin-bottom:10px;">
+        <span style="width:13px; height:13px; border-radius:50%; border:1.5px solid #6b7280;"></span>
+        <span style="font-size:8px; color:#6b7280;">Nast.</span>
+      </div>
+    </div>
+
+    <div style="flex:1; display:flex; flex-direction:column; min-width:0;">
+
+      <!-- ── HORNÍ PÁS: PŘEHRÁVAČ + KNIHOVNA ────────────────── -->
+      <div style="height:372px; flex:none; display:flex; min-width:0;">
+
+        <div style="flex:1; background:#08090a; position:relative; display:flex; align-items:center; justify-content:center; min-width:0; min-height:0; overflow:hidden; padding:16px;">
+          <div style="height:100%; max-height:100%; width:auto; max-width:100%; aspect-ratio:16/9; background:linear-gradient(160deg,#2b2f36,#12141a); position:relative; display:flex; align-items:center; justify-content:center; color:#4b5158; font-size:11px;">
+            náhled 3840×2160
+            <div style="position:absolute; left:0; right:0; top:31%; text-align:center; font-family:Georgia,'Times New Roman',serif; font-size:38px; font-weight:600; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.65);">Anna a Petr</div>
+            <div style="position:absolute; left:50%; transform:translateX(-50%); bottom:58px; background:rgba(0,0,0,.55); border-radius:5px; padding:4px 10px; font-size:13px; font-weight:600; color:#fff;">a tímhle prstenem si tě beru</div>
+            <div style="position:absolute; left:8px; top:8px; display:flex; gap:5px;">
+              <span style="padding:2px 6px; border-radius:5px; background:rgba(0,0,0,.55); font-size:9px; color:#c9ccd1;">Proxy 1/2</span>
+              <span style="padding:2px 6px; border-radius:5px; background:rgba(0,0,0,.55); font-size:9px; color:#8cb8ff;">rampa 0,25×</span>
+              <span style="padding:2px 6px; border-radius:5px; background:rgba(0,0,0,.55); font-size:9px; color:#ffd88a;">Teplý film 62 %</span>
+            </div>
+          </div>
+
+          <!-- měřidlo hlasitosti u pravé hrany náhledu -->
+          <div style="position:absolute; right:12px; top:22px; bottom:80px; width:34px; display:flex; flex-direction:column; align-items:center; gap:5px;">
+            <span style="font-size:8px; color:#6b7280;">LUFS</span>
+            <div style="flex:1; display:flex; gap:3px;">
+              <span style="width:6px; border-radius:3px; background:linear-gradient(to top,#3ecf8e 0 52%, #2a2d33 52%);"></span>
+              <span style="width:6px; border-radius:3px; background:linear-gradient(to top,#3ecf8e 0 46%, #2a2d33 46%);"></span>
+            </div>
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:8px; color:#9aa0a8;">−16,2</span>
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:8px; color:#ff9f0a;">−1,0 TP</span>
+          </div>
+
+          <!-- transport jako pilulka na obraze -->
+          <div style="position:absolute; left:50%; transform:translateX(-50%); bottom:14px; height:44px; display:flex; align-items:center; gap:11px; padding:0 14px; border-radius:22px; background:rgba(18,20,24,.92); border:1px solid #33373e; box-shadow:0 12px 28px rgba(0,0,0,.5);">
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px; letter-spacing:-.01em;">00:00:08:22</span>
+            <span style="width:1px; height:20px; background:#33373e;"></span>
+            <span style="width:24px; height:24px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:10px; color:#9aa0a8;">J</span>
+            <span style="width:24px; height:24px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:11px; color:#9aa0a8;">◀</span>
+            <span style="width:32px; height:32px; border-radius:50%; background:#e9eaec; color:#131417; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;">❚❚</span>
+            <span style="width:24px; height:24px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:11px; color:#9aa0a8;">▶</span>
+            <span style="width:24px; height:24px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:10px; color:#9aa0a8;">L</span>
+            <span style="width:1px; height:20px; background:#33373e;"></span>
+            <span style="padding:3px 8px; border-radius:6px; background:rgba(255,159,10,.14); color:#ff9f0a; font-size:10px; font-weight:600;">−2× krokováním</span>
+          </div>
+        </div>
+
+        <!-- ── KNIHOVNA ─────────────────────────────────────── -->
+        <div style="width:330px; flex:none; box-sizing:border-box; background:#131417; border-left:1px solid #24262b; display:flex; flex-direction:column; min-height:0;">
+          <div style="height:34px; flex:none; box-sizing:border-box; display:flex; align-items:center; padding:0 12px; gap:8px; border-bottom:1px solid #24262b;">
+            <span style="font-size:11px; font-weight:600;">Knihovna</span>
+            <span style="font-size:10px; color:#6b7280;">14 · chronologicky</span>
+            <span style="flex:1;"></span>
+            <span style="font-size:13px; color:#9aa0a8;">＋</span>
+          </div>
+          <div style="flex:none; padding:8px 10px; display:flex; gap:5px;">
+            <span style="padding:3px 9px; border-radius:12px; background:#2c3037; border:1px solid #3a3f47; font-size:10px; font-weight:600;">Vše</span>
+            <span style="padding:3px 9px; border-radius:12px; background:#1b1d21; border:1px solid #24262b; font-size:10px; color:#9aa0a8;">Video</span>
+            <span style="padding:3px 9px; border-radius:12px; background:#1b1d21; border:1px solid #24262b; font-size:10px; color:#9aa0a8;">Fotky</span>
+            <span style="padding:3px 9px; border-radius:12px; background:#1b1d21; border:1px solid #24262b; font-size:10px; color:#9aa0a8;">Hudba</span>
+            <span style="flex:1;"></span>
+            <span style="font-size:10px; color:#6b7280;">⌥⌘K</span>
+          </div>
+          <div style="flex:1; min-height:0; padding:0 10px; display:grid; grid-template-columns:1fr 1fr; grid-auto-rows:94px; gap:8px; align-content:start; overflow-y:auto;">
+            <div style="border-radius:9px; overflow:hidden; border:1px solid #24262b; background:#1b1d21;">
+              <div style="height:62px; background:linear-gradient(150deg,#3a4250,#1a1d22); position:relative;">
+                <span style="position:absolute; right:4px; top:4px; padding:0 4px; border-radius:3px; background:rgba(0,0,0,.6); font-size:8px; color:#c9ccd1;">0:45</span>
+              </div>
+              <div style="padding:5px 7px; display:flex; flex-direction:column; gap:1px;"><span style="font-size:9px; font-weight:600;">202947</span><span style="font-size:8px; color:#6b7280;">60p · CFR · 20:29</span></div>
+            </div>
+            <div style="border-radius:9px; overflow:hidden; border:1px solid #24262b; background:#1b1d21;">
+              <div style="height:62px; background:linear-gradient(150deg,#463f38,#1a1d22); position:relative;">
+                <span style="position:absolute; left:4px; bottom:4px; padding:0 4px; border-radius:3px; background:rgba(255,159,10,.9); color:#1a1a1a; font-size:8px; font-weight:700;">VFR</span>
+                <span style="position:absolute; right:4px; top:4px; padding:0 4px; border-radius:3px; background:rgba(0,0,0,.6); font-size:8px; color:#c9ccd1;">0:11</span>
+              </div>
+              <div style="padding:5px 7px; display:flex; flex-direction:column; gap:1px;"><span style="font-size:9px; font-weight:600;">203452</span><span style="font-size:8px; color:#6b7280;">30,01 fps · 20:34</span></div>
+            </div>
+            <div style="border-radius:9px; overflow:hidden; border:1.5px solid #ffc947; background:#23262b;">
+              <div style="height:62px; background:linear-gradient(150deg,#33404a,#1a1d22); position:relative;">
+                <span style="position:absolute; left:4px; bottom:4px; padding:0 4px; border-radius:3px; background:rgba(120,180,255,.92); color:#10131a; font-size:8px; font-weight:700;">120p</span>
+                <span style="position:absolute; right:4px; top:4px; padding:0 4px; border-radius:3px; background:rgba(0,0,0,.6); font-size:8px; color:#c9ccd1;">0:22</span>
+              </div>
+              <div style="padding:5px 7px; display:flex; flex-direction:column; gap:1px;"><span style="font-size:9px; font-weight:600;">203813</span><span style="font-size:8px; color:#9aa0a8;">slow-mo · na ose</span></div>
+            </div>
+            <div style="border-radius:9px; overflow:hidden; border:1px solid #24262b; background:#1b1d21;">
+              <div style="height:62px; background:linear-gradient(150deg,#3d3a44,#1a1d22); position:relative;">
+                <span style="position:absolute; left:4px; bottom:4px; padding:0 4px; border-radius:3px; background:rgba(0,0,0,.6); font-size:8px; color:#c9ccd1;">fotka</span>
+              </div>
+              <div style="padding:5px 7px; display:flex; flex-direction:column; gap:1px;"><span style="font-size:9px; font-weight:600;">IMG_4821</span><span style="font-size:8px; color:#ff9f0a;">datum souboru</span></div>
+            </div>
+            <div style="border-radius:9px; overflow:hidden; border:1px solid #24262b; background:#1b1d21;">
+              <div style="height:62px; background:linear-gradient(150deg,#3a4250,#1a1d22); position:relative;">
+                <span style="position:absolute; left:4px; bottom:4px; width:26px; height:4px; border-radius:2px; background:rgba(255,159,10,.9);"></span>
+                <span style="position:absolute; right:4px; top:4px; padding:0 4px; border-radius:3px; background:rgba(0,0,0,.6); font-size:8px; color:#c9ccd1;">0:31</span>
+              </div>
+              <div style="padding:5px 7px; display:flex; flex-direction:column; gap:1px;"><span style="font-size:9px; font-weight:600;">203901</span><span style="font-size:8px; color:#6b7280;">měkký úsek 2×</span></div>
+            </div>
+            <div style="border-radius:9px; overflow:hidden; border:1px solid #24262b; background:#1b1d21;">
+              <div style="height:62px; background:#1e2c26; display:flex; align-items:center; justify-content:center;"><span style="width:62px; height:18px; background:repeating-linear-gradient(90deg, rgba(120,220,170,.55) 0 1px, transparent 1px 3px);"></span></div>
+              <div style="padding:5px 7px; display:flex; flex-direction:column; gap:1px;"><span style="font-size:9px; font-weight:600;">Podklad_hudba</span><span style="font-size:8px; color:#6b7280;">110,0 BPM · 93 %</span></div>
+            </div>
+          </div>
+          <div style="flex:none; padding:9px 12px; border-top:1px solid #24262b; display:flex; flex-direction:column; gap:6px;">
+            <button style="height:26px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; color:#c9ccd1; font-size:11px;">Uspořádat na V1 chronologicky</button>
+            <div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#6b7280;">
+              <span style="width:7px; height:7px; border-radius:50%; background:#3ecf8e;"></span>Proxy 5/5 · 4,7 GB
+              <span style="flex:1;"></span>
+              <span style="color:#9aa0a8;">Nastavení…</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── LIŠTA OSY ──────────────────────────────────────── -->
+      <div style="height:32px; flex:none; box-sizing:border-box; background:#17181b; border-top:1px solid #24262b; border-bottom:1px solid #24262b; display:flex; align-items:center; padding:0 12px; gap:7px;">
+        <span style="font-size:10px; color:#6b7280;">Na ose:</span>
+        <span style="padding:4px 9px; border-radius:6px; background:#2c3037; border:1px solid #3a3f47; font-size:10px; font-weight:600;">Miniatury</span>
+        <span style="padding:4px 9px; border-radius:6px; background:#2c3037; border:1px solid #3a3f47; font-size:10px; font-weight:600;">Vlny</span>
+        <span style="padding:4px 9px; border-radius:6px; background:#2c3037; border:1px solid #3a3f47; font-size:10px; font-weight:600;">Doby</span>
+        <span style="padding:4px 9px; border-radius:6px; background:#2c3037; border:1px solid #3a3f47; font-size:10px; font-weight:600;">Značky kvality</span>
+        <div style="width:1px; height:18px; background:#24262b; margin:0 3px;"></div>
+        <span style="font-size:10px; color:#6b7280;">Citlivost</span>
+        <span style="width:80px; height:3px; border-radius:2px; background:#2f3238; position:relative; display:inline-block;"><span style="position:absolute; left:0; top:0; bottom:0; width:65%; background:#ff9f0a; border-radius:2px;"></span><span style="position:absolute; left:65%; top:-4.5px; width:11px; height:11px; border-radius:50%; background:#e9eaec;"></span></span>
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">0,65</span>
+        <div style="width:1px; height:18px; background:#24262b; margin:0 3px;"></div>
+        <span style="padding:4px 9px; border-radius:6px; background:#2c3037; border:1px solid #3a3f47; font-size:10px; font-weight:600;">Přichytávání</span>
+        <span style="font-size:10px; color:#6b7280;">Shift vypne</span>
+        <span style="flex:1;"></span>
+        <span style="font-size:10px; color:#6b7280;">výřez 0:04–0:26</span>
+        <span style="padding:4px 8px; border-radius:6px; background:#1b1d21; border:1px solid #24262b; font-size:10px; color:#ffc947; font-weight:600;">I</span>
+        <span style="padding:4px 8px; border-radius:6px; background:#1b1d21; border:1px solid #24262b; font-size:10px; color:#ffc947; font-weight:600;">O</span>
+        <div style="width:1px; height:18px; background:#24262b; margin:0 3px;"></div>
+        <span style="font-size:10px; color:#6b7280;">zoom</span>
+        <span style="width:96px; height:3px; border-radius:2px; background:#2f3238; position:relative; display:inline-block;"><span style="position:absolute; left:0; top:0; bottom:0; width:42%; background:#9aa0a8; border-radius:2px;"></span><span style="position:absolute; left:42%; top:-4.5px; width:11px; height:11px; border-radius:50%; background:#e9eaec;"></span></span>
+        <span style="padding:4px 8px; border-radius:6px; background:#1b1d21; border:1px solid #24262b; font-size:10px; color:#9aa0a8;">Fit ⇧Z</span>
+      </div>
+
+      <!-- ── OSA + PŘIPNUTÝ EDITOR RAMPY ─────────────────────── -->
+      <div style="flex:1; display:flex; min-height:0; background:#0f1013;">
+
+        <div style="flex:1; display:flex; flex-direction:column; min-width:0; min-height:0;">
+
+          <!-- pravítko -->
+          <div style="height:26px; flex:none; box-sizing:border-box; display:flex;">
+            <div style="width:104px; flex:none; background:#17181b; border-right:1px solid #24262b;"></div>
+            <div style="flex:1; background:#17181b; border-bottom:1px solid #24262b; position:relative; overflow:hidden;">
+              <div style="position:absolute; left:96px; right:196px; top:0; bottom:0; background:rgba(255,201,71,.18);"></div>
+              <div style="position:absolute; left:96px; top:0; bottom:0; width:2px; background:#ffc947;"></div>
+              <div style="position:absolute; right:196px; top:0; bottom:0; width:2px; background:#ffc947;"></div>
+              <span style="position:absolute; left:0; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:60px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <span style="position:absolute; left:120px; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:180px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <span style="position:absolute; left:240px; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:300px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <span style="position:absolute; left:360px; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:420px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <span style="position:absolute; left:480px; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:540px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <span style="position:absolute; left:600px; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:660px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <span style="position:absolute; left:720px; bottom:1px; width:1px; height:8px; background:#7c828b;"></span>
+              <span style="position:absolute; left:780px; bottom:1px; width:1px; height:4px; background:rgba(124,130,139,.45);"></span>
+              <div style="position:absolute; left:3px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:00:00</div>
+              <div style="position:absolute; left:123px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:04:00</div>
+              <div style="position:absolute; left:243px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:08:00</div>
+              <div style="position:absolute; left:363px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:12:00</div>
+              <div style="position:absolute; left:483px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:16:00</div>
+              <div style="position:absolute; left:603px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:20:00</div>
+              <div style="position:absolute; left:723px; top:4px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">00:00:24:00</div>
+              <span style="position:absolute; left:0; right:0; bottom:0; height:4px; background:repeating-linear-gradient(90deg, rgba(255,159,10,.5) 0 1px, transparent 1px 16.4px);"></span>
+              <span style="position:absolute; left:0; bottom:0; width:2px; height:8px; background:#ff9f0a;"></span>
+              <span style="position:absolute; left:65.5px; bottom:0; width:2px; height:8px; background:#ff9f0a;"></span>
+              <span style="position:absolute; left:131px; bottom:0; width:2px; height:8px; background:#ff9f0a;"></span>
+              <span style="position:absolute; left:196.5px; bottom:0; width:2px; height:8px; background:#ff9f0a;"></span>
+              <span style="position:absolute; left:262px; bottom:0; width:2px; height:8px; background:#ff9f0a;"></span>
+              <span style="position:absolute; left:327.5px; bottom:0; width:2px; height:8px; background:#ff9f0a;"></span>
+              <span style="position:absolute; left:393px; bottom:0; width:2px; height:8px; background:#ff9f0a;"></span>
+              <span style="position:absolute; left:458.5px; bottom:0; width:2px; height:8px; background:#ff9f0a;"></span>
+              <span style="position:absolute; left:524px; bottom:0; width:2px; height:8px; background:#ff9f0a;"></span>
+              <span style="position:absolute; left:589.5px; bottom:0; width:2px; height:8px; background:#ff9f0a;"></span>
+              <span style="position:absolute; left:655px; bottom:0; width:2px; height:8px; background:#ff9f0a;"></span>
+              <span style="position:absolute; left:720.5px; bottom:0; width:2px; height:8px; background:#ff9f0a;"></span>
+            </div>
+          </div>
+
+          <!-- stopy -->
+          <div style="flex:1; display:flex; min-height:0;">
+            <div style="width:104px; flex:none; box-sizing:border-box; background:#131417; border-right:1px solid #24262b; display:flex; flex-direction:column; gap:3px; padding-top:3px;">
+              <div style="height:136px; flex:none; box-sizing:border-box; overflow:hidden; background:#1b1d21; border-radius:0 7px 7px 0; padding:7px 8px; display:flex; flex-direction:column; justify-content:space-between;">
+                <div style="display:flex; flex-direction:column; gap:2px;">
+                  <span style="font-size:11px; font-weight:600;">V1</span>
+                  <span style="font-size:9px; color:#6b7280;">obraz · 5 klipů</span>
+                </div>
+                <div style="display:flex; gap:4px;">
+                  <span style="width:19px; height:15px; border-radius:4px; background:#23262b; border:1px solid #33373e; font-size:8px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;">👁</span>
+                  <span style="width:19px; height:15px; border-radius:4px; background:#23262b; border:1px solid #33373e; font-size:8px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; color:#9aa0a8;">🔒</span>
+                </div>
+              </div>
+              <div style="height:78px; flex:none; box-sizing:border-box; overflow:hidden; background:#1b1d21; border-radius:0 7px 7px 0; padding:7px 8px; display:flex; flex-direction:column; justify-content:space-between;">
+                <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:11px; font-weight:600;">A1</span><span style="font-size:9px; color:#6b7280;">řeč</span></div>
+                <div style="display:flex; flex-direction:column; gap:5px;">
+                  <div style="display:flex; align-items:center; gap:5px;">
+                    <span style="width:19px; height:15px; border-radius:4px; background:#23262b; border:1px solid #33373e; font-size:8px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;">M</span>
+                    <span style="flex:1; height:3px; border-radius:2px; background:#2f3238; position:relative;"><span style="position:absolute; left:0; top:0; bottom:0; width:80%; background:#3ecf8e; border-radius:2px;"></span><span style="position:absolute; left:80%; top:-4px; width:10px; height:10px; border-radius:50%; background:#e9eaec;"></span></span>
+                  </div>
+                  <span style="font-size:8px; color:#6b7280;">−4,0 dB</span>
+                </div>
+              </div>
+              <div style="height:78px; flex:none; box-sizing:border-box; overflow:hidden; background:#1b1d21; border-radius:0 7px 7px 0; padding:7px 8px; display:flex; flex-direction:column; justify-content:space-between;">
+                <div style="display:flex; align-items:baseline; gap:6px;"><span style="font-size:11px; font-weight:600;">A2</span><span style="font-size:9px; color:#6b7280;">hudba</span></div>
+                <div style="display:flex; flex-direction:column; gap:5px;">
+                  <div style="display:flex; align-items:center; gap:5px;">
+                    <span style="width:19px; height:15px; border-radius:4px; background:#23262b; border:1px solid #33373e; font-size:8px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; color:#6b7280;">M</span>
+                    <span style="flex:1; height:3px; border-radius:2px; background:#2f3238; position:relative;"><span style="position:absolute; left:0; top:0; bottom:0; width:45%; background:#3ecf8e; border-radius:2px;"></span><span style="position:absolute; left:45%; top:-4px; width:10px; height:10px; border-radius:50%; background:#e9eaec;"></span></span>
+                  </div>
+                  <span style="font-size:8px; color:#6b7280;">−12,5 dB</span>
+                </div>
+              </div>
+              <div style="height:40px; flex:none; box-sizing:border-box; overflow:hidden; background:#1b1d21; border-radius:0 7px 7px 0; padding:0 8px; display:flex; align-items:center; gap:6px;">
+                <span style="font-size:11px; font-weight:600;">T1</span><span style="font-size:9px; color:#6b7280;">titulky</span>
+              </div>
+            </div>
+
+            <div style="flex:1; position:relative; background:#0f1013; overflow:hidden;">
+              <!-- V1 -->
+              <div style="position:absolute; left:4px; top:3px; width:150px; height:136px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#3a578c; overflow:hidden;">
+                <div style="position:absolute; left:0; right:0; bottom:0; height:96px; display:flex;">
+                  <span style="flex:1; background:linear-gradient(150deg,#42505f,#1b2027);"></span>
+                  <span style="flex:1; background:linear-gradient(150deg,#3a4a5a,#191d24);"></span>
+                </div>
+                <div style="position:absolute; left:5px; top:5px; right:5px; font-size:11px; font-weight:500; color:#f0f0f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">20260725_202947.mp4</div>
+                <div style="position:absolute; left:6px; top:1px; width:38px; height:4px; border-radius:1.5px; background:rgba(255,159,10,.9);"></div>
+                <div style="position:absolute; left:86px; bottom:1px; width:48px; height:4px; border-radius:1.5px; background:#8e8e93;"></div>
+              </div>
+
+              <div style="position:absolute; left:156px; top:3px; width:172px; height:136px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#3a578c; overflow:hidden;">
+                <div style="position:absolute; left:0; right:0; bottom:0; height:96px; display:flex;">
+                  <span style="flex:1; background:linear-gradient(150deg,#4b4438,#1f1c18);"></span>
+                  <span style="flex:1; background:linear-gradient(150deg,#544a3c,#221f19);"></span>
+                </div>
+                <div style="position:absolute; left:5px; top:5px; right:5px; font-size:11px; font-weight:500; color:#f0f0f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">20260725_203452.mp4</div>
+                <div style="position:absolute; left:28px; top:1px; width:20px; height:4px; border-radius:1.5px; background:#ff453b;"></div>
+                <div style="position:absolute; left:5px; bottom:4px; padding:0 5px; border-radius:4px; background:rgba(0,0,0,.5); font-size:9px; color:#ffd88a;">Teplý film 62 %</div>
+              </div>
+
+              <!-- přechod přes střih -->
+              <div style="position:absolute; left:288px; top:3px; width:80px; height:136px; z-index:2;">
+                <svg width="80" height="136" viewBox="0 0 80 136" style="display:block;"><path d="M0 0 L80 0 L44 136 L36 136 Z" fill="rgba(148,112,219,.6)" stroke="#c7a8ff" stroke-width="1"></path></svg>
+                <div style="position:absolute; left:50%; transform:translateX(-50%); bottom:3px; font-size:9px; color:#efe6ff;">1,0 s</div>
+              </div>
+
+              <!-- vybraný klip s rampou -->
+              <div style="position:absolute; left:330px; top:3px; width:250px; height:136px; border-radius:5px; border:1.5px solid #ffc947; background:#3a578c; overflow:hidden; box-shadow:0 0 0 1px rgba(255,201,71,.25);">
+                <div style="position:absolute; left:0; right:0; bottom:0; height:96px; display:flex;">
+                  <span style="flex:1; background:linear-gradient(150deg,#3b4a55,#181c22);"></span>
+                  <span style="flex:1; background:linear-gradient(150deg,#44525d,#1a1f25);"></span>
+                  <span style="flex:1; background:linear-gradient(150deg,#3d4b57,#181d23);"></span>
+                </div>
+                <div style="position:absolute; left:5px; top:5px; font-size:11px; font-weight:500; color:#f0f0f0;">20260725_203813.mp4</div>
+                <div style="position:absolute; right:5px; top:4px; padding:0 5px; border-radius:4px; background:rgba(0,0,0,.5); font-size:9px; color:#8cb8ff;">1× → 0,25× → 1×</div>
+                <svg width="250" height="40" viewBox="0 0 250 40" style="position:absolute; left:0; bottom:0;">
+                  <path d="M0 8 C60 8 60 32 118 32 L146 32 C204 32 204 10 250 10" fill="none" stroke="#8cb8ff" stroke-width="1.5"></path>
+                  <circle cx="118" cy="32" r="3" fill="#ebebeb"></circle>
+                  <circle cx="146" cy="32" r="3" fill="#ebebeb"></circle>
+                </svg>
+              </div>
+
+              <!-- fotka s Ken Burns -->
+              <div style="position:absolute; left:582px; top:3px; width:130px; height:136px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#3a578c; overflow:hidden;">
+                <div style="position:absolute; left:0; right:0; bottom:0; height:96px; background:linear-gradient(150deg,#4a4450,#1d1a22);"></div>
+                <div style="position:absolute; left:5px; top:5px; font-size:11px; font-weight:500; color:#f0f0f0;">IMG_4821.HEIC</div>
+                <div style="position:absolute; left:5px; bottom:4px; padding:0 5px; border-radius:4px; background:rgba(0,0,0,.5); font-size:9px; color:#c9ccd1;">nájezd 1,3×</div>
+              </div>
+
+              <!-- A1: řeč s fade klíny a úchyty -->
+              <div style="position:absolute; left:4px; top:142px; width:324px; height:78px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#29684d; overflow:hidden;">
+                <div style="position:absolute; left:0; right:0; top:22px; height:38px; background:repeating-linear-gradient(90deg, rgba(255,255,255,.36) 0 1px, transparent 1px 3px);"></div>
+                <div style="position:absolute; left:5px; top:3px; font-size:11px; font-weight:500; color:#f0f0f0;">20260725_202947.mp4</div>
+                <svg width="52" height="78" viewBox="0 0 52 78" style="position:absolute; left:0; top:0;"><path d="M0 78 L52 0 L0 0 Z" fill="rgba(0,0,0,.35)"></path></svg>
+                <div style="position:absolute; left:49px; top:1px; width:6px; height:6px; border-radius:3px; background:rgba(255,255,255,.9); border:1px solid rgba(0,0,0,.4);"></div>
+                <svg width="40" height="78" viewBox="0 0 40 78" style="position:absolute; right:0; top:0;"><path d="M40 78 L0 0 L40 0 Z" fill="rgba(0,0,0,.35)"></path></svg>
+                <div style="position:absolute; right:37px; top:1px; width:6px; height:6px; border-radius:3px; background:rgba(255,255,255,.9); border:1px solid rgba(0,0,0,.4);"></div>
+              </div>
+              <div style="position:absolute; left:330px; top:142px; width:382px; height:78px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#29684d; overflow:hidden;">
+                <div style="position:absolute; left:0; right:0; top:22px; height:38px; background:repeating-linear-gradient(90deg, rgba(255,255,255,.3) 0 1px, transparent 1px 4px);"></div>
+                <div style="position:absolute; left:5px; top:3px; font-size:11px; font-weight:500; color:#f0f0f0;">klopák_Petr.wav</div>
+                <div style="position:absolute; right:5px; top:3px; padding:0 5px; border-radius:4px; background:rgba(0,0,0,.45); font-size:9px; color:#c9ccd1;">sync −0,42 s</div>
+              </div>
+
+              <!-- A2: hudba -->
+              <div style="position:absolute; left:4px; top:223px; width:820px; height:78px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#29684d; overflow:hidden;">
+                <div style="position:absolute; left:0; right:0; top:20px; height:40px; background:repeating-linear-gradient(90deg, rgba(255,255,255,.26) 0 1px, transparent 1px 3px);"></div>
+                <div style="position:absolute; left:5px; top:3px; font-size:11px; font-weight:500; color:#f0f0f0;">Podklad_hudba.m4a · 110,0 BPM</div>
+                <svg width="30" height="78" viewBox="0 0 30 78" style="position:absolute; left:0; top:0;"><path d="M0 78 L30 0 L0 0 Z" fill="rgba(0,0,0,.35)"></path></svg>
+              </div>
+
+              <!-- T1 -->
+              <div style="position:absolute; left:20px; top:304px; width:130px; height:40px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#8c5233; display:flex; align-items:center; padding:0 8px;">
+                <span style="font-size:10px; font-weight:500; color:#f5ece6;">Anna a Petr</span>
+              </div>
+              <div style="position:absolute; left:360px; top:304px; width:170px; height:40px; border-radius:5px; border:1px solid rgba(0,0,0,.5); background:#8c5233; display:flex; align-items:center; padding:0 8px;">
+                <span style="font-size:10px; font-weight:500; color:#f5ece6;">Obřad · 25. 7. 2026</span>
+              </div>
+              <div style="position:absolute; left:560px; top:339px; width:200px; height:4px; background:rgba(41,105,77,.65);"></div>
+
+              <!-- vodicí čára přichytávání + hlava -->
+              <div style="position:absolute; left:330px; top:0; bottom:0; width:1px; background:rgba(255,201,71,.45);"></div>
+              <div style="position:absolute; left:262px; top:0; bottom:0; width:2px; background:#ff453b;"></div>
+              <div style="position:absolute; left:256px; top:0; width:14px; height:8px; border-radius:2px; background:#ff453b;"></div>
+            </div>
+          </div>
+
+          <!-- přehled celé osy (navigace na dvacetiminutové stopáži) -->
+          <div style="height:46px; flex:none; box-sizing:border-box; background:#131417; border-top:1px solid #24262b; display:flex; align-items:center; gap:10px; padding:0 12px;">
+            <span style="font-size:9px; color:#6b7280; width:56px;">přehled</span>
+            <div style="flex:1; height:26px; position:relative; border-radius:5px; background:#0f1013; border:1px solid #24262b; overflow:hidden;">
+              <span style="position:absolute; left:2px; top:3px; width:16%; height:9px; border-radius:2px; background:#3a578c;"></span>
+              <span style="position:absolute; left:18.5%; top:3px; width:19%; height:9px; border-radius:2px; background:#3a578c;"></span>
+              <span style="position:absolute; left:38%; top:3px; width:27%; height:9px; border-radius:2px; background:#3a578c;"></span>
+              <span style="position:absolute; left:66%; top:3px; width:14%; height:9px; border-radius:2px; background:#3a578c;"></span>
+              <span style="position:absolute; left:2px; top:14px; width:78%; height:8px; border-radius:2px; background:#29684d;"></span>
+              <span style="position:absolute; left:19%; top:0; bottom:0; width:2px; background:#ff453b;"></span>
+              <span style="position:absolute; left:8%; top:0; bottom:0; width:34%; border:1px solid rgba(255,201,71,.7); border-radius:4px; background:rgba(255,201,71,.08);"></span>
+            </div>
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#6b7280;">00:04:12:07</span>
+          </div>
+        </div>
+
+        <!-- ── PŘIPNUTÝ PANEL: RYCHLOSTNÍ KŘIVKA ───────────────── -->
+        <sc-if value="{{ showRampPanel }}" hint-placeholder-val="{{ true }}">
+        <div style="width:452px; flex:none; box-sizing:border-box; background:#16181c; border-left:1px solid #24262b; display:flex; flex-direction:column; overflow:hidden;">
+          <div style="height:34px; flex:none; box-sizing:border-box; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid #24262b;">
+            <span style="font-size:11px; font-weight:600;">20260725_203813.mp4</span>
+            <span style="font-size:10px; color:#6b7280;">zdroj 120 fps · 0:22</span>
+            <span style="flex:1;"></span>
+            <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:9px; color:#6b7280;">⌘4 skryje</span>
+          </div>
+
+          <sc-if value="{{ isSpeed }}" hint-placeholder-val="{{ true }}">
+          <div style="flex:none; display:flex; gap:14px; padding:8px 12px 0; font-size:11px;">
+            <span style="padding-bottom:6px; border-bottom:2px solid #ffc947; font-weight:600;">Rychlost</span>
+            <span style="padding-bottom:6px; color:#9aa0a8;">Barva</span>
+            <span style="padding-bottom:6px; color:#9aa0a8;">Zvuk</span>
+            <span style="padding-bottom:6px; color:#9aa0a8;">Info</span>
+          </div>
+          <div style="height:1px; flex:none; background:#24262b;"></div>
+
+          <div style="flex:1; padding:10px 12px; display:flex; flex-direction:column; gap:10px; min-height:0; overflow-y:auto;">
+            <div style="display:flex; gap:6px;">
+              <span style="flex:1; text-align:center; padding:6px 0; border-radius:7px; background:#1e2024; border:1px solid #2f3238; font-size:11px; color:#c9ccd1;">Bez rampy</span>
+              <span style="flex:1; text-align:center; padding:6px 0; border-radius:7px; background:#1e2024; border:1px solid #2f3238; font-size:11px; color:#c9ccd1;">0,5×</span>
+              <span style="flex:1; text-align:center; padding:6px 0; border-radius:7px; background:#3a3320; border:1px solid #ffc947; font-size:11px; font-weight:600; color:#ffc947;">0,25×</span>
+              <span style="flex:1; text-align:center; padding:6px 0; border-radius:7px; background:#1e2024; border:1px solid #2f3238; font-size:11px; color:#5c6067;">0,125×</span>
+            </div>
+
+            <div style="position:relative; height:150px; flex:none; border-radius:8px; background:#131417; border:1px solid #24262b; overflow:hidden;">
+              <div style="position:absolute; left:46px; right:8px; top:14px; height:1px; background:#2a2d33;"></div>
+              <div style="position:absolute; left:46px; right:8px; top:48px; height:1px; background:#3a3f47;"></div>
+              <div style="position:absolute; left:46px; right:8px; top:86px; height:1px; background:#2a2d33;"></div>
+              <div style="position:absolute; left:46px; right:8px; top:112px; height:1px; background:#2a2d33;"></div>
+              <div style="position:absolute; left:0; top:8px; width:40px; text-align:right; font-size:9px; color:#9aa0a8;">2×</div>
+              <div style="position:absolute; left:0; top:42px; width:40px; text-align:right; font-size:9px; color:#f0f0f0; font-weight:600;">1×</div>
+              <div style="position:absolute; left:0; top:80px; width:40px; text-align:right; font-size:9px; color:#9aa0a8;">0,50×</div>
+              <div style="position:absolute; left:0; top:106px; width:40px; text-align:right; font-size:9px; color:#ffc947;">0,25×</div>
+              <div style="position:absolute; left:0; top:130px; width:40px; text-align:right; font-size:9px; color:#6b7280;">0,10×</div>
+              <div style="position:absolute; left:46px; right:8px; top:112px; bottom:0; background:rgba(255,201,71,.16); border-top:1px solid rgba(255,201,71,.9);"></div>
+              <div style="position:absolute; right:12px; top:116px; font-size:9px; color:rgba(255,201,71,.9);">limit zdroje 0,25× — pod ním se snímky duplikují</div>
+              <svg width="374" height="150" viewBox="0 0 374 150" style="position:absolute; left:46px; top:0;">
+                <path d="M0 48 L64 48 C124 48 124 112 182 112 L220 112 C278 112 278 48 336 48 L374 48" fill="none" stroke="#8cb8ff" stroke-width="2"></path>
+                <circle cx="0" cy="48" r="5" fill="#ebebeb" stroke="#3a3f47" stroke-width="1.5"></circle>
+                <circle cx="64" cy="48" r="5" fill="#ebebeb" stroke="#3a3f47" stroke-width="1.5"></circle>
+                <circle cx="182" cy="112" r="5.5" fill="#ebebeb" stroke="#ffc947" stroke-width="2"></circle>
+                <circle cx="220" cy="112" r="5" fill="#ebebeb" stroke="#3a3f47" stroke-width="1.5"></circle>
+                <circle cx="336" cy="48" r="5" fill="#ebebeb" stroke="#3a3f47" stroke-width="1.5"></circle>
+              </svg>
+              <div style="position:absolute; left:52px; bottom:4px; font-size:9px; color:#9aa0a8;">dvojklik přidá uzel · Delete smaže · Shift vypne přichytávání</div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:8px; font-size:10px; color:#9aa0a8;">
+              <span style="padding:3px 7px; border-radius:5px; background:rgba(255,201,71,.14); color:#ffc947; font-weight:600;">182 úseků · skok 1,42 %</span>
+              <span>spotřeba zdroje 3,125 s</span>
+              <span style="flex:1;"></span>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:8px; font-size:11px;">
+              <span style="color:#9aa0a8; width:96px;">Korekce výšky</span>
+              <span style="flex:1; height:24px; border-radius:6px; border:1px solid #2f3238; background:#1e2024; display:flex; align-items:center; justify-content:space-between; padding:0 8px; font-size:11px;">Časová doména <span style="color:#6b7280;">⌄</span></span>
+            </div>
+
+            <div style="height:1px; background:#24262b;"></div>
+
+            <div style="display:flex; flex-direction:column; gap:7px;">
+              <span style="font-size:10px; color:#6b7280;">Dopasování na hudbu</span>
+              <div style="display:flex; gap:8px;">
+                <button style="flex:1; height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:11px;">Zpomalení na dobu</button>
+                <button style="flex:1; height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:11px;">Zarovnat konec na dobu</button>
+              </div>
+              <div style="font-size:10px; color:#9aa0a8;">Nejbližší doba na <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">00:00:11:12</span> · rampa na ni dosedne.</div>
+            </div>
+          </div>
+          </sc-if>
+
+          <sc-if value="{{ isColor }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:none; display:flex; gap:14px; padding:8px 12px 0; font-size:11px;">
+            <span style="padding-bottom:6px; color:#9aa0a8;">Rychlost</span>
+            <span style="padding-bottom:6px; border-bottom:2px solid #ffc947; font-weight:600;">Barva</span>
+            <span style="padding-bottom:6px; color:#9aa0a8;">Zvuk</span>
+            <span style="padding-bottom:6px; color:#9aa0a8;">Info</span>
+          </div>
+          <div style="height:1px; flex:none; background:#24262b;"></div>
+
+          <div style="flex:1; padding:10px 12px; display:flex; flex-direction:column; gap:10px; min-height:0; overflow-y:auto;">
+            <!-- náhled před/po: preset se vybírá okem, ne podle jména -->
+            <div style="flex:none; display:flex; gap:8px;">
+              <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <div style="height:52px; border-radius:7px; border:1px solid #24262b; background:linear-gradient(150deg,#3b4a55,#181c22);"></div>
+                <span style="font-size:9px; color:#6b7280;">Originál</span>
+              </div>
+              <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                <div style="height:52px; border-radius:7px; border:1px solid #ffc947; background:linear-gradient(150deg,#6a5238,#2a1f16);"></div>
+                <span style="font-size:9px; color:#ffd88a;">Teplý film · 62 %</span>
+              </div>
+            </div>
+
+            <!-- presety jako řádky s vlastním vzorkem, ne jen jména v rozbalovátku -->
+            <div style="flex:none; display:flex; flex-direction:column; gap:4px;">
+              <div style="display:flex; align-items:center; gap:9px; height:26px; padding:0 8px; border-radius:7px; border:1px solid #2f3238; background:#1e2024;">
+                <span style="width:34px; height:18px; border-radius:4px; background:linear-gradient(150deg,#3b4a55,#181c22); border:1px solid #33373e;"></span>
+                <span style="font-size:11px; color:#c9ccd1;">Bez úpravy</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:9px; height:26px; padding:0 8px; border-radius:7px; border:1px solid #2f3238; background:#1e2024;">
+                <span style="width:34px; height:18px; border-radius:4px; background:linear-gradient(150deg,#5c5a52,#241f1c); border:1px solid #33373e;"></span>
+                <span style="font-size:11px; color:#c9ccd1;">Jemný svatební</span>
+                <span style="flex:1;"></span>
+                <span style="font-size:9px; color:#6b7280;">tlumené kontrasty</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:9px; height:26px; padding:0 8px; border-radius:7px; border:1px solid #ffc947; background:#3a3320;">
+                <span style="width:34px; height:18px; border-radius:4px; background:linear-gradient(150deg,#6a5238,#2a1f16); border:1px solid rgba(255,201,71,.5);"></span>
+                <span style="font-size:11px; font-weight:600; color:#ffc947;">Teplý film</span>
+                <span style="flex:1;"></span>
+                <span style="font-size:9px; color:#ffd88a;">vybráno</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:9px; height:26px; padding:0 8px; border-radius:7px; border:1px solid #2f3238; background:#1e2024;">
+                <span style="width:34px; height:18px; border-radius:4px; background:linear-gradient(150deg,#6b5348,#2b2320); border:1px solid #33373e;"></span>
+                <span style="font-size:11px; color:#c9ccd1;">Čistá pleť</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:9px; height:26px; padding:0 8px; border-radius:7px; border:1px solid #2f3238; background:#1e2024;">
+                <span style="width:34px; height:18px; border-radius:4px; background:linear-gradient(150deg,#8e8e8e,#1c1c1c); border:1px solid #33373e;"></span>
+                <span style="font-size:11px; color:#c9ccd1;">Černobílá</span>
+              </div>
+            </div>
+
+            <div style="flex:none; display:flex; align-items:center; gap:10px; font-size:11px;">
+              <span style="width:34px; color:#9aa0a8;">Síla</span>
+              <span style="flex:1; height:3px; border-radius:2px; background:#2f3238; position:relative; display:inline-block;"><span style="position:absolute; left:0; top:0; bottom:0; width:62%; background:#ffc947; border-radius:2px;"></span><span style="position:absolute; left:62%; top:-5px; width:13px; height:13px; border-radius:50%; background:#e9eaec;"></span></span>
+              <span style="width:44px; text-align:right; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:#9aa0a8;">62 %</span>
+            </div>
+
+            <div style="flex:none; display:flex; align-items:center; gap:8px;">
+              <span style="padding:3px 7px; border-radius:5px; background:rgba(255,201,71,.14); color:#ffc947; font-size:10px; font-weight:600;">platí pro výběr · 3 klipy</span>
+              <span style="font-size:10px; color:#9aa0a8;">jeden krok ⌘Z</span>
+            </div>
+
+            <div style="height:1px; flex:none; background:#24262b;"></div>
+
+            <div style="flex:none; display:flex; gap:8px;">
+              <button style="flex:1; height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:11px;">Kopírovat na celý výběr</button>
+              <button style="flex:1; height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; color:#c9ccd1; font-size:11px;" title="S presetem se zapíná vlastní kompozitor — náhled i export vypadají stejně, GPU zátěž stoupne (medián 24 % při 4K/30).">Zrušit preset</button>
+            </div>
+
+          </div>
+          </sc-if>
+
+          <sc-if value="{{ isAudio }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:none; display:flex; gap:14px; padding:8px 12px 0; font-size:11px;">
+            <span style="padding-bottom:6px; color:#9aa0a8;">Rychlost</span>
+            <span style="padding-bottom:6px; color:#9aa0a8;">Barva</span>
+            <span style="padding-bottom:6px; border-bottom:2px solid #ffc947; font-weight:600;">Zvuk</span>
+            <span style="padding-bottom:6px; color:#9aa0a8;">Info</span>
+          </div>
+          <div style="height:1px; flex:none; background:#24262b;"></div>
+
+          <div style="flex:1; padding:10px 12px; display:flex; flex-direction:column; gap:10px; min-height:0; overflow-y:auto;">
+            <div style="flex:none; display:flex; align-items:center; gap:8px; font-size:10px; color:#6b7280;">
+              <span>svázaný zvuk na A1</span>
+              <span style="padding:2px 6px; border-radius:5px; background:#1e2024; border:1px solid #2f3238; color:#9aa0a8;">2 kanály · 48 kHz</span>
+            </div>
+
+            <div style="flex:none; display:flex; flex-direction:column; gap:5px;">
+              <span style="font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#6b7280;">Fade</span>
+              <div style="display:flex; align-items:center; gap:9px; font-size:11px;">
+                <span style="width:52px; color:#c9ccd1;">Nájezd</span>
+                <span style="flex:1; height:3px; border-radius:2px; background:#2f3238; position:relative; display:inline-block;"><span style="position:absolute; left:0; top:0; bottom:0; width:24%; background:#3ecf8e; border-radius:2px;"></span><span style="position:absolute; left:24%; top:-5px; width:13px; height:13px; border-radius:50%; background:#e9eaec;"></span></span>
+                <span style="width:56px; text-align:right; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">18 sn · 0,6 s</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:9px; font-size:11px;">
+                <span style="width:52px; color:#c9ccd1;">Dojezd</span>
+                <span style="flex:1; height:3px; border-radius:2px; background:#2f3238; position:relative; display:inline-block;"><span style="position:absolute; left:0; top:0; bottom:0; width:40%; background:#3ecf8e; border-radius:2px;"></span><span style="position:absolute; left:40%; top:-5px; width:13px; height:13px; border-radius:50%; background:#e9eaec;"></span></span>
+                <span style="width:56px; text-align:right; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">30 sn · 1,0 s</span>
+              </div>
+              <div style="font-size:10px; color:#6b7280;">Hrana pod crossfadem fade nedostane — přechod tam už rampuje.</div>
+            </div>
+
+            <div style="flex:none; display:flex; flex-direction:column; gap:5px;">
+              <span style="font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#6b7280;">Stopa A1</span>
+              <div style="display:flex; align-items:center; gap:9px; font-size:11px;">
+                <span style="width:24px; height:20px; border-radius:5px; background:#23262b; border:1px solid #33373e; font-size:9px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;">M</span>
+                <span style="flex:1; height:3px; border-radius:2px; background:#2f3238; position:relative; display:inline-block;"><span style="position:absolute; left:0; top:0; bottom:0; width:80%; background:#3ecf8e; border-radius:2px;"></span><span style="position:absolute; left:80%; top:-5px; width:13px; height:13px; border-radius:50%; background:#e9eaec;"></span></span>
+                <span style="width:56px; text-align:right; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; color:#9aa0a8;">−4,0 dB</span>
+              </div>
+            </div>
+
+            <div style="flex:none; display:flex; flex-direction:column; gap:5px;">
+              <span style="font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#6b7280;">Klopák</span>
+              <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; background:#1e2024; border:1px solid #2f3238;">
+                <div style="display:flex; flex-direction:column; gap:2px; min-width:0;">
+                  <span style="font-size:11px; color:#c9ccd1;">klopák_Petr.wav</span>
+                  <span style="font-size:10px; color:#6b7280;">posun −0,42 s · jistota 96 %</span>
+                </div>
+                <span style="flex:1;"></span>
+                <span style="padding:3px 7px; border-radius:5px; background:rgba(62,207,142,.14); color:#3ecf8e; font-size:10px; font-weight:600;">na vzorek</span>
+              </div>
+            </div>
+
+            <div style="flex:none; display:flex; align-items:center; gap:8px; font-size:10px;">
+              <span style="padding:3px 7px; border-radius:5px; background:#1e2024; border:1px solid #2f3238; color:#9aa0a8; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">−16,2 LUFS</span>
+              <span style="padding:3px 7px; border-radius:5px; background:#1e2024; border:1px solid #2f3238; color:#ff9f0a; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">−1,0 dBTP</span>
+              <span style="color:#6b7280;">měřeno na výběru</span>
+            </div>
+
+            <div style="height:1px; flex:none; background:#24262b;"></div>
+
+            <div style="flex:none; display:flex; gap:8px;">
+              <button style="flex:1; height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:11px;">Synchronizovat zvuk…</button>
+              <button style="flex:1; height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:11px;">Titulky z řeči…</button>
+            </div>
+          </div>
+          </sc-if>
+        </div>
+        </sc-if>
+      </div>
+
+      <!-- ── STAVOVÝ ŘÁDEK ──────────────────────────────────── -->
+      <div style="height:26px; flex:none; box-sizing:border-box; background:#17181b; border-top:1px solid #24262b; display:flex; align-items:center; padding:0 12px; gap:14px; font-size:10px; color:#9aa0a8;">
+        <span style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:#ff9f0a;"></span>Ostrost 3/5 · hluchá místa ve frontě</span>
+        <span style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:#3ecf8e;"></span>Proxy 5/5</span>
+        <span style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:#3ecf8e;"></span>Model přepisu 1,62 GB</span>
+        <span style="flex:1;"></span>
+        <span>Rampa 1× → 0,25× nastavena · ⌘Z vrátí</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1470,&quot;height&quot;:900},&quot;showRampPanel&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;panelTab&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;rychlost&quot;,&quot;barva&quot;,&quot;zvuk&quot;],&quot;default&quot;:&quot;zvuk&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const tab = this.props.panelTab ?? "rychlost";
+    return {
+      showRampPanel: this.props.showRampPanel ?? true,
+      isSpeed: tab === "rychlost",
+      isColor: tab === "barva",
+      isAudio: tab === "zvuk",
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  body { margin:0; background:#08090a; color:#e9eaec;
+         font-family:-apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif; }
+  a { color:#ffc947; text-decoration:none; }
+  a:hover { color:#ffdd88; }
+</style>
+</helmet>
+
+<div style="width:1470px; height:900px; overflow:hidden; background:#0e0f11; position:relative; font-size:12px;">
+
+  <!-- ── ZTMAVENÉ OKNO NA POZADÍ (schéma, ne druhá kopie UI) ── -->
+  <div style="position:absolute; inset:0; display:flex; flex-direction:column; opacity:.4;">
+    <div style="height:46px; flex:none; background:#17181b; border-bottom:1px solid #24262b; display:flex; align-items:center; padding:0 14px; gap:10px;">
+      <span style="width:11px; height:11px; border-radius:50%; background:#ff5f57;"></span>
+      <span style="width:11px; height:11px; border-radius:50%; background:#febc2e;"></span>
+      <span style="width:11px; height:11px; border-radius:50%; background:#28c840;"></span>
+      <span style="margin-left:10px; font-size:13px; font-weight:600;">Svatba Anna a Petr</span>
+    </div>
+    <div style="flex:1; display:flex; min-height:0;">
+      <div style="width:60px; flex:none; background:#131417; border-right:1px solid #24262b;"></div>
+      <div style="flex:1; display:flex; flex-direction:column; min-width:0;">
+        <div style="height:372px; flex:none; display:flex;">
+          <div style="flex:1; background:#08090a; display:flex; align-items:center; justify-content:center; padding:16px;">
+            <div style="height:100%; max-height:100%; width:auto; max-width:100%; aspect-ratio:16/9; background:linear-gradient(160deg,#2b2f36,#12141a);"></div>
+          </div>
+          <div style="width:330px; flex:none; background:#131417; border-left:1px solid #24262b;"></div>
+        </div>
+        <div style="height:32px; flex:none; background:#17181b; border-top:1px solid #24262b; border-bottom:1px solid #24262b;"></div>
+        <div style="flex:1; display:flex; min-height:0; background:#0f1013;">
+          <div style="width:104px; flex:none; background:#131417; border-right:1px solid #24262b;"></div>
+          <div style="flex:1; position:relative; min-width:0;">
+            <div style="position:absolute; left:4px; top:29px; width:150px; height:136px; border-radius:5px; background:#3a578c;"></div>
+            <div style="position:absolute; left:156px; top:29px; width:172px; height:136px; border-radius:5px; background:#3a578c;"></div>
+            <div style="position:absolute; left:330px; top:29px; width:250px; height:136px; border-radius:5px; background:#3a578c;"></div>
+            <div style="position:absolute; left:582px; top:29px; width:130px; height:136px; border-radius:5px; background:#3a578c;"></div>
+            <div style="position:absolute; left:4px; top:168px; width:324px; height:78px; border-radius:5px; background:#29684d;"></div>
+            <div style="position:absolute; left:330px; top:168px; width:382px; height:78px; border-radius:5px; background:#29684d;"></div>
+            <div style="position:absolute; left:4px; top:249px; width:820px; height:78px; border-radius:5px; background:#29684d;"></div>
+            <div style="position:absolute; left:20px; top:330px; width:130px; height:40px; border-radius:5px; background:#8c5233;"></div>
+          </div>
+          <div style="width:452px; flex:none; background:#16181c; border-left:1px solid #24262b;"></div>
+        </div>
+        <div style="height:26px; flex:none; background:#17181b; border-top:1px solid #24262b;"></div>
+      </div>
+    </div>
+  </div>
+  <div style="position:absolute; inset:0; background:rgba(6,7,8,.62);"></div>
+
+  <!-- ── LIST EXPORTU ────────────────────────────────────────── -->
+  <div style="position:absolute; left:50%; top:56px; transform:translateX(-50%); width:660px; border-radius:14px; background:#191b1f; border:1px solid #33373e; box-shadow:0 30px 70px rgba(0,0,0,.65); overflow:hidden; display:flex; flex-direction:column;">
+
+    <div style="flex:none; box-sizing:border-box; padding:16px 20px 14px; border-bottom:1px solid #24262b; display:flex; align-items:flex-start; gap:14px;">
+      <div style="display:flex; flex-direction:column; gap:3px;">
+        <span style="font-size:16px; font-weight:600; letter-spacing:-.01em;">Exportovat film</span>
+        <span style="font-size:11px; color:#9aa0a8;">Svatba Anna a Petr · vždy z originálů, proxy se nepoužije</span>
+      </div>
+      <span style="flex:1;"></span>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px;">00:04:12:07</span>
+        <span style="font-size:10px; color:#6b7280;">7 567 snímků · odhad 2,8 GB</span>
+      </div>
+    </div>
+
+    <!-- ── STAV: NASTAVENÍ ── -->
+    <sc-if value="{{ isSetup }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:none; box-sizing:border-box; padding:16px 20px; display:flex; flex-direction:column; gap:16px;">
+
+      <div style="display:flex; flex-direction:column; gap:7px;">
+        <span style="font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#6b7280;">Rozsah</span>
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1; padding:9px 11px; border-radius:9px; border:1px solid #ffc947; background:#3a3320; display:flex; flex-direction:column; gap:2px;">
+            <span style="font-size:11px; font-weight:600; color:#ffc947;">Celý projekt</span>
+            <span style="font-size:10px; color:#ffd88a;">00:04:12:07 · 7 567 snímků</span>
+          </div>
+          <div style="flex:1; padding:9px 11px; border-radius:9px; border:1px solid #2f3238; background:#1e2024; display:flex; flex-direction:column; gap:2px;">
+            <span style="font-size:11px; color:#c9ccd1;">Jen výřez I—O</span>
+            <span style="font-size:10px; color:#6b7280;">00:00:04:00 → 00:00:26:00 · 660 snímků</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:16px;">
+        <div style="flex:1; display:flex; flex-direction:column; gap:7px;">
+          <span style="font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#6b7280;">Obraz</span>
+          <div style="height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; display:flex; align-items:center; justify-content:space-between; padding:0 9px; font-size:11px;">HEVC · 3840×2160 · 30 fps <span style="color:#6b7280;">⌄</span></div>
+          <div style="display:flex; align-items:center; gap:7px; font-size:10px; color:#9aa0a8;">
+            <span style="padding:2px 6px; border-radius:5px; background:rgba(62,207,142,.14); color:#3ecf8e; font-weight:600;">CFR</span>
+            pevná mřížka snímků, kolísání 0,0 %
+          </div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; gap:7px;">
+          <span style="font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#6b7280;">Hlasitost</span>
+          <div style="height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; display:flex; align-items:center; justify-content:space-between; padding:0 9px; font-size:11px;">Web / sociální sítě (−14 LUFS) <span style="color:#6b7280;">⌄</span></div>
+          <div style="font-size:10px; color:#9aa0a8;">Změří se celý mix, strop −1 dBTP. Když zesílení narazí na špičky, řekne se to.</div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:7px;">
+        <span style="font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#6b7280;">Titulky</span>
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1; padding:9px 11px; border-radius:9px; border:1px solid #3a3f47; background:#23262b; display:flex; align-items:center; gap:9px;">
+            <span style="width:15px; height:15px; border-radius:4px; background:#ffc947; color:#191a1c; font-size:10px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;">✓</span>
+            <div style="display:flex; flex-direction:column; gap:1px;">
+              <span style="font-size:11px;">Vypálit grafické titulky (T1)</span>
+              <span style="font-size:10px; color:#6b7280;">2 titulky · jména, kapitola</span>
+            </div>
+          </div>
+          <div style="flex:1; padding:9px 11px; border-radius:9px; border:1px solid #2f3238; background:#1e2024; display:flex; align-items:center; gap:9px;">
+            <span style="width:15px; height:15px; border-radius:4px; border:1px solid #3a3f47;"></span>
+            <div style="display:flex; flex-direction:column; gap:1px;">
+              <span style="font-size:11px; color:#c9ccd1;">Uložit řeč jako .srt vedle filmu</span>
+              <span style="font-size:10px; color:#6b7280;">148 úseků z přepisu</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:7px;">
+        <span style="font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#6b7280;">Uložit jako</span>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <div style="flex:1; height:28px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; display:flex; align-items:center; padding:0 9px; font-size:11px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#c9ccd1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">~/Filmy/Svatba Anna a Petr.mp4</div>
+          <button style="height:28px; padding:0 12px; border-radius:7px; border:1px solid #2f3238; background:#1e2024; color:#e9eaec; font-size:11px;">Změnit…</button>
+        </div>
+      </div>
+
+      <!-- přiznaná mez, ne překvapení po exportu -->
+      <div style="display:flex; gap:10px; padding:11px 12px; border-radius:9px; background:rgba(255,159,10,.1); border:1px solid rgba(255,159,10,.3);">
+        <span style="width:7px; height:7px; border-radius:50%; background:#ff9f0a; margin-top:4px; flex:none;"></span>
+        <div style="display:flex; flex-direction:column; gap:3px;">
+          <span style="font-size:11px; color:#ffd7a0;">Jeden klip zpomaluje pod možnosti zdroje</span>
+          <span style="font-size:10px; line-height:1.45; color:#c9ac86; text-wrap:pretty;">20260725_203452 má 30 fps a rampa jde na 0,25× — ve zpomalené části se snímky zduplikují (37,5 %) a bude to trhat. Export projde, jen to nebude plynulé.</span>
+          <span style="font-size:10px; color:#ffc947;">Zobrazit klip na ose</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:none; box-sizing:border-box; padding:13px 20px; border-top:1px solid #24262b; background:#16181c; display:flex; align-items:center; gap:10px;">
+      <span style="font-size:10px; color:#6b7280;">Odhad 1 min · hardwarový kodér (~126 fps)</span>
+      <span style="flex:1;"></span>
+      <button style="height:30px; padding:0 14px; border-radius:8px; border:1px solid #2f3238; background:#1e2024; color:#c9ccd1; font-size:12px;">Zrušit</button>
+      <button style="height:30px; padding:0 18px; border-radius:8px; border:1px solid #ffc947; background:#ffc947; color:#191a1c; font-size:12px; font-weight:600;">Exportovat</button>
+    </div>
+    </sc-if>
+
+    <!-- ── STAV: PRŮBĚH ── -->
+    <sc-if value="{{ isRunning }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:none; box-sizing:border-box; padding:18px 20px; display:flex; flex-direction:column; gap:16px;">
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; align-items:baseline; gap:10px;">
+          <span style="font-size:22px; font-weight:600; letter-spacing:-.01em;">42 %</span>
+          <span style="font-size:11px; color:#9aa0a8;">3 180 z 7 567 snímků · zbývá asi 35 s</span>
+          <span style="flex:1;"></span>
+          <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:#6b7280;">126 fps</span>
+        </div>
+        <div style="height:6px; border-radius:3px; background:#24262b; position:relative; overflow:hidden;">
+          <span style="position:absolute; left:0; top:0; bottom:0; width:42%; border-radius:3px; background:#ffc947;"></span>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <div style="display:flex; align-items:center; gap:9px; font-size:11px;">
+          <span style="width:15px; height:15px; border-radius:50%; background:rgba(62,207,142,.16); color:#3ecf8e; font-size:9px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;">✓</span>
+          <span style="color:#c9ccd1;">Hlasitost změřena</span>
+          <span style="flex:1;"></span>
+          <span style="font-size:10px; color:#6b7280;">−16,2 → −14 LUFS · gain +2,2 dB</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:9px; font-size:11px;">
+          <span style="width:15px; height:15px; border-radius:50%; background:rgba(255,201,71,.18); border:1px solid rgba(255,201,71,.5);"></span>
+          <span style="font-weight:600;">Renderuju obraz a zvuk</span>
+          <span style="flex:1;"></span>
+          <span style="font-size:10px; color:#6b7280;">HEVC · titulky se vypalují</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:9px; font-size:11px; opacity:.55;">
+          <span style="width:15px; height:15px; border-radius:50%; border:1px solid #3a3f47;"></span>
+          <span style="color:#9aa0a8;">Kontrola časování a zápis .srt</span>
+        </div>
+      </div>
+
+      <div style="font-size:10px; line-height:1.45; color:#6b7280; text-wrap:pretty;">Můžeš dál stříhat — export si drží vlastní kopii projektu. Zavření okna ho zruší.</div>
+    </div>
+
+    <div style="flex:none; box-sizing:border-box; padding:13px 20px; border-top:1px solid #24262b; background:#16181c; display:flex; align-items:center; gap:10px;">
+      <span style="font-size:10px; color:#6b7280;">~/Filmy/Svatba Anna a Petr.mp4</span>
+      <span style="flex:1;"></span>
+      <button style="height:30px; padding:0 14px; border-radius:8px; border:1px solid #2f3238; background:#1e2024; color:#c9ccd1; font-size:12px;">Zrušit export</button>
+      <button style="height:30px; padding:0 14px; border-radius:8px; border:1px solid #3a3f47; background:#23262b; color:#e9eaec; font-size:12px;">Skrýt na pozadí</button>
+    </div>
+    </sc-if>
+
+    <!-- ── STAV: HOTOVO ── -->
+    <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:none; box-sizing:border-box; padding:18px 20px; display:flex; flex-direction:column; gap:16px;">
+      <div style="display:flex; gap:14px; align-items:center;">
+        <div style="width:112px; height:63px; border-radius:8px; background:linear-gradient(150deg,#3b4a55,#181c22); border:1px solid #33373e; flex:none;"></div>
+        <div style="display:flex; flex-direction:column; gap:3px; min-width:0;">
+          <span style="font-size:14px; font-weight:600;">Film je hotový</span>
+          <span style="font-size:11px; color:#9aa0a8; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Svatba Anna a Petr.mp4 · 2,84 GB</span>
+          <span style="font-size:10px; color:#6b7280;">1 min 0 s · celý projekt 00:04:12:07 · 7 567 snímků</span>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <div style="display:flex; align-items:center; gap:9px; font-size:11px;">
+          <span style="width:15px; height:15px; border-radius:50%; background:rgba(62,207,142,.16); color:#3ecf8e; font-size:9px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;">✓</span>
+          <span style="color:#c9ccd1;">Časování</span>
+          <span style="flex:1;"></span>
+          <span style="font-size:10px; color:#6b7280;">CFR 30,000 fps · kolísání 0,0 %</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:9px; font-size:11px;">
+          <span style="width:15px; height:15px; border-radius:50%; background:rgba(255,159,10,.16); color:#ff9f0a; font-size:9px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;">!</span>
+          <span style="color:#c9ccd1;">Hlasitost</span>
+          <span style="flex:1;"></span>
+          <span style="font-size:10px; color:#ffbe5c;">gain omezen špičkami na +1,4 dB — na −14 LUFS nedosáhl</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:9px; font-size:11px;">
+          <span style="width:15px; height:15px; border-radius:50%; background:rgba(62,207,142,.16); color:#3ecf8e; font-size:9px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;">✓</span>
+          <span style="color:#c9ccd1;">Titulky</span>
+          <span style="flex:1;"></span>
+          <span style="font-size:10px; color:#6b7280;">2 vypálené · 148 úseků do .srt</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:none; box-sizing:border-box; padding:13px 20px; border-top:1px solid #24262b; background:#16181c; display:flex; align-items:center; gap:10px;">
+      <button style="height:30px; padding:0 12px; border-radius:8px; border:1px solid #2f3238; background:#1e2024; color:#c9ccd1; font-size:12px;">Ukázat ve Finderu</button>
+      <span style="flex:1;"></span>
+      <button style="height:30px; padding:0 12px; border-radius:8px; border:1px solid #2f3238; background:#1e2024; color:#c9ccd1; font-size:12px;">Exportovat znovu…</button>
+      <button style="height:30px; padding:0 18px; border-radius:8px; border:1px solid #ffc947; background:#ffc947; color:#191a1c; font-size:12px; font-weight:600;">Zavřít</button>
+    </div>
+    </sc-if>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1470,&quot;height&quot;:900},&quot;stav&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;nastaveni&quot;,&quot;prubeh&quot;,&quot;hotovo&quot;],&quot;default&quot;:&quot;prubeh&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const stav = this.props.stav ?? "nastaveni";
+    return {
+      isSetup: stav === "nastaveni",
+      isRunning: stav === "prubeh",
+      isDone: stav === "hotovo",
+    };
+  }
+}
+
+</script>
+</body>
+</html>

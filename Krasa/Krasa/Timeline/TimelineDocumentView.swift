@@ -1388,6 +1388,42 @@ final class TimelineDocumentView: NSView {
             menu.addItem(freeze)
         }
 
+        // Dopasování na dobu hudby (fáze 14, modul 3). Jestli je akce
+        // proveditelná, rozhodne ZKUŠEBNÍ BĚH operace na kopii projektu —
+        // menu pak nelže: vypnutá položka nese v tooltipu důvod z chyby
+        // modelu (přiznané meze, žádné tiché selhání po kliknutí).
+        if !isStillClip,
+           controller.project.timeline.track(id: hit.trackID)?.kind == .video {
+            menu.addItem(.separator())
+
+            let fit = NSMenuItem(title: "Zarovnat konec na dobu hudby",
+                                 action: #selector(menuFitToBeat(_:)), keyEquivalent: "")
+            fit.target = self
+            var fitProbe = controller.project
+            do {
+                _ = try fitProbe.fitClipEndToBeat(clipID: hit.clipID)
+                fit.isEnabled = true
+            } catch let error as TimelineError {
+                fit.isEnabled = false
+                fit.toolTip = beatFitExcuse(for: error)
+            } catch { fit.isEnabled = false }
+            menu.addItem(fit)
+
+            let rampBeat = NSMenuItem(title: "Zpomalení na dobu (rampa na úder)",
+                                      action: #selector(menuRampToBeat(_:)), keyEquivalent: "")
+            rampBeat.target = self
+            var rampProbe = controller.project
+            do {
+                _ = try rampProbe.rampClipToBeat(clipID: hit.clipID,
+                                                 near: controller.playhead)
+                rampBeat.isEnabled = true
+            } catch let error as TimelineError {
+                rampBeat.isEnabled = false
+                rampBeat.toolTip = beatFitExcuse(for: error)
+            } catch { rampBeat.isEnabled = false }
+            menu.addItem(rampBeat)
+        }
+
         // Sync klopáku (fáze 7, modul 5). U klipu s rampou vypnuto —
         // zvuk položený lineárně by se s křivkou rozjel.
         menu.addItem(.separator())
@@ -1453,6 +1489,44 @@ final class TimelineDocumentView: NSView {
     @objc private func menuToggleRamp(_ sender: Any?) {
         guard let clipID = menuClipID else { return }
         controller.toggleClassicRamp(clipID)
+    }
+
+    @objc private func menuFitToBeat(_ sender: Any?) {
+        guard let clipID = menuClipID else { return }
+        controller.fitClipEndToBeat(clipID)
+    }
+
+    @objc private func menuRampToBeat(_ sender: Any?) {
+        guard let clipID = menuClipID else { return }
+        controller.rampClipToBeat(clipID)
+    }
+
+    /// Důvod, proč dopasování nejde — z chyby modelu na lidskou radu.
+    /// Plán F14: při velké odchylce NEVYNUCOVAT, nabídnout trim nebo
+    /// jiný bod.
+    private func beatFitExcuse(for error: TimelineError) -> String {
+        switch error {
+        case .noBeatInReach(let nearest):
+            if let nearest {
+                let rate = controller.project.timeline.frameRate
+                return "V dosahu není volná doba — nejbližší je na "
+                    + "\(nearest.timecode(frameRate: rate).text). "
+                    + "Trimni klip, posuň ho, nebo přisuň hudbu."
+            }
+            return "Na ose není hudba s dobami — přidej ji přes "
+                + "Soubor → Přidat hudbu…"
+        case .noCleanSlowdown:
+            return "Zdroj nemá dost snímků na čisté zpomalení "
+                + "(potřeba zdrojFps ≥ výstupFps/rychlost). Ručně to jde "
+                + "v editoru křivky — přiznaně, přes žlutou zónu."
+        case .blockedByTransition:
+            return "Na střihu klipu leží přechod — napřed ho odeber."
+        case .beatFitOnMusicClip:
+            return "Tohle je hudební klip — dopasovávají se záběry na něj, "
+                + "ne on sám na sebe."
+        default:
+            return "Dopasování tady nejde provést."
+        }
     }
 
     @objc private func menuSplit(_ sender: Any?) {

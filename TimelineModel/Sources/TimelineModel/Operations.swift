@@ -62,6 +62,16 @@ public enum TimelineError: Error, Hashable, Sendable {
     case beatGridNeedsAudio
     /// Mřížka dob s nesmyslným tempem nebo fází.
     case invalidBeatGrid
+    /// V dosahu není žádná použitelná doba (meze rychlosti, limit čistého
+    /// zpomalení, sousedi). Nese nejbližší dobu — UI z ní udělá radu
+    /// „trimni klip nebo posuň hudbu", NIKDY nevynucuje (plán F14).
+    case noBeatInReach(nearest: Frames?)
+    /// Dopasovávat hudební klip na jeho vlastní doby nedává smysl.
+    case beatFitOnMusicClip
+    /// Zdroj nemá dost snímků na ČISTÉ zpomalení (výstupFps/zdrojFps ≥ 1)
+    /// — automatika nad limit nejde; ručně to editor křivky se žlutou
+    /// zónou dovolí (přiznaná duplikace, persona Alena).
+    case noCleanSlowdown
 }
 
 // MARK: - Assety

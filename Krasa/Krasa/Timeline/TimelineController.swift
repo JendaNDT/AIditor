@@ -435,6 +435,24 @@ final class TimelineController: ObservableObject {
         project = updated
     }
 
+    /// Kontextové menu: zarovnat konec klipu na dobu (modul 3). Meze hlídá
+    /// model; menu položku zapíná zkušební běh, takže selhání sem nedojde.
+    func fitClipEndToBeat(_ clipID: ClipID) {
+        var updated = project
+        guard (try? updated.fitClipEndToBeat(clipID: clipID)) != nil else { return }
+        undo.record(project)
+        project = updated
+    }
+
+    /// Kontextové menu: rampa na úder — zpomalení dosedne na dobu nejblíž
+    /// HLAVĚ (uživatel si úder naskrubuje).
+    func rampClipToBeat(_ clipID: ClipID) {
+        var updated = project
+        guard (try? updated.rampClipToBeat(clipID: clipID, near: playhead)) != nil else { return }
+        undo.record(project)
+        project = updated
+    }
+
     // MARK: - Synchronizace externího zvuku (fáze 7, modul 5)
 
     /// Kontextové menu klipu žádá synchronizaci — obslouží `AppModel`

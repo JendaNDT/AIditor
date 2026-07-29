@@ -94,6 +94,8 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
 
   **Naměřené klipy jsou většinou 60 fps.** Při 24 fps by tedy trhaly běžné záběry — a to kvůli výhodě, která se projeví jen ve zpomalených úsecích. Zpomalené záběry jsou menšina stopáže, panorámování ne.
 - **Seek se zero tolerance + coalescing** podle Apple QA1820.
+- **Zpětné přehrávání (JKL, F17): naše kompozice ho UMÍ, ale za cenu 84 % rychlosti.** Změřeno 29. 07. 2026 (`--jkl-check`) na 4K HEVC bez proxy: `canPlayReverse` i `canPlayFastReverse` hlásí `true`, vpřed 1/2/4× jede na 97–98 % slíbeného, pozpátku −1/−2× jen na **84 %**. Ptát se ale MUSÍME dál (jiný zdroj může říct `false`) — proto fallback na krokování časovačem, který se v praxi nespustí, a proto ho `--jkl-check` **vynucuje** (`forcesSteppingFallback`): nespouštěná cesta tiše shnije. ⚠️ **Od macOS 10.9 jde každý hotový item přehrát mezi 1,0 a 2,0 i když `canPlayFastForward` je `false`** — ta vlastnost od té doby značí rychlosti NAD 2,0 (hlavička `AVPlayerItem`), takže ptát se jí na 2× je chyba.
+  Krokovací fallback si vede VLASTNÍ kurzor: `player.currentTime()` odpovídá poslednímu dokončenému seeku a coalescing by krok zasekl na místě. Uživatelský seek kurzor srovná (jinak by si hlavu přetahovaly).
 - **WhisperKit** (`argmaxinc/argmax-oss-swift` v1.0.0, produkt `WhisperKit`) — zapojený od fáze 8. ⚠️ **Past v názvosloví modelů:** OpenAI „large-v3-turbo" se v repozitáři `whisperkit-coreml` jmenuje **`openai_whisper-large-v3-v20240930`** (podle data vydání); přípona `_turbo` tam značí komprimované varianty WhisperKitu — jinou věc. Ne whisper-small — pro češtinu má 34–38 % chybovost. Model (~1,5 GB) se stahuje při prvním použití do kontejneru (jediné síťové použití aplikace, entitlement `network.client`).
 - **`AVAudioMix.volume` má dokumentovaný rozsah jen 0,0–1,0** — zesilovat přes něj se NESMÍ (nedokumentované chování). Normalizační gain se násobí přímo do vzorků (float32, `vDSP_vsmul` v `CFRRendereru`), se stropem **−1 dBTP** (true peak, od F16 — `TruePeakMeter` v AudioEngine, 4× převzorkování; špička vzorků mezivzorkové špičky neviděla a na reálném klipu lhala o 1,2 dB), který se při zásahu poctivě hlásí.
 - **Dekodéry AAC se neshodnou na rozjezdu:** afconvert vs. čtení přes `AVComposition` se liší přesně o 528 vzorků (11,00 ms). Interní cesty appky (sync, přehrávač, export, měření) čtou VŠECHNY přes kompozici, takže jsou vzájemně konzistentní — další důvod pravidla „zvuk jen přes AVComposition".
@@ -135,7 +137,7 @@ Testy pustíš přes `cd SpeedRampEngine && swift test`.
 ### `TimelineModel/`
 Logika, geometrie a interakce časové osy. Čistý Swift, závislosti
 `SpeedRampEngine` a od F14 `AudioEngine` (oba také čistý Swift), **žádné
-AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **412
+AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **419
 testů, ověřeno; 29 invariantů ve `validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
 křivku (uzly kotvené ve zdrojovém čase) a `rampPlaybackPlan` vydává
 segmentaci v celých tickách pro `scaleTimeRange`. Od vylepšovacích fází
@@ -200,6 +202,12 @@ navíc:
   kompozice); invariant 29 hlídá jen zápornost a stopu. V mixu jsou to
   tytéž volume rampy jako crossfade; hrana pokrytá crossfadem fade
   NEDOSTANE (dvě rampy přes sebe mix nesmí dostat).
+- **Osa sleduje hlavu (F17):** `scrollToKeep(playhead:scrollX:viewportWidth:
+  maxScrollX:)` — čistá funkce, STRÁNKUJE (hlava za hranou → skok do levé
+  třetiny při jízdě vpřed, do pravé při jízdě zpět), mezi skoky osa STOJÍ.
+  Rezerva 16 b u hrany. Zapojení v `TimelinePane`: vypnuto při scrubování,
+  tažení čehokoli a během live scrollu; kdo si odscrolluje pryč, toho osa
+  nechá být, dokud hlava sama nevjede do výřezu.
 
 ```swift
 var project = Project.empty()                        // V1 + A1 + A2 + T1

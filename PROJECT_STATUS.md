@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (⭐ VŠECHNY FÁZE 0–16 HOTOVÉ — před námi koukance a KILL-GATE 1)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 17 modul 1 hotový — osa sleduje hlavu a JKL)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -9,15 +9,27 @@ Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (v
 
 **⭐ VŠECHNY NAPLÁNOVANÉ FÁZE HOTOVÉ: 0–9 (MVP) i vylepšovací 10–16; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → **hudba s dobami v pravítku, magnetem a dopasováním klipů na dobu** → **analýzy kvality (neostrost, hluchá místa) se značkami na klipech** → **zvukové fade úchyty** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a normalizací na −1 dBTP → export SRT.
 
-Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (412, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 519 automatických testů, 0 selhání.** Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
+Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (419, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 526 automatických testů, 0 selhání.** Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 17 — ergonomie střihu** (modul 1: osa sleduje hlavu + JKL). Plán fází 0–16 je dostavěný; 29. 07. 2026 k němu přibyla **třetí vlna, fáze 17–21** (`IMPLEMENTACNI_PLAN.md`), sestavená z průzkumu kódu — co v appce po dostavění plánu opravdu chybí.
+**➡️ PŘÍŠTÍ KROK: FÁZE 17, MODUL 2 — výběr a schránka** (multi-výběr shift/⌘/rámečkem, ⌘C/⌘X/⌘V s čerstvými `LinkID` u svázaných dvojic, hromadné operace na celý výběr). Modul 1 (osa sleduje hlavu + JKL) je hotový, viz níž.
 
-**Pořadí odsud:** fáze 17 (ergonomie) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)** → fáze 18–21 v pořadí, které určí svatba.
+**Pořadí odsud:** dokončit fázi 17 (moduly 2–3) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)** → fáze 18–21 v pořadí, které určí svatba.
 
 ⚠️ **Do kill-gate se nepřidávají FUNKCE — fáze 17 je pojmenovaná výjimka a není funkce.** Auto-scroll za hlavou, JKL, kopírovat/vložit a multi-výběr jsou chybějící základy ovládání; bez nich bude svatba bolet z důvodů, které s produktem nesouvisejí (a hromadné operace navíc rozhodují o tom, jestli jsou presety z F13 na dvou stech klipech vůbec použitelné). Všechno ostatní — V2, ducking, multikamera, stabilizace — čeká AŽ ZA svatbu: „Zvládl jsi to, ale bolelo to → opravy toho, co bolelo. Žádné nové funkce, dokud to nebolí míň."
+
+## 🔨 FÁZE 17 — ergonomie střihu (modul 1 HOTOVÝ 29. 07. 2026)
+
+✅ **Modul 1 — osa sleduje hlavu + JKL (29. 07. 2026).**
+
+  - **Auto-scroll STRÁNKUJE, ne centruje.** `TimelineGeometry.scrollToKeep(playhead:scrollX:viewportWidth:maxScrollX:)` (+7 testů, celkem 419) — čistá funkce bez UI: dokud je hlava ve výřezu, vrací `nil` a osa STOJÍ; když vyjede, skočí o stránku tak, aby dosedla do levé třetiny (jízda vpřed) nebo pravé (jízda zpět — jinak by se při přehrávání pozpátku skákalo po snímcích). Rezerva 16 bodů u hrany (hlava má šířku a mezi tiky urazí kus cesty), ořez na rozsah scrollu, a když z ořezu vyjde tatáž pozice, vrací `nil` místo scrollu o nic.
+  - **Kdy se NEsleduje:** scrubování (`isUserScrubbing`), jakékoli tažení (klip, titulek, fade, přechod — `documentView.hasActiveDrag`) a **live scroll** (`NSScrollViewWillStartLiveScrollNotification`, macOS 10.9+; `boundsDidChange` uživatelský scroll od programového nerozliší). Kdo si odscrolluje pryč od hlavy, toho osa nechá být, dokud hlava sama nevjede zpět do výřezu — klik do pravítka je vždycky uvnitř výřezu, takže „vrať se k hlavě" nepotřebuje žádnou další cestu.
+  - **JKL:** žebřík −8…8 v `PlaybackControlleru`, L doprava, J doleva, K na pauzu (konvence NLE — ze 4× vpřed jede J na 2×, ne rovnou pozpátku). Klávesy visí na `keyDown` osy, NE na SwiftUI `keyboardShortcut`: písmeno bez modifikátoru by střílelo i při psaní titulku. KVO na `player.rate` srovná stav, když přehrávač sám zastaví (konec osy).
+  - **⚠️ Změřeno (`--jkl-check`), a je to překvapení proti plánu:** na naší kompozici ze 4K HEVC **`canPlayReverse` i `canPlayFastReverse` hlásí `true`** — zpětné přehrávání funguje bez fallbacku. Vpřed 1/2/4× jede na **97–98 %** slíbené rychlosti, pozpátku −1/−2× jen na **84 %** (trhá, přesně jak plán čekal). Krokovací fallback je tedy postavený, ale nikdy se nespustí — proto ho kontrola **vynucuje** (`forcesSteppingFallback`) a měří: −1/−2× vynuceně krokováním na **93/97 %** času (obraz trhá víc, zvuk nehraje; přiznané oranžovým „(krokováním)" v transportu).
+  - **⚠️ Past, kterou fallback musel obejít:** krok si vede VLASTNÍ kurzor. `player.currentTime()` odpovídá poslednímu DOKONČENÉMU seeku, a protože se seeky slučují (QA1820), krokování o `currentTime` by se zaseklo na místě. Uživatelský seek kurzor srovná — jinak by si s časovačem přetahovaly hlavu.
+  - **Ověřeno `--jkl-check` i integračně:** simulace 601 tiků hlavy → **3 skoky osy, hlava mimo okno 0×**; odzoomovaná osa (celá se vejde do okna) **0 skoků**. V běžícím okně scroll **0 → 1047 b za 12 s přehrávání**, hlava ve výřezu po celou dobu (115 vzorků). Řetězec kláves: syntetické L, L, J, K poslané do osy dají **2× → 1× → pauza**, tedy keyDown → hook controlleru → přehrávač drží.
+  - *Koukanec rukou (v seznamu): auto-scroll při přehrávání dlouhé osy, JKL na klávesnici, ruční odscrollování během přehrávání (osa má nechat být), indikátor rychlosti v transportu. `--jkl-demo` postaví osu a rozjede ji na 2×.*
 
 ## ✅ FÁZE 16 — vymazlení a technické dluhy (HOTOVÁ 29. 07. 2026)
 

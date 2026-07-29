@@ -135,7 +135,7 @@ Testy pustíš přes `cd SpeedRampEngine && swift test`.
 ### `TimelineModel/`
 Logika, geometrie a interakce časové osy. Čistý Swift, závislosti
 `SpeedRampEngine` a od F14 `AudioEngine` (oba také čistý Swift), **žádné
-AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **408
+AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **412
 testů, ověřeno; 29 invariantů ve `validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
 křivku (uzly kotvené ve zdrojovém čase) a `rampPlaybackPlan` vydává
 segmentaci v celých tickách pro `scaleTimeRange`. Od vylepšovacích fází
@@ -187,6 +187,12 @@ navíc:
   a soubor bez zvukové stopy je z definice ticho. Pohyb se měří a
   ukládá, ale v klasifikaci v1 se nepoužívá (kapsa se hýbe, dekorace
   stojí — hluchost neurčuje).
+- **Přechody na ose (F16, drobnosti z koukanců):** `transitionArms(clipID:)`
+  vrací ramena, která musí zůstat uvnitř klipu — **náhled trimu je
+  zařezává, takže se tažení o přechod OPŘE** místo tichého odmítnutí při
+  puštění. Trim, který střih zruší (odtažení od souseda → mezera), rameno
+  neomezuje: tam přechod legálně umírá s ním. Přechod jde vybrat klikem
+  do těla (`selectedTransition`) a smazat Delete.
 - **Fade (F16):** `Clip.audioFades` přes `setAudioFades` — jen zvuková
   stopa. Fade jsou HRANOVÉ: split/overwrite dávají nájezd začátku
   a dojezd konci. Trim smí klip zkrátit pod součet fade — délky

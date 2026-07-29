@@ -56,6 +56,59 @@ final class TimelineController: ObservableObject {
     /// Výběr. Totéž — stav UI, ne dokumentu.
     @Published var selection: Set<ClipID> = []
 
+    // MARK: - Rozsah exportu (fáze 17, modul 3)
+
+    /// In a out bod na ose. Stav UI jako hlava — do projektového souboru
+    /// nepatří a undo se jich netýká.
+    @Published var inPoint: Frames?
+    @Published var outPoint: Frames?
+
+    /// Co se bude exportovat. Bez bodů (nebo s obrácenými) celý projekt —
+    /// export nikdy nesmí tiše vyrobit prázdný soubor.
+    var exportRange: Range<Frames> { project.exportRange(inPoint: inPoint, outPoint: outPoint) }
+
+    /// Je to opravdu výřez, nebo celý film?
+    var hasExportRange: Bool {
+        let range = exportRange
+        return range.lowerBound.count > 0 || range.upperBound < project.duration
+    }
+
+    func setInPoint(_ frame: Frames?) {
+        inPoint = frame
+        // Obrácené body se nedrží — druhý ustoupí, ať je stav vždycky
+        // smysluplný a nemusí se to dohánět až v exportu.
+        if let inPoint, let out = outPoint, out <= inPoint { outPoint = nil }
+    }
+
+    func setOutPoint(_ frame: Frames?) {
+        outPoint = frame
+        if let outPoint, let inp = inPoint, outPoint <= inp { inPoint = nil }
+    }
+
+    func clearExportRange() {
+        inPoint = nil
+        outPoint = nil
+    }
+
+    /// Uspořádat klipy stopy podle času natočení (fáze 17, modul 3).
+    func arrangeChronologically(trackID: TrackID) {
+        var updated = project
+        do {
+            let undated = try updated.arrangeChronologically(trackID: trackID)
+            guard updated != project else {
+                onStatus?("Klipy už jsou v chronologickém pořadí.")
+                return
+            }
+            undo.record(project)
+            project = updated
+            onStatus?(undated > 0
+                      ? "Uspořádáno chronologicky; \(undated) klipů bez času natočení je na konci."
+                      : "Uspořádáno chronologicky podle času natočení.")
+        } catch {
+            onStatus?("Uspořádat nešlo: na sousední stopě leží něco, co by se překrylo.")
+        }
+    }
+
     /// Vybraný titulek na T1 (fáze 11, modul 3). Výběry se navzájem
     /// vylučují — inspektor pod přehrávačem ukazuje právě jednu věc.
     @Published var selectedTitle: TitleClipID?
@@ -814,7 +867,11 @@ final class TimelineController: ObservableObject {
                               // Nepřímý, ale jediný dostupný signál: offset
                               // zvukové stopy sonda vyplní, jen když zvuková
                               // stopa existuje.
-                              hasAudio: timing.audioSourceOffset != nil)
+                              hasAudio: timing.audioSourceOffset != nil,
+                              // Čas natočení (fáze 17) — sonda ho přečetla
+                              // spolu s časováním, tady se jen předává dál.
+                              creationDate: timing.creationDate,
+                              creationDateSource: timing.creationDateSource)
             built.addAsset(asset)
 
             let start = built.duration

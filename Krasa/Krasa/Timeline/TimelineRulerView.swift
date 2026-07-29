@@ -71,6 +71,7 @@ final class TimelineRulerView: NSView {
                                                width: Double(bounds.width),
                                                overscanPoints: Self.minimumLabelSpacing)
 
+        drawExportRange(geometry: geometry)
         drawMinorTicks(geometry: geometry, range: range, interval: interval)
         drawBeatMarks(geometry: geometry, range: range)
         drawLabels(geometry: geometry, range: range, interval: interval, frameRate: frameRate)
@@ -98,6 +99,28 @@ final class TimelineRulerView: NSView {
             guard frame.count % interval.count != 0 else { continue }   // pod popiskem už ryska je
             let x = (geometry.x(for: frame) - scrollX).rounded()
             NSRect(x: x, y: bounds.height - 5, width: 1, height: 4).fill()
+        }
+    }
+
+    /// Výřez k exportu (fáze 17, modul 3): světlý pruh mezi in a out
+    /// a plné zarážky na obou koncích.
+    ///
+    /// Kreslí se, JEN když je výřez opravdu výřez — zvýrazňovat celý film
+    /// by znamenalo, že „nic nevybráno" a „vybráno vše" vypadá stejně,
+    /// a uživatel by pak nevěděl, jestli mu export ukrojí konec.
+    private func drawExportRange(geometry: TimelineGeometry) {
+        guard controller.hasExportRange else { return }
+        let range = controller.exportRange
+        let startX = geometry.x(for: range.lowerBound) - scrollX
+        let endX = geometry.x(for: range.upperBound) - scrollX
+        guard endX > 0, startX < Double(bounds.width) else { return }
+
+        TimelinePalette.clipSelectedStroke.withAlphaComponent(0.18).setFill()
+        NSRect(x: startX, y: 0, width: endX - startX, height: bounds.height).fill()
+
+        TimelinePalette.clipSelectedStroke.setFill()
+        for x in [startX, endX - 2] {
+            NSRect(x: x.rounded(), y: 0, width: 2, height: bounds.height).fill()
         }
     }
 

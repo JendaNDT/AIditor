@@ -169,6 +169,15 @@ final class TimelinePane: NSView {
                 .sink { [weak self] _ in self?.documentView.refreshClips() },
             // Dopočítané vzorky ostrosti a hluchosti (fáze 15) — přijdou
             // jednou za asset z pozadí, reload přepočítá značky kvality.
+            // In/out výřezu (fáze 17, modul 3) — mění se jen pruh v pravítku.
+            controller.$inPoint
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.rulerView.needsDisplay = true },
+            controller.$outPoint
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.rulerView.needsDisplay = true },
             controller.$sharpnessSamples
                 .dropFirst()
                 .receive(on: DispatchQueue.main)

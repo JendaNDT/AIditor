@@ -27,6 +27,10 @@ final class VideoResampler {
     private weak var writer: AVAssetWriter?
     private let frameDuration: CMTime
     private let slotCount: Int
+    /// Zdrojový čas prvního slotu. Nenulový při exportu výřezu (fáze 17):
+    /// čtečka pak dodává vzorky od `startTime` a zapisovač dostal tentýž
+    /// čas jako začátek session, takže výsledný soubor stejně začíná nulou.
+    private let startTime: CMTime
     /// Úprava snímku před zápisem (fáze 11: titulky). Dostává slot, ne PTS —
     /// tentýž zdrojový snímek podržený přes víc slotů může v každém slotu
     /// potřebovat jinou dekoraci (titulek začíná/končí uprostřed držení).
@@ -56,6 +60,7 @@ final class VideoResampler {
          writer: AVAssetWriter,
          frameDuration: CMTime,
          slotCount: Int,
+         startTime: CMTime = .zero,
          frameDecorator: ((CVPixelBuffer, Int) -> CVPixelBuffer)? = nil) {
         self.output = output
         self.adaptor = adaptor
@@ -63,6 +68,7 @@ final class VideoResampler {
         self.writer = writer
         self.frameDuration = frameDuration
         self.slotCount = slotCount
+        self.startTime = startTime
         self.frameDecorator = frameDecorator
     }
 
@@ -74,8 +80,10 @@ final class VideoResampler {
 
             // Čas slotu se počítá násobením indexu, ne přičítáním v cyklu —
             // sčítání CMTime by po tisících snímcích nakumulovalo chybu.
-            let slotTime = CMTime(value: frameDuration.value * Int64(slot),
-                                  timescale: frameDuration.timescale)
+            // Při exportu výřezu je mřížka posunutá o začátek rozsahu.
+            let slotTime = CMTimeAdd(startTime,
+                                     CMTime(value: frameDuration.value * Int64(slot),
+                                            timescale: frameDuration.timescale))
 
             advance(to: slotTime)
 

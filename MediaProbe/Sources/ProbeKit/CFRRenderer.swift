@@ -90,6 +90,7 @@ public enum CFRRenderer {
                               audioGainLinear: Double = 1.0,
                               videoComposition: AVVideoComposition? = nil,
                               frameDecorator: (@Sendable (CVPixelBuffer, Int) -> CVPixelBuffer)? = nil,
+                              timeRange: CMTimeRange? = nil,
                               onProgress: (@Sendable (Double) -> Void)? = nil,
                               to outputURL: URL) async throws -> CFRRenderResult {
         let started = Date()
@@ -170,6 +171,16 @@ public enum CFRRenderer {
             throw ProbeError.message("Čtečka nepřijala video výstup s formátem \(fourCC(pixelFormat)).")
         }
         reader.add(videoOutput)
+
+        // Export výřezu (fáze 17, modul 3): čte se jen zadaný úsek.
+        // ⚠️ Časy vzorků pak začínají na `timeRange.start`, ne na nule —
+        // proto níž `startSession(atSourceTime:)` na tomtéž čase a sloty
+        // resampleru posunuté o `start`. Zapisovač časy odečte sám,
+        // takže výsledný soubor začíná na nule.
+        // <https://developer.apple.com/documentation/avfoundation/avassetreader/timerange>
+        if let timeRange {
+            reader.timeRange = timeRange
+        }
 
         var audioOutput: AVAssetReaderOutput?
         var audioChannels: UInt32 = 0
@@ -312,12 +323,15 @@ public enum CFRRenderer {
         guard reader.startReading() else {
             throw reader.error ?? ProbeError.message("Čtečku se nepodařilo spustit.")
         }
-        writer.startSession(atSourceTime: .zero)
+        writer.startSession(atSourceTime: timeRange?.start ?? .zero)
 
         // MARK: Převzorkování
 
         let sourceDuration = try await asset.load(.duration)
-        let slotCount = frameSlotCount(duration: sourceDuration, frameDuration: frameDuration)
+        let renderedDuration = timeRange.map {
+            CMTimeMinimum($0.duration, CMTimeSubtract(sourceDuration, $0.start))
+        } ?? sourceDuration
+        let slotCount = frameSlotCount(duration: renderedDuration, frameDuration: frameDuration)
 
         let resampler = VideoResampler(output: videoOutput,
                                        adaptor: adaptor,
@@ -325,6 +339,7 @@ public enum CFRRenderer {
                                        writer: writer,
                                        frameDuration: frameDuration,
                                        slotCount: slotCount,
+                                       startTime: timeRange?.start ?? .zero,
                                        frameDecorator: frameDecorator)
         resampler.onProgress = onProgress
 

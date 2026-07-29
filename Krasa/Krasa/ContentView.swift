@@ -317,7 +317,7 @@ final class AppModel: ObservableObject {
                 found.append(timing)
             }
         }
-        clips = found.sorted { $0.name < $1.name }
+        clips = ClipTiming.chronological(found)
         startProxyGeneration()
         startSharpnessAnalysis()
     }
@@ -527,7 +527,12 @@ final class AppModel: ObservableObject {
             let bookmark = try? url.bookmarkData(options: .withSecurityScope,
                                                 includingResourceValuesForKeys: nil,
                                                 relativeTo: nil)
-            let photo = Asset.still(url: url, bookmark: bookmark)
+            var photo = Asset.still(url: url, bookmark: bookmark)
+            // Čas pořízení fotky (fáze 17): EXIF `DateTimeOriginal`, a když
+            // chybí, datum souboru — čtečka to rozliší a UI zdroj přizná.
+            let creation = CreationDateReader.readStill(url: url)
+            photo.creationDate = creation.date
+            photo.creationDateSource = creation.source
             project.addAsset(photo)
             guard let clip = try? project.makeClip(assetID: photo.id, at: cursor),
                   (try? project.insert(clip, onTrack: v1)) != nil else { continue }
@@ -681,6 +686,17 @@ final class AppModel: ObservableObject {
                 cues: project.titleCues(),
                 canvas: CGSize(width: canvas.width, height: canvas.height))
 
+            // Export výřezu (fáze 17, modul 3): in/out z osy. Bez nich je
+            // rozsah celý projekt a cesta je ta dosavadní.
+            let range = timeline.exportRange
+            let exportsPart = timeline.hasExportRange
+            let rangeTime = exportsPart
+                ? CMTimeRange(start: CompositionBuilder.time(of: range.lowerBound,
+                                                             frameRate: project.timeline.frameRate),
+                              end: CompositionBuilder.time(of: range.upperBound,
+                                                           frameRate: project.timeline.frameRate))
+                : nil
+
             let result = try await CFRRenderer.render(
                 asset: composition,
                 videoTrack: video,
@@ -697,6 +713,7 @@ final class AppModel: ObservableObject {
                 // Přechody (fáze 10): tatáž video kompozice jako v náhledu.
                 videoComposition: built.videoComposition,
                 frameDecorator: titleRenderer?.decorator(),
+                timeRange: rangeTime,
                 onProgress: { fraction in
                     Task { @MainActor [weak self] in
                         guard let self, self.exportProgress != nil else { return }
@@ -708,6 +725,10 @@ final class AppModel: ObservableObject {
             status = "Export hotový: \(url.lastPathComponent) — "
                 + "\(result.writtenFrameCount) snímků za "
                 + String(format: "%.1f s.", result.elapsedSeconds)
+                + (exportsPart
+                   ? " Jen výřez \(range.lowerBound.timecode(frameRate: project.timeline.frameRate).text)"
+                     + "–\(range.upperBound.timecode(frameRate: project.timeline.frameRate).text)."
+                   : "")
                 + loudnessNote
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } catch {
@@ -2371,6 +2392,212 @@ final class AppModel: ObservableObject {
               : "❌ porušené invarianty: \(timeline.project.validate())")
     }
 
+    /// Kvantitativní kontrola fáze 17, modulu 3 (`--range-check`).
+    ///
+    ///  A) čas natočení: co se opravdu vyčetlo z reálných souborů a odkud
+    ///  B) chronologie: přeházená osa → uspořádat → pořadí a sync dvojic
+    ///  C) export výřezu: SNÍMKY výstupu i jejich OBSAH musí odpovídat
+    ///     výřezu, ne celé ose (jinak by se dalo „ověřit" prázdné video)
+    func verifyChronologyAndRange() async {
+        print("=== A) čas natočení ===")
+        var withMetadata = 0, withFile = 0, without = 0
+        for timing in clips {
+            switch timing.creationDateSource {
+            case .metadata: withMetadata += 1
+            case .fileSystem: withFile += 1
+            case nil: without += 1
+            }
+        }
+        for timing in ClipTiming.chronological(clips).prefix(5) {
+            let stamp = timing.creationDate.map {
+                let f = DateFormatter()
+                f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+                return f.string(from: $0)
+            } ?? "—"
+            print("  \(timing.name)  \(stamp)  [\(timing.creationDateSource.map(String.init(describing:)) ?? "nic")]")
+        }
+        print("z metadat: \(withMetadata), z data souboru: \(withFile), bez času: \(without)")
+        print(withMetadata > 0 ? "✅ reálné klipy nesou čas natočení v metadatech"
+                               : "⚠️ žádný klip nemá metadata — řadit se bude podle data souboru")
+        let sortedNames = ClipTiming.chronological(clips).map(\.name)
+        print(sortedNames == sortedNames.sorted() || withMetadata > 0
+              ? "✅ řazení proběhlo (pořadí: \(sortedNames.joined(separator: ", ")))"
+              : "❌ řazení selhalo")
+
+        print("\n=== B) chronologie na ose ===")
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && $0.hasAudio && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný asset s obrazem i zvukem"); return
+        }
+        // Tři assety s vlastními časy natočení, položené na osu v OPAČNÉM
+        // pořadí, každý se svázaným zvukem.
+        var project = Project.empty()
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        var assetIDs: [AssetID] = []
+        for i in 0..<3 {
+            // Tentýž soubor pod novým ID — jde o časy, ne o obsah.
+            let asset = Asset(originalURL: source.originalURL,
+                              bookmark: source.bookmark,
+                              duration: source.duration,
+                              measuredFrameRate: source.measuredFrameRate,
+                              hasVideo: true, hasAudio: true,
+                              creationDate: base.addingTimeInterval(Double(i) * 600),
+                              creationDateSource: .metadata)
+            project.addAsset(asset)
+            assetIDs.append(asset.id)
+        }
+        let v1 = project.timeline.tracks[0].id
+        let a1 = project.timeline.tracks[1].id
+        do {
+            for (position, assetID) in assetIDs.reversed().enumerated() {
+                let link = LinkID()
+                var video = Clip(assetID: assetID, timelineStart: Frames(position * 120),
+                                 duration: Frames(60), sourceStart: .zero)
+                var audio = Clip(assetID: assetID, timelineStart: Frames(position * 120),
+                                 duration: Frames(60), sourceStart: .zero)
+                video.linkID = link
+                audio.linkID = link
+                try project.insertLinked(video: video, onVideoTrack: v1,
+                                         audio: audio, onAudioTrack: a1)
+            }
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        timeline.project = project
+        timeline.arrangeChronologically(trackID: v1)
+
+        let order = timeline.project.timeline.tracks[0].clips.map(\.assetID)
+        let starts = timeline.project.timeline.tracks[0].clips.map(\.timelineStart.count)
+        print(order == assetIDs
+              ? "✅ klipy se seřadily podle času natočení (nejstarší první)"
+              : "❌ pořadí nesedí")
+        print(starts == [0, 60, 120]
+              ? "✅ mezery se zavřely (0, 60, 120)"
+              : "❌ pozice po uspořádání: \(starts)")
+        var syncOK = true
+        for clip in timeline.project.timeline.tracks[0].clips {
+            let partners = timeline.project.linkedPartners(of: clip.id)
+            if partners.first?.timelineStart != clip.timelineStart { syncOK = false }
+        }
+        print(syncOK ? "✅ zvuk zůstal u svého obrazu (sync se nerozešel)"
+                     : "❌ zvuk se rozešel s obrazem")
+        print(timeline.project.validate().isEmpty
+              ? "✅ osa po uspořádání bez porušených invariantů"
+              : "❌ \(timeline.project.validate())")
+
+        print("\n=== C) export výřezu ===")
+        // ⚠️ Osa ze TŘÍ JEDNOBAREVNÝCH fotek, ne ze tří míst téhož klipu.
+        // S reálným záběrem se jas prvního snímku výřezu lišil od jasu
+        // začátku osy jen o 0,95 — kontrola by prošla, i kdyby renderer
+        // rozsah ignoroval. Černá / šedá / bílá to rozhodne beze zbytku.
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("KrasaRangeCheck", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        var ranged = Project.empty()
+        let rv1 = ranged.timeline.tracks[0].id
+        let shades: [(name: String, gray: Double)] = [("cerna", 0.0), ("seda", 0.5), ("bila", 1.0)]
+        do {
+            for (i, shade) in shades.enumerated() {
+                let png = directory.appendingPathComponent("\(shade.name).png")
+                guard writeSquarePNG(to: png, side: 640,
+                                     color: CGColor(red: shade.gray, green: shade.gray,
+                                                    blue: shade.gray, alpha: 1)) else {
+                    print("❌ fotku se nepodařilo vyrobit"); return
+                }
+                let photo = Asset.still(url: png)
+                ranged.addAsset(photo)
+                let clip = Clip(assetID: photo.id, timelineStart: Frames(i * 60),
+                                duration: Frames(60), sourceStart: .zero)
+                try ranged.insert(clip, onTrack: rv1)
+            }
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        timeline.project = ranged
+
+        let wholeURL = directory.appendingPathComponent("cela_osa.mp4")
+        let partURL = directory.appendingPathComponent("vyrez.mp4")
+
+        let savedProfile = loudnessProfile
+        loudnessProfile = nil
+        defer { loudnessProfile = savedProfile }
+
+        timeline.clearExportRange()
+        await export(to: wholeURL)
+        print(status)
+        // Výřez = prostřední klip (60–120).
+        timeline.setInPoint(Frames(60))
+        timeline.setOutPoint(Frames(120))
+        await export(to: partURL)
+        print(status)
+        timeline.clearExportRange()
+
+        func frameCount(_ url: URL) async -> Int {
+            let asset = AVURLAsset(url: url)
+            guard let duration = try? await asset.load(.duration) else { return -1 }
+            return Int((duration.seconds * 30).rounded())
+        }
+        let whole = await frameCount(wholeURL)
+        let part = await frameCount(partURL)
+        print("celá osa \(whole) snímků, výřez \(part) snímků (čekáno 180 a 60)")
+        print(whole == 180 && part == 60
+              ? "✅ výřez má délku výřezu, ne celé osy"
+              : "❌ délky nesedí")
+
+        // Snímek 0 výřezu musí odpovídat snímku 60 celé osy, ne snímku 0.
+        // (Kdyby renderer rozsah ignoroval, byla by shoda s nulou.)
+        func lumaAt(_ url: URL, frame: Int) async -> Double? {
+            let asset = AVURLAsset(url: url)
+            guard let track = try? await asset.loadTracks(withMediaType: .video).first ?? nil,
+                  let reader = try? AVAssetReader(asset: asset) else { return nil }
+            reader.timeRange = CMTimeRange(start: CMTime(value: CMTimeValue(frame), timescale: 30),
+                                           duration: CMTime(value: 2, timescale: 30))
+            let output = AVAssetReaderTrackOutput(
+                track: track,
+                outputSettings: [kCVPixelBufferPixelFormatTypeKey as String:
+                                    kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange])
+            guard reader.canAdd(output) else { return nil }
+            reader.add(output)
+            reader.startReading()
+            guard let buffer = output.copyNextSampleBuffer(),
+                  let pixel = CMSampleBufferGetImageBuffer(buffer) else { return nil }
+            CVPixelBufferLockBaseAddress(pixel, .readOnly)
+            defer { CVPixelBufferUnlockBaseAddress(pixel, .readOnly) }
+            guard let base = CVPixelBufferGetBaseAddressOfPlane(pixel, 0) else { return nil }
+            let width = CVPixelBufferGetWidthOfPlane(pixel, 0)
+            let height = CVPixelBufferGetHeightOfPlane(pixel, 0)
+            let stride = CVPixelBufferGetBytesPerRowOfPlane(pixel, 0)
+            let bytes = base.assumingMemoryBound(to: UInt8.self)
+            var total = 0.0, samples = 0
+            for y in Swift.stride(from: 0, to: height, by: 8) {
+                for x in Swift.stride(from: 0, to: width, by: 8) {
+                    total += Double(bytes[y * stride + x])
+                    samples += 1
+                }
+            }
+            return samples > 0 ? total / Double(samples) : nil
+        }
+
+        guard let partFirst = await lumaAt(partURL, frame: 0),
+              let partLast = await lumaAt(partURL, frame: 55),
+              let wholeAtCut = await lumaAt(wholeURL, frame: 60),
+              let wholeFirst = await lumaAt(wholeURL, frame: 0) else {
+            print("⚠️ snímky se nepodařilo přečíst"); return
+        }
+        print(String(format: "jas: výřez první %.0f, výřez konec %.0f | celá osa snímek 0 = %.0f, snímek 60 = %.0f",
+                     partFirst, partLast, wholeFirst, wholeAtCut))
+        // Šedá fotka dá ve videorozsahu ~124, černá ~16, bílá ~235. Rozdíly
+        // jsou desítky jasu, ne desetiny — kontrola nemůže projít omylem.
+        print(abs(partFirst - wholeAtCut) < 3 && abs(partFirst - wholeFirst) > 30
+              ? "✅ výřez začíná OBSAHEM na in bodu (šedá), ne na začátku osy (černá)"
+              : "❌ obsah výřezu neodpovídá in bodu")
+        print(abs(partLast - partFirst) < 3
+              ? "✅ výřez končí před dalším klipem (celý je šedý, bílá se do něj nedostala)"
+              : "❌ do výřezu se dostal obsah za out bodem")
+    }
+
     /// CLI ukázka fáze 17 (`--jkl-demo`): dlouhá osa, rychlost 2× a osa
     /// ujíždějící za hlavou. Koukanec pro oko a screenshot; měří `--jkl-check`.
     func runShuttleDemo() async {
@@ -2959,7 +3186,7 @@ final class AppModel: ObservableObject {
                 status = "\(file.lastPathComponent): \(error.localizedDescription)"
             }
         }
-        clips = found.sorted { $0.name < $1.name }
+        clips = ClipTiming.chronological(found)
 
         // Import = NOVÝ neuložený projekt z naskenovaných klipů. Bookmark
         // per asset — bez něj by uložený projekt po restartu nesměl na
@@ -3427,6 +3654,8 @@ struct ContentView: View {
                     await model.runShuttleDemo()
                 } else if arguments.contains("--select-check") {
                     await model.verifySelectionAndClipboard()
+                } else if arguments.contains("--range-check") {
+                    await model.verifyChronologyAndRange()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
@@ -3442,6 +3671,16 @@ struct ContentView: View {
     /// Vybraný klip drží `AppModel`, ne `@State` ve view.
     ///
     /// Jedno úložiště, žádná synchronizace — stejný důvod, proč geometrii
+    /// Popisek času natočení v sidebaru (fáze 17). Datum ze SOUBORU se
+    /// přiznává — po zkopírování z karty to bývá čas kopírování, ne
+    /// natáčení, a řadit se podle něj sice dá, ale věřit mu na minutu ne.
+    private static func creationText(_ date: Date, source: CreationDateSource?) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d. M. yyyy HH:mm:ss"
+        let text = formatter.string(from: date)
+        return source == .fileSystem ? "\(text) (datum souboru)" : text
+    }
+
     /// osy vlastní `TimelineController`. Se dvěma kopiemi by se po přetvoření
     /// view rozešel zvýrazněný řádek od klipu načteného v přehrávači.
     private var clipSelection: Binding<URL?> {
@@ -3487,6 +3726,15 @@ struct ContentView: View {
                          + (clip.droppedFrames > 0 ? " · \(clip.droppedFrames) zahozených" : ""))
                         .font(.caption)
                         .foregroundStyle(clip.isVariable ? .orange : .secondary)
+                    // Čas natočení (fáze 17) — seznam je podle něj seřazený,
+                    // takže musí být vidět. U data ze SOUBORU se to přizná:
+                    // po kopírování z karty to bývá čas kopírování.
+                    if let date = clip.creationDate {
+                        Text(Self.creationText(date, source: clip.creationDateSource))
+                            .font(.caption2)
+                            .foregroundStyle(clip.creationDateSource == .fileSystem
+                                             ? .orange : .secondary)
+                    }
                 }
             }
 

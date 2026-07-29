@@ -1559,6 +1559,19 @@ final class TimelineDocumentView: NSView {
             case "l": controller.onShuttle?(.forward); return
             case "j": controller.onShuttle?(.backward); return
             case "k": controller.onShuttle?(.pause); return
+            // In a out bod výřezu (fáze 17, modul 3) — konvence z NLE.
+            // ⌥I / ⌥O bod zase zruší.
+            case "i": controller.setInPoint(controller.playhead); return
+            case "o": controller.setOutPoint(controller.playhead); return
+            default: break
+            }
+        }
+        if event.modifierFlags.contains(.option),
+           !event.modifierFlags.contains(.command) {
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "i": controller.setInPoint(nil); return
+            case "o": controller.setOutPoint(nil); return
+            case "x": controller.clearExportRange(); return
             default: break
             }
         }
@@ -1639,6 +1652,8 @@ final class TimelineDocumentView: NSView {
     private var menuTitleID: TitleClipID?
     /// Místo na T1, kam míří „Přidat titulek" — snímek a stopa.
     private var menuTitleSpot: (trackID: TrackID, frame: Frames)?
+    /// Stopa pod pravým tlačítkem — cíl „Uspořádat chronologicky" (fáze 17).
+    private var menuTrackID: TrackID?
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let point = convert(event.locationInWindow, from: nil)
@@ -1705,7 +1720,34 @@ final class TimelineDocumentView: NSView {
 
         guard let hit = controller.geometry.hitTest(x: point.x, y: point.y,
                                                     in: controller.project.timeline) else {
-            return nil
+            // Prázdné místo na stopě s klipy: uspořádání a výřez (fáze 17).
+            guard let ti = controller.geometry.trackIndex(atY: point.y,
+                                                          in: controller.project.timeline),
+                  controller.project.timeline.tracks[ti].clips.count > 1 else { return nil }
+            menuTrackID = controller.project.timeline.tracks[ti].id
+
+            let menu = NSMenu()
+            menu.autoenablesItems = false
+            let arrange = NSMenuItem(title: "Uspořádat chronologicky",
+                                     action: #selector(menuArrangeChronologically(_:)),
+                                     keyEquivalent: "")
+            arrange.target = self
+            let dated = controller.project.timeline.tracks[ti].clips
+                .filter { controller.project.creationDate(of: $0.id) != nil }.count
+            arrange.isEnabled = dated > 0
+            arrange.toolTip = dated > 0
+                ? "Seřadí klipy stopy podle času natočení a zavře mezery."
+                : "Žádný klip stopy nemá čas natočení — není podle čeho řadit."
+            menu.addItem(arrange)
+
+            menu.addItem(.separator())
+            let clear = NSMenuItem(title: "Zrušit výřez exportu",
+                                   action: #selector(menuClearExportRange(_:)),
+                                   keyEquivalent: "")
+            clear.target = self
+            clear.isEnabled = controller.hasExportRange
+            menu.addItem(clear)
+            return menu
         }
         // Pravý klik do klipu, který je součástí výběru, výběr NECHÁ být —
         // jinak by se hromadná akce nedala z menu vůbec spustit (fáze 17).
@@ -1925,6 +1967,15 @@ final class TimelineDocumentView: NSView {
     @objc private func menuSyncAudio(_ sender: Any?) {
         guard let clipID = menuClipID else { return }
         controller.onSyncAudioRequest?(clipID)
+    }
+
+    @objc private func menuArrangeChronologically(_ sender: Any?) {
+        guard let trackID = menuTrackID else { return }
+        controller.arrangeChronologically(trackID: trackID)
+    }
+
+    @objc private func menuClearExportRange(_ sender: Any?) {
+        controller.clearExportRange()
     }
 
     @objc private func menuToggleRamp(_ sender: Any?) {

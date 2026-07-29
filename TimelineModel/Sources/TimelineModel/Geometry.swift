@@ -291,6 +291,65 @@ extension TimelineGeometry {
     }
 }
 
+// MARK: - Rámečkový výběr (fáze 17)
+
+/// Obdélník v souřadnicích dokumentu osy.
+///
+/// Vlastní typ, ne `CGRect`: model se překládá bez CoreGraphics (a tedy
+/// i na Linuxu) — týž důvod, proč má Ken Burns `NormalizedRect`.
+public struct TimelineRect: Hashable, Sendable {
+    public var minX: Double
+    public var minY: Double
+    public var maxX: Double
+    public var maxY: Double
+
+    /// Ze dvou rohů v libovolném pořadí — tažení jde všemi čtyřmi směry.
+    public init(from: (x: Double, y: Double), to: (x: Double, y: Double)) {
+        minX = Swift.min(from.x, to.x)
+        maxX = Swift.max(from.x, to.x)
+        minY = Swift.min(from.y, to.y)
+        maxY = Swift.max(from.y, to.y)
+    }
+
+    public var width: Double { maxX - minX }
+    public var height: Double { maxY - minY }
+}
+
+extension TimelineGeometry {
+
+    /// Klipy, které rámeček PROTÍNÁ.
+    ///
+    /// Protíná, ne „obsahuje celé": u dlouhého klipu by se jinak musel
+    /// rámeček táhnout přes půl osy, aby ho chytil.
+    ///
+    /// Titulky rámeček nebere — výběr titulku je v UI výhradní (inspektor
+    /// pod přehrávačem ukazuje právě jednu věc) a míchat ho do množiny
+    /// klipů by znamenalo dva druhy výběru v jednom tažení.
+    public func clips(in rect: TimelineRect, in timeline: Timeline) -> [ClipID] {
+        var out: [ClipID] = []
+        var top = 0.0
+        for track in timeline.tracks {
+            let height = self.height(of: track.kind)
+            defer { top += height + trackSpacing }
+            guard track.kind != .title else { continue }
+            // Svisle: protíná rámeček pruh stopy?
+            guard rect.minY < top + height, top < rect.maxY else { continue }
+
+            let from = frame(atX: rect.minX)
+            let to = frame(atX: rect.maxX)
+            for clip in visibleClips(on: track, in: from ..< Frames(Swift.max(to.count, from.count + 1))) {
+                // `visibleClips` zaokrouhluje přes snímky; hranu porovnáme
+                // ještě v bodech, ať rámeček nechytá klip, kterého se
+                // opticky nedotkl.
+                guard x(for: clip.timelineStart) < rect.maxX,
+                      rect.minX < x(for: clip.timelineEnd) else { continue }
+                out.append(clip.id)
+            }
+        }
+        return out
+    }
+}
+
 // MARK: - Přichytávání
 
 /// Na co se dá přichytit. Model dostane až zaokrouhlený výsledek — sám

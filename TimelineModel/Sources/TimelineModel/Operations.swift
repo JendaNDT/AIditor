@@ -147,17 +147,13 @@ extension Project {
     }
 
     /// Kopie s **novým** ID.
+    ///
+    /// Staví přes `Clip.copied` (fáze 17) — dřív si kopii skládala vlastním
+    /// konstruktorem a fáze 13 tudy ztratila barevný preset. Jedno místo,
+    /// jedna past, jeden test.
     public mutating func duplicate(clipID: ClipID, onto trackID: TrackID, at start: Frames) throws -> ClipID {
         guard let original = timeline.clip(clipID) else { throw TimelineError.clipNotFound(clipID) }
-        var copy = Clip(assetID: original.assetID,
-                        linkID: nil,
-                        timelineStart: start,
-                        duration: original.duration,
-                        sourceStart: original.sourceStart,
-                        speedRamp: original.speedRamp,
-                        kenBurns: original.kenBurns,
-                        colorGrade: original.colorGrade)
-        copy.linkID = nil
+        let copy = original.copied(linkID: nil, timelineStart: start)
         try insert(copy, onTrack: trackID)
         return copy.id
     }

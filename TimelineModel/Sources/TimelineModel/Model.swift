@@ -72,6 +72,18 @@ public struct SpeedRamp: Hashable, Codable, Sendable {
 
 // MARK: - Asset
 
+/// Odkud se vzal čas natočení (fáze 17).
+///
+/// ⚠️ Rozdíl je podstatný a musí být vidět v UI. `metadata` je čas z kamery
+/// (QuickTime `com.apple.quicktime.creationdate` a spol.) — ten sedí.
+/// `fileSystem` je datum souboru: po zkopírování z karty, rozbalení archivu
+/// nebo přeposlání přes messenger to bývá čas KOPÍROVÁNÍ, ne natáčení.
+/// Řadit se podle něj dá, ale tvrdit, že je to čas natočení, ne.
+public enum CreationDateSource: String, Codable, Sendable {
+    case metadata
+    case fileSystem
+}
+
 public struct Asset: Identifiable, Hashable, Codable, Sendable {
     public let id: AssetID
     public var originalURL: URL
@@ -105,6 +117,12 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
     /// Volitelné pole, verze formátu se nezvedá. Zapisuj přes
     /// `Project.setBeatGrid` — validuje tempo.
     public var beatGrid: BeatGrid?
+    /// Kdy byl záběr NATOČEN (fáze 17). Svatba je chronologická událost
+    /// a materiál ze dvou kamer se podle jména seřadit nedá.
+    public var creationDate: Date?
+    /// Odkud čas pochází. ⚠️ Musí být vidět v UI: datum souboru je jen
+    /// náhrada a po zkopírování z karty umí lhát o hodiny i dny.
+    public var creationDateSource: CreationDateSource?
 
     public init(id: AssetID = AssetID(),
                 originalURL: URL,
@@ -117,7 +135,9 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
                 isOffline: Bool = false,
                 transcript: [TranscriptSegment]? = nil,
                 isStill: Bool = false,
-                beatGrid: BeatGrid? = nil) {
+                beatGrid: BeatGrid? = nil,
+                creationDate: Date? = nil,
+                creationDateSource: CreationDateSource? = nil) {
         self.id = id
         self.originalURL = originalURL
         self.proxyURL = proxyURL
@@ -130,6 +150,8 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
         self.transcript = transcript
         self.isStill = isStill
         self.beatGrid = beatGrid
+        self.creationDate = creationDate
+        self.creationDateSource = creationDateSource
     }
 
     /// Fotka jako asset. Jediná správná cesta — nastavuje příznaky tak,
@@ -145,6 +167,7 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case id, originalURL, proxyURL, bookmark, duration, measuredFrameRate
         case hasVideo, hasAudio, isOffline, transcript, isStill, beatGrid
+        case creationDate, creationDateSource
     }
 
     public init(from decoder: Decoder) throws {
@@ -161,6 +184,9 @@ public struct Asset: Identifiable, Hashable, Codable, Sendable {
         transcript = try c.decodeIfPresent([TranscriptSegment].self, forKey: .transcript)
         isStill = try c.decodeIfPresent(Bool.self, forKey: .isStill) ?? false
         beatGrid = try c.decodeIfPresent(BeatGrid.self, forKey: .beatGrid)
+        creationDate = try c.decodeIfPresent(Date.self, forKey: .creationDate)
+        creationDateSource = try c.decodeIfPresent(CreationDateSource.self,
+                                                   forKey: .creationDateSource)
     }
 
     /// Jediné místo v celém projektu, kde se rozhoduje, se kterým souborem

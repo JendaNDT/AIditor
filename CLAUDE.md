@@ -137,7 +137,7 @@ Testy pustíš přes `cd SpeedRampEngine && swift test`.
 ### `TimelineModel/`
 Logika, geometrie a interakce časové osy. Čistý Swift, závislosti
 `SpeedRampEngine` a od F14 `AudioEngine` (oba také čistý Swift), **žádné
-AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **419
+AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **442
 testů, ověřeno; 29 invariantů ve `validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
 křivku (uzly kotvené ve zdrojovém čase) a `rampPlaybackPlan` vydává
 segmentaci v celých tickách pro `scaleTimeRange`. Od vylepšovacích fází
@@ -208,6 +208,20 @@ navíc:
   Rezerva 16 b u hrany. Zapojení v `TimelinePane`: vypnuto při scrubování,
   tažení čehokoli a během live scrollu; kdo si odscrolluje pryč, toho osa
   nechá být, dokud hlava sama nevjede do výřezu.
+- **Schránka a multi-výběr (F17):** `Clipboard` je stav SEZENÍ, ne
+  dokumentu (do souboru nepatří). `clipboard(copying:)` bere svázaná
+  dvojčata celá (vzorec mazání), `paste(_:at:)` razí **čerstvý `LinkID`
+  pro každou skupinu** — se stejným by vazbu sdílely tři klipy a
+  `validate()` hlásí `brokenLink` — a je ATOMICKÝ (co se nevejde celé,
+  nevloží se vůbec; rozstrkání by rozbilo vzájemnou polohu klipů a s ní
+  sync). Vkládá se na PŮVODNÍ stopu, jinak na první téhož druhu.
+  ⚠️ **`Clip.copied(linkID:timelineStart:)` je JEDINÉ místo, kde se klip
+  klonuje** (i `duplicate` jde přes něj) — dřív si kopii stavěla tři místa
+  vlastním konstruktorem a F13 jimi ztratila barevný preset; test porovnává
+  pole REFLEXÍ, takže chytí i budoucí přidané pole.
+  ⚠️ V UI mají `⌘` a `shift` na ose DVA významy (klik = výběr, tažení =
+  slip / vypnuté přichytávání) — rozhoduje se až při puštění podle toho,
+  jestli se myš pohnula.
 
 ```swift
 var project = Project.empty()                        // V1 + A1 + A2 + T1

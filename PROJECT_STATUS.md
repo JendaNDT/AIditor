@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 17 modul 1 hotový — osa sleduje hlavu a JKL)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 17 moduly 1–2 hotové — osa sleduje hlavu, JKL, multi-výběr a schránka)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -9,17 +9,29 @@ Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (v
 
 **⭐ VŠECHNY NAPLÁNOVANÉ FÁZE HOTOVÉ: 0–9 (MVP) i vylepšovací 10–16; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → **hudba s dobami v pravítku, magnetem a dopasováním klipů na dobu** → **analýzy kvality (neostrost, hluchá místa) se značkami na klipech** → **zvukové fade úchyty** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a normalizací na −1 dBTP → export SRT.
 
-Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (419, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 526 automatických testů, 0 selhání.** Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
+Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (442, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 549 automatických testů, 0 selhání.** Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 17, MODUL 2 — výběr a schránka** (multi-výběr shift/⌘/rámečkem, ⌘C/⌘X/⌘V s čerstvými `LinkID` u svázaných dvojic, hromadné operace na celý výběr). Modul 1 (osa sleduje hlavu + JKL) je hotový, viz níž.
+**➡️ PŘÍŠTÍ KROK: FÁZE 17, MODUL 3 — chronologie a export rozsahu** (čas natočení z `AVAsset.load(.creationDate)` s přiznaným fallbackem na datum souboru, řazení a „Uspořádat chronologicky", in/out export výřezu). Moduly 1 a 2 jsou hotové, viz níž.
 
-**Pořadí odsud:** dokončit fázi 17 (moduly 2–3) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)** → fáze 18–21 v pořadí, které určí svatba.
+**Pořadí odsud:** dokončit fázi 17 (modul 3) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)** → fáze 18–21 v pořadí, které určí svatba.
 
 ⚠️ **Do kill-gate se nepřidávají FUNKCE — fáze 17 je pojmenovaná výjimka a není funkce.** Auto-scroll za hlavou, JKL, kopírovat/vložit a multi-výběr jsou chybějící základy ovládání; bez nich bude svatba bolet z důvodů, které s produktem nesouvisejí (a hromadné operace navíc rozhodují o tom, jestli jsou presety z F13 na dvou stech klipech vůbec použitelné). Všechno ostatní — V2, ducking, multikamera, stabilizace — čeká AŽ ZA svatbu: „Zvládl jsi to, ale bolelo to → opravy toho, co bolelo. Žádné nové funkce, dokud to nebolí míň."
 
-## 🔨 FÁZE 17 — ergonomie střihu (modul 1 HOTOVÝ 29. 07. 2026)
+## 🔨 FÁZE 17 — ergonomie střihu (moduly 1–2 HOTOVÉ 29. 07. 2026)
+
+✅ **Modul 2 — výběr a schránka (29. 07. 2026).** Model **+23 testů (celkem 442)**, všechny prošly napoprvé.
+
+  - **Multi-výběr:** ⌘-klik přepíná jeden klip, shift-klik bere rozsah od kotvy (`clipRange(from:to:)` — jen na TÉŽE stopě; co je „mezi" klipem na V1 a klipem na A2?), tažení v prázdné ploše je rámeček (`TimelineRect` + `geometry.clips(in:)` — PROTÍNÁ, ne „obsahuje celé": u dlouhého klipu by se jinak musel rámeček táhnout přes půl osy), ⌘A vezme všechny klipy. Titulky rámeček nebere — jejich výběr je výhradní.
+  - **⚠️ Kolize modifikátorů, kterou musel modul vyřešit:** ⌘ i shift už na ose význam MĚLY — ⌘ v těle klipu je slip, shift při tažení vypíná přichytávání. Řešení: o výběru se rozhoduje až při PUŠTĚNÍ. Nepohnulo se = byl to klik a platí výběr; pohnulo = platí tažení. Kontrola to měří zvlášť („⌘-klik bez pohybu NEudělal slip").
+  - **Schránka ⌘C/⌘X/⌘V** vkládá na hlavu. **Svázané dvojice se kopírují CELÉ** (i když uživatel vybral jen obraz — stejně jako se celé mažou) a vložení razí každé skupině **ČERSTVÝ `LinkID`**: se stejným by vazbu sdílely tři klipy a `validate()` hlásí `brokenLink` — táž past, kterou už jednou chytil split svázaného páru (fáze 2). Osamocená půlka vazbu ztrácí (vazba na jeden klip není vazba). Vkládá se na PŮVODNÍ stopu (hudba z A2 nesmí přistát na A1 pod řečí), jinak na první stopu téhož druhu.
+  - **Vložení je ATOMICKÉ:** co se nevejde celé, nevloží se vůbec, a řekne se to („Na hlavě není místo — vlož jinam nebo udělej díru."). Rozstrkat klipy po volných místech by rozbilo jejich vzájemnou polohu, a s ní sync obrazu se zvukem — přesně to, kvůli čemu se offsety uchovávají. Nový hook `onStatus` vede hlášky z osy do stavového řádku; tiché nic nutí uživatele mačkat ⌘V třikrát.
+  - **⚠️ `Clip.copied(linkID:timelineStart:)` je JEDINÉ místo, kde se klip klonuje** (i `duplicate` je na něj převedený). Dřív si kopii stavěla tři místa vlastním konstruktorem a fáze 13 jimi ztratila barevný preset. Test porovnává pole **reflexí** (`Mirror`), ne vypsaným seznamem — takže chytí i pole, které někdo přidá za rok.
+  - **Hromadné operace — vlastní odměna modulu:** preset i jeho posuvník síly jedou na celý výběr, fade tažením úchytu se rozdá všem vybraným zvukovým klipům (délky se každému zařežou zvlášť — krátký klip dostane, co unese), kontextové menu nabídne „Zpomalit 0,25× (N klipů)". **Rampa se každému klipu počítá z JEHO spotřeby** — uzly jsou kotvené ve zdrojovém čase konkrétního záběru, kopírovat je z cizího klipu nejde. Klipy, kde operace nesedí, se přeskočí a řekne se kolik.
+  - **Ověřeno `--select-check`:** ⌘-klik přidá i odebere, shift rozsah 4 klipy, rámeček 3 protnuté (a zvuk pod ním ne), ⌘A 7; kopie svázaného obrazu vezme i zvuk, vložená dvojice má čerstvou vazbu a projekt je **bez porušených invariantů**; vložení na obsazené místo nezmění NIC; **preset na 5 klipů = jeden undo krok** (⌘Z vrátí všech 5 naráz), zpomalení na 5 taky. V běžícím okně syntetickými událostmi: tažení myší vybere rámečkem 3 klipy, ⌘-klik přidá čtvrtý a neudělá slip, ⌘C/⌘V z klávesnice vloží klip na hlavu.
+  - **Přiznané meze v1:** tažení víc vybraných klipů naráz se NEDĚLÁ (táhne se ten pod kurzorem — `TimelineInteraction` je automat na jeden klip) a **přechody se nekopírují** (přechod patří střihu dvojice sousedů; vložené sousedící klipy mají čistý střih). Ani jedno není v zadání modulu; kdyby to na svatbě chybělo, je to položka do backlogu.
+  - *Koukanec rukou (v seznamu): rámeček přes deset klipů, ⌘-klik, shift-klik, ⌘C/⌘V na hlavu, preset na celý výběr a ⌘Z.*
 
 ✅ **Modul 1 — osa sleduje hlavu + JKL (29. 07. 2026).**
 

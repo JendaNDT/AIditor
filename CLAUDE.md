@@ -137,7 +137,7 @@ Testy pustíš přes `cd SpeedRampEngine && swift test`.
 ### `TimelineModel/`
 Logika, geometrie a interakce časové osy. Čistý Swift, závislosti
 `SpeedRampEngine` a od F14 `AudioEngine` (oba také čistý Swift), **žádné
-AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **442
+AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **453
 testů, ověřeno; 29 invariantů ve `validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
 křivku (uzly kotvené ve zdrojovém čase) a `rampPlaybackPlan` vydává
 segmentaci v celých tickách pro `scaleTimeRange`. Od vylepšovacích fází
@@ -222,6 +222,19 @@ navíc:
   ⚠️ V UI mají `⌘` a `shift` na ose DVA významy (klik = výběr, tažení =
   slip / vypnuté přichytávání) — rozhoduje se až při puštění podle toho,
   jestli se myš pohnula.
+- **Chronologie a výřez (F17):** `Asset.creationDate` + `creationDateSource`
+  (`metadata` / `fileSystem`) — datum souboru je NÁHRADA a UI ji přiznává
+  (po kopírování z karty je to čas kopírování). Čte `CreationDateReader`:
+  `AVAsset.load(.creationDate)` → `load(.dateValue)`, u fotek EXIF
+  `DateTimeOriginal` přes ImageIO, teprve pak soubor. ⚠️ Synchronní
+  `asset.creationDate` je od macOS 13 deprecated.
+  `arrangeChronologically(trackID:)` řadí stabilně, zavírá mezery, drží
+  začátek stopy a **posouvá svázaná dvojčata o totéž** (jinak se rozejde
+  obraz se zvukem); klipy bez data jdou dozadu a jejich počet se vrací.
+  Export výřezu: `exportRange(inPoint:outPoint:)` v modelu (chybějící nebo
+  obrácené body = CELÝ projekt), v `CFRRendereru` volitelný `timeRange` =
+  `reader.timeRange` + `startSession(atSourceTime:)` + posunutá mřížka
+  slotů; zapisovač časy odečte, takže soubor začíná nulou.
 
 ```swift
 var project = Project.empty()                        // V1 + A1 + A2 + T1

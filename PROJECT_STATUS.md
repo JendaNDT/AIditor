@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 17 moduly 1–2 hotové — osa sleduje hlavu, JKL, multi-výběr a schránka)*
+*Naposled aktualizováno: 29. 07. 2026 (⭐ FÁZE 17 CELÁ HOTOVÁ — před námi koukance a KILL-GATE 1)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -9,17 +9,30 @@ Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (v
 
 **⭐ VŠECHNY NAPLÁNOVANÉ FÁZE HOTOVÉ: 0–9 (MVP) i vylepšovací 10–16; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → **hudba s dobami v pravítku, magnetem a dopasováním klipů na dobu** → **analýzy kvality (neostrost, hluchá místa) se značkami na klipech** → **zvukové fade úchyty** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a normalizací na −1 dBTP → export SRT.
 
-Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (442, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 549 automatických testů, 0 selhání.** Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
+Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (453, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 560 automatických testů, 0 selhání.** Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 17, MODUL 3 — chronologie a export rozsahu** (čas natočení z `AVAsset.load(.creationDate)` s přiznaným fallbackem na datum souboru, řazení a „Uspořádat chronologicky", in/out export výřezu). Moduly 1 a 2 jsou hotové, viz níž.
+**➡️ PŘÍŠTÍ KROK: KOUKANCE RUKOU a pak 🚧 KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu** (materiál ~konec srpna 2026). Fáze 17 je celá hotová a byla poslední, která směla přijít před kill-gate.
 
-**Pořadí odsud:** dokončit fázi 17 (modul 3) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)** → fáze 18–21 v pořadí, které určí svatba.
+**Pořadí odsud:** koukance rukou → 🚧 **KILL-GATE 1 (svatba)** → fáze 18–21 v pořadí, které určí svatba. Do té doby se **nepřidávají funkce**: „Zvládl jsi to, ale bolelo to → opravy toho, co bolelo."
 
 ⚠️ **Do kill-gate se nepřidávají FUNKCE — fáze 17 je pojmenovaná výjimka a není funkce.** Auto-scroll za hlavou, JKL, kopírovat/vložit a multi-výběr jsou chybějící základy ovládání; bez nich bude svatba bolet z důvodů, které s produktem nesouvisejí (a hromadné operace navíc rozhodují o tom, jestli jsou presety z F13 na dvou stech klipech vůbec použitelné). Všechno ostatní — V2, ducking, multikamera, stabilizace — čeká AŽ ZA svatbu: „Zvládl jsi to, ale bolelo to → opravy toho, co bolelo. Žádné nové funkce, dokud to nebolí míň."
 
-## 🔨 FÁZE 17 — ergonomie střihu (moduly 1–2 HOTOVÉ 29. 07. 2026)
+## ✅ FÁZE 17 — ergonomie střihu (HOTOVÁ 29. 07. 2026)
+
+**Hotovo když** (kritérium plánu): *přehrání dvacetiminutové osy nevyžaduje sáhnout na scroll* ✅ (auto-scroll, modul 1) · *preset na deset klipů je jedno kliknutí* ✅ (hromadné operace, modul 2) · *klipy ze dvou kamer se poskládají v pořadí, ve kterém se natočily* ✅ (chronologie, modul 3).
+
+✅ **Modul 3 — chronologie a export rozsahu (29. 07. 2026): FÁZE 17 JE TÍM HOTOVÁ.** Model **+11 testů (celkem 453)**.
+
+  - **Čas natočení (`CreationDateReader`):** `AVAsset.load(.creationDate)` → `load(.dateValue)`; u fotky **EXIF `DateTimeOriginal`** přes ImageIO (po AirDropu je datum souboru čas doručení, zatímco EXIF je pořád okamžik stisknutí spouště); teprve pak datum souboru — a to se **PŘIZNÁ**: `Asset.creationDateSource` je `metadata` / `fileSystem` a sidebar ho ukazuje oranžově s poznámkou „(datum souboru)". ⚠️ Synchronní `asset.creationDate` je od macOS 13 deprecated, proto asynchronní cesta. Volitelná pole, starší projekty se čtou dál, verze formátu se nezvedá.
+  - **Řazení:** sidebar jede chronologicky místo podle jména (u jedné kamery je název časové razítko, u telefonu hosta ne), kontextové menu prázdného místa na stopě nabídne **„Uspořádat chronologicky"** — vypnuté s vysvětlením, když žádný klip stopy čas nemá. Operace řadí stabilně, **zavírá mezery**, drží začátek stopy (místo vpředu na titulek se nezahodí) a **svázaná dvojčata posouvá o totéž**; klipy bez data jdou dozadu v dosavadním pořadí a jejich počet se hlásí ve stavu. Atomická: co by rozbilo osu, se neprovede.
+  - **Export výřezu:** `I` a `O` staví in/out na hlavě, `⌥I`/`⌥O` je ruší, `⌥X` zruší celý výřez; pravítko kreslí světlý pruh se zarážkami **jen když je výřez opravdu výřez** (jinak by „nic nevybráno" a „vybráno vše" vypadalo stejně a uživatel by nevěděl, jestli mu export ukrojí konec). Status po exportu výřez přizná. Model: `exportRange(inPoint:outPoint:)` — chybějící nebo obrácené body znamenají **CELÝ projekt**, export nikdy nesmí tiše vyrobit prázdný soubor.
+  - **`CFRRenderer` dostal volitelný `timeRange`:** `reader.timeRange` + `writer.startSession(atSourceTime: range.start)` + mřížka slotů resampleru posunutá o začátek rozsahu. Zapisovač časy odečte sám, takže výsledný soubor začíná nulou. Bez rozsahu je cesta bajt po bajtu ta dosavadní.
+  - **Ověřeno `--range-check`:** pět reálných klipů má čas natočení **v metadatech (5/5)**, řazení sedí; přeházená osa se seřadila podle času, mezery se zavřely (0/60/120), **zvuk zůstal u svého obrazu** a osa je bez porušených invariantů; export výřezu dal **60 snímků proti 180 celé osy**.
+  - **⚠️ Kontrolu obsahu jsem musel zesílit.** První verze porovnávala tři místa téhož záběru a jas se lišil jen o **0,95** — prošla by, i kdyby renderer rozsah ignoroval. Přepsaná jede na černé/šedé/bílé fotce: výřez **87**, začátek osy **16**, rozdíl **71 jasu**, a navíc se kontroluje, že se do výřezu nedostal obsah za out bodem.
+  - **Regrese:** `--export-check` 4739 snímků v pořádku, `--transition-check` po zásahu do rendereru dává **číslo po čísle** totéž co ve fázi 10 (79/0; 0,7/12,9/13,1).
+  - *Koukanec rukou (v seznamu): I/O a export výřezu, „Uspořádat chronologicky" na materiálu ze dvou zařízení, čas natočení v sidebaru.*
 
 ✅ **Modul 2 — výběr a schránka (29. 07. 2026).** Model **+23 testů (celkem 442)**, všechny prošly napoprvé.
 

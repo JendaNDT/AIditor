@@ -735,7 +735,13 @@ final class TimelineDocumentView: NSView {
                     mountedTransitionLayers[placement.transitionID] = layer
                 }
                 layer.fillColor = TimelinePalette.transitionFill.cgColor
-                layer.strokeColor = TimelinePalette.transitionStroke.cgColor
+                // Vybraný přechod dostává žlutý obrys — týž jazyk výběru
+                // jako klipy a titulky (fáze 16).
+                let isSelected = placement.transitionID == controller.selectedTransition
+                layer.strokeColor = isSelected
+                    ? TimelinePalette.clipSelectedStroke.cgColor
+                    : TimelinePalette.transitionStroke.cgColor
+                layer.lineWidth = isSelected ? 2 : 1
                 layer.apply(frame: CGRect(x: placement.x, y: placement.y,
                                           width: placement.width, height: placement.height),
                             cutX: placement.cutX)
@@ -1034,7 +1040,9 @@ final class TimelineDocumentView: NSView {
                     transitionID: transitionHit.transitionID,
                     trackID: transitionHit.trackID)
             case .body:
-                break   // tělo zatím nic nedělá; akce jsou v kontextovém menu
+                // Výběr přechodu (fáze 16 — drobnost z koukanců F10):
+                // rámeček + Delete. Tažení tělo nemá, akce jsou v menu.
+                controller.selectTransition(transitionHit.transitionID)
             }
             return
         }
@@ -1075,6 +1083,7 @@ final class TimelineDocumentView: NSView {
             if !controller.selection.isEmpty { controller.selection = [] }
             controller.selectTitle(nil)
             controller.selectSpeech(nil)
+            controller.selectTransition(nil)
             return
         }
 
@@ -1393,6 +1402,8 @@ final class TimelineDocumentView: NSView {
         if event.keyCode == 51 || event.keyCode == 117 {
             if let titleID = controller.selectedTitle {
                 controller.deleteTitle(titleID)
+            } else if let transitionID = controller.selectedTransition {
+                controller.removeTransition(transitionID)
             } else {
                 controller.deleteClips(controller.selection)
             }

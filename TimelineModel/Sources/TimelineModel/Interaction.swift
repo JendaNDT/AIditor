@@ -212,7 +212,11 @@ public struct TimelineInteraction: Sendable {
     private func trimStartPreview(drag: TimelineDrag, clip: Clip, to frame: Frames,
                                   snapped: SnapCandidate?, in project: Project) -> DragPreview {
         let lowest = project.maxTrimStart(clipID: drag.clipID) ?? .zero
-        let highest = clip.timelineEnd - Frames(1)
+        // Rameno přechodu na PRAVÉ hraně musí v klipu zůstat — jinak by
+        // operace tažení odmítla a uživatel by viděl jen, že se nic
+        // nestalo (fáze 16, drobnost z koukanců F10).
+        let arm = project.transitionArms(clipID: drag.clipID).trailing
+        let highest = clip.timelineEnd - Frames(Swift.max(1, arm.count))
         let start = Frames(Swift.min(Swift.max(frame.count, lowest.count), highest.count))
         return DragPreview(clipID: drag.clipID, trackID: drag.originTrackID,
                            start: start, duration: clip.timelineEnd - start,
@@ -223,7 +227,9 @@ public struct TimelineInteraction: Sendable {
     private func trimEndPreview(drag: TimelineDrag, clip: Clip, to frame: Frames,
                                 snapped: SnapCandidate?, in project: Project) -> DragPreview {
         let highest = project.maxTrimEnd(clipID: drag.clipID) ?? clip.timelineEnd
-        let lowest = clip.timelineStart + Frames(1)
+        // Totéž pro rameno na LEVÉ hraně (viz `trimStartPreview`).
+        let arm = project.transitionArms(clipID: drag.clipID).leading
+        let lowest = clip.timelineStart + Frames(Swift.max(1, arm.count))
         let end = Frames(Swift.min(Swift.max(frame.count, lowest.count), highest.count))
         return DragPreview(clipID: drag.clipID, trackID: drag.originTrackID,
                            start: clip.timelineStart, duration: end - clip.timelineStart,

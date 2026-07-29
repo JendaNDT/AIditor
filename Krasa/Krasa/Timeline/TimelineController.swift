@@ -222,6 +222,7 @@ final class TimelineController: ObservableObject {
         guard (try? updated.removeTransition(id: id)) != nil else { return }
         undo.record(project)
         project = updated
+        if selectedTransition == id { selectedTransition = nil }
     }
 
     /// Puštění tažení okraje: mezistavy se během tažení do modelu nepsaly
@@ -368,6 +369,21 @@ final class TimelineController: ObservableObject {
     func selectClips(_ ids: Set<ClipID>) {
         if selection != ids { selection = ids }
         if !ids.isEmpty {
+            if selectedTitle != nil { selectedTitle = nil }
+            if selectedSpeech != nil { selectedSpeech = nil }
+            if selectedTransition != nil { selectedTransition = nil }
+        }
+    }
+
+    /// Vybraný přechod (fáze 16, modul 3 — drobnost z koukanců F10:
+    /// „přechod nejde vybrat klikem do těla"). Výběr dává lichoběžníku
+    /// rámeček a pouští na něj Delete.
+    @Published var selectedTransition: TransitionID?
+
+    func selectTransition(_ id: TransitionID?) {
+        if selectedTransition != id { selectedTransition = id }
+        if id != nil {
+            if !selection.isEmpty { selection = [] }
             if selectedTitle != nil { selectedTitle = nil }
             if selectedSpeech != nil { selectedSpeech = nil }
         }

@@ -133,6 +133,11 @@ final class TimelinePane: NSView {
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.documentView.refreshClips() },
+            // Výběr přechodu (fáze 16) — totéž.
+            controller.$selectedTransition
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.documentView.refreshClips() },
             controller.$playhead
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)

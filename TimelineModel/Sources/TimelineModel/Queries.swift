@@ -69,6 +69,34 @@ extension Project {
         return min(bySource, byNeighbour)
     }
 
+    /// Ramena přechodů, která musí zůstat UVNITŘ klipu (fáze 16):
+    /// `leading` je část oblasti za střihem na LEVÉ hraně klipu,
+    /// `trailing` část před střihem na PRAVÉ hraně.
+    ///
+    /// **Z toho UI dělá zarážku trimu.** Bez ní tažení dojede až na
+    /// mez zdroje, operace ho odmítne `blockedByTransition` a uživatel
+    /// vidí jen to, že se nic nestalo (koukanec F10). Zarážka je
+    /// poctivější než zčervenání: ruka se opře o zeď a klip se doveze
+    /// přesně tam, kam smí.
+    ///
+    /// Trim, který střih ZRUŠÍ (odtažení od souseda → mezera), rameno
+    /// neomezuje — tam přechod legálně umírá s ním (pravidlo ① fáze 10).
+    public func transitionArms(clipID: ClipID) -> (leading: Frames, trailing: Frames) {
+        guard let at = timeline.locate(clipID) else { return (.zero, .zero) }
+        let track = timeline.tracks[at.trackIndex]
+        var leading = Frames.zero
+        var trailing = Frames.zero
+        for transition in track.transitions {
+            if transition.rightClipID == clipID {
+                leading = max(leading, transition.framesAfterCut)
+            }
+            if transition.leftClipID == clipID {
+                trailing = max(trailing, transition.framesBeforeCut)
+            }
+        }
+        return (leading, trailing)
+    }
+
     /// O kolik snímků lze posunout zdrojový výřez klipu.
     public func slipRange(clipID: ClipID) -> ClosedRange<Frames>? {
         guard let clip = timeline.clip(clipID) else { return nil }

@@ -1892,6 +1892,46 @@ final class AppModel: ObservableObject {
         print("FADE_CHECK_PATH=\(directory.path)")
     }
 
+    /// CLI ukázka fáze 16 (`--transition-demo`): dva přechody na ose,
+    /// první VYBRANÝ klikem do těla — koukanec vidí žlutý rámeček
+    /// lichoběžníku (drobnost z koukanců F10).
+    func runTransitionSelectionDemo() async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+        var project = Project.empty()
+        project.addAsset(source)
+        var first: TransitionID?
+        do {
+            var ids: [ClipID] = []
+            for (start, src) in [(0, 0), (60, 120), (120, 240)] {
+                let clip = Clip(assetID: source.id, timelineStart: Frames(start),
+                                duration: Frames(60),
+                                sourceStart: project.timeline.sourceTime(Frames(src)))
+                try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+                ids.append(clip.id)
+            }
+            first = try project.setTransition(.crossDissolve, duration: Frames(30),
+                                              betweenLeft: ids[0], andRight: ids[1])
+            _ = try project.setTransition(.dipToBlack, duration: Frames(20),
+                                          betweenLeft: ids[1], andRight: ids[2])
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        var geometry = timeline.geometry
+        geometry.setZoom(6)
+        timeline.geometry = geometry
+        timeline.project = project
+        if let first { timeline.selectTransition(first) }
+        if let host = await waitForPlayerWindow() {
+            host.window?.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        try? await Task.sleep(nanoseconds: 25_000_000_000)
+    }
+
     /// CLI ukázka fáze 16 (`--fade-demo`): zvukový klip s klíny fade.
     func runFadeDemo() async {
         guard let source = timeline.project.assets
@@ -2353,6 +2393,36 @@ final class AppModel: ObservableObject {
     func deleteProxies() {
         timeline.clearAssetProxies()      // kompozice nesmí ukazovat na mazané soubory
         proxies.deleteAll()
+    }
+
+    // MARK: Správa modelu přepisu (fáze 16, modul 3)
+
+    /// Smazání se PTÁ — model se stahuje 1,5 GB po síti a uživatel to
+    /// nemusí chtít zopakovat kvůli překliku.
+    func deleteWhisperModel() {
+        let alert = NSAlert()
+        alert.messageText = "Smazat model přepisu?"
+        alert.informativeText = "Uvolní se ~1,5 GB. Při dalším vytváření titulků "
+            + "z řeči se model stáhne znovu — to chce síť a trpělivost."
+        alert.addButton(withTitle: "Zrušit")
+        alert.addButton(withTitle: "Smazat")
+        guard alert.runModal() == .alertSecondButtonReturn else { return }
+        transcription.deleteModel()
+        status = "Model přepisu smazán."
+    }
+
+    /// Přemístění na jiný disk — soubory se přesunou, nestahují znovu.
+    func relocateWhisperModel() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Uložit model sem"
+        panel.message = "Vyber složku pro model přepisu (~1,5 GB) — klidně na "
+            + "externím disku. Stažené soubory se přesunou."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        transcription.relocateModel(to: url)
+        status = "Model přepisu: \(transcription.modelLocationName)"
     }
 
     private func regenerateProxies() {
@@ -2866,6 +2936,8 @@ struct ContentView: View {
                     await model.verifyAudioFades()
                 } else if arguments.contains("--fade-demo") {
                     await model.runFadeDemo()
+                } else if arguments.contains("--transition-demo") {
+                    await model.runTransitionSelectionDemo()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
@@ -2932,6 +3004,10 @@ struct ContentView: View {
             ProxyControls(timeline: model.timeline, proxies: model.proxies,
                           onChangeLocation: { model.changeProxyDirectory() },
                           onDelete: { model.deleteProxies() })
+
+            WhisperModelControls(transcription: model.transcription,
+                                 onRelocate: { model.relocateWhisperModel() },
+                                 onDelete: { model.deleteWhisperModel() })
 
             if let progress = model.exportProgress {
                 VStack(alignment: .leading, spacing: 2) {
@@ -3564,6 +3640,35 @@ private struct ProxyControls: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+        }
+    }
+}
+
+/// Správa modelu přepisu (fáze 16, modul 3). Vlastní view ze stejného
+/// důvodu jako `ProxyControls` — `transcription` je vnořený
+/// `ObservableObject`. Nestažený model se neukazuje vůbec: dokud
+/// uživatel titulky z řeči nepoužil, není co spravovat.
+private struct WhisperModelControls: View {
+    @ObservedObject var transcription: TranscriptionService
+    let onRelocate: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        if let size = transcription.modelSizeBytes {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Button("Přemístit model…") { onRelocate() }
+                    Button("Smazat model") { onDelete() }
+                }
+                .controlSize(.small)
+                .disabled(transcription.statusText != nil)
+
+                Text("Model přepisu: \(transcription.modelLocationName) · "
+                     + ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
         }
     }
 }

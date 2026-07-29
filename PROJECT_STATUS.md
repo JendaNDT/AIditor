@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 13: moduly 1–2 hotové — presety hrají v náhledu i exportu)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 13 HOTOVÁ)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -7,15 +7,22 @@ Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (v
 
 ## 📍 STAV (29. 07. 2026)
 
-**Fáze 0–9 HOTOVÉ (MVP) + vylepšovací fáze 10–12 HOTOVÉ; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a LUFS normalizací → export SRT.
+**Fáze 0–9 HOTOVÉ (MVP) + vylepšovací fáze 10–13 HOTOVÉ; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a LUFS normalizací → export SRT.
 
 Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (365, 28 invariantů), `AudioEngine` (32), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 13 — barevné presety, modul 3 (UI)** — výběr presetu + posuvník intenzity v inspektoru vybraného klipu (vzorec inspektoru fotky z F12: posuvník = jeden undo krok), případně položky v kontextovém menu klipu. Kompoziční vrstva je hotová a ověřená (modul 2 níže) — UI jen volá `setColorGrade`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 14 — hudební synchronizace (VLAJKOVÁ), modul 1** — `BeatGrid` v `AudioEngine`: onsety (energie + spektrální tok přes vlastní FFT), odhad tempa, mřížka hlavních/vedlejších dob, ruční korekce prvního taktu a násobku tempa. Čistý Swift, testy na syntetických klikových stopách se známým tempem. Detail v `IMPLEMENTACNI_PLAN.md`.
 
-## 🚧 FÁZE 13 — barevné presety (moduly 1–2 HOTOVÉ 29. 07. 2026)
+## ✅ FÁZE 13 — barevné presety (HOTOVÁ 29. 07. 2026)
+
+✅ **Modul 3 — UI presetů (29. 07. 2026): FÁZE 13 JE TÍM HOTOVÁ.**
+
+  - **`ColorGradePanel` v pásu inspektoru:** picker (Bez úpravy / Jemný svatební / Teplý film / Čistá pleť / Černobílá) + posuvník Síla 0–100 %. Výběr presetu = jeden undo krok; posuvník skládá undo kolem tažení (vzorec hlasitosti a zoomu, `colorGradeDragBegan/Changed/Ended` na controlleru). Přepnutí presetu drží nastavenou sílu; „Bez úpravy" preset maže.
+  - **Umístění:** u vybraného VIDEO klipu vedle editoru rychlostní křivky (HStack, panel 260 b), u fotky vedle inspektoru Ken Burns — preset patří obrazu, u zvukového klipu se panel neukazuje (`selectedVideoClip()` kontroluje druh STOPY). Náhled se při změně přestaví sám (`rebuildTimelineComposition` — týž mechanismus jako Ken Burns).
+  - **Ověřeno screenshotem běžící aplikace (`--color-demo`):** tři klipy, prostřední s ČB presetem a vybraný — náhled pod hlavou je ČERNOBÍLÝ, v inspektoru panel s pickerem „Černobílá" a sílou 100 %, na ose žlutý rámeček výběru. UI → model → kompozice → přehrávač funguje živě.
+  - *Koukanec rukou (v seznamu): preset v náhledu při přehrávání, síla plynule, kombinace s prolínačkou a Ken Burns.*
 
 ✅ **Modul 2 — presety hrají v kompozici, náhledu i exportu (29. 07. 2026).**
 
@@ -155,8 +162,8 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 1. ✅ **F10 — přechody** (HOTOVÁ 28. 07.; GPU skok změřen — medián ~12 % s kompozicí)
 2. ✅ **F11 — texty a titulky + stopa T1** (HOTOVÁ 29. 07.; obě splátky fáze 8 splacené, export přes `frameDecorator` místo CoreAnimationTool — viz oprava v plánu)
 3. ✅ **F12 — fotky a Ken Burns** (HOTOVÁ 29. 07.; fotka přes „still movie" mezisoubor, freeze frame jako fotka)
-4. 🚧 **F13 — barevné presety** (Core Image per klip, intenzita) **← PRÁVĚ TADY** (moduly 1–2 hotové: model + vlastní `ColorVideoCompositor` ověřený `--color-check`, GPU skok změřen ~24 %; zbývá modul 3 UI)
-5. **F14 — hudební synchronizace** (beat-grid na vlastní FFT, magnet na doby, dopasování tempa 90–115 % s respektem k limitu zpomalení — VLAJKOVÁ)
+4. ✅ **F13 — barevné presety** (HOTOVÁ 29. 07.; vlastní `ColorVideoCompositor` ověřený `--color-check`, GPU skok ~24 %, UI v inspektoru)
+5. **F14 — hudební synchronizace** (beat-grid na vlastní FFT, magnet na doby, dopasování tempa 90–115 % s respektem k limitu zpomalení — VLAJKOVÁ) **← PRÁVĚ TADY**
 6. **F15 — analýzy kvality** (neostrost, ticho/prázdno; jen návrhy, nikdy automatický střih)
 7. **F16 — vymazlení** (zvukové fade úchyty, dBTP strop, správa Whisper modelu)
 

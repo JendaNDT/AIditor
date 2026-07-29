@@ -27,19 +27,21 @@ import TimelineModel
 /// <https://developer.apple.com/documentation/appkit/nscolor/init(name:dynamicprovider:)>
 enum TimelinePalette {
 
-    private static func adaptive(_ name: String,
-                                 dark: CGFloat, light: CGFloat) -> NSColor {
-        NSColor(name: NSColor.Name(name)) { appearance in
-            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return NSColor(white: isDark ? dark : light, alpha: 1)
-        }
+    /// ⚠️ **Od fáze 18 je paleta JEN TMAVÁ** (rozhodnuto 29. 07. 2026).
+    /// Okno si v `WindowConfigurator` vynucuje `.darkAqua`, takže světlá
+    /// větev by se nikdy nespustila. Světlé protějšky jsou proto **smazané,
+    /// ne zakomentované**: barva, kterou nikdo nevidí, se za rok rozejde se
+    /// zbytkem palety a nikdo si toho nevšimne.
+    ///
+    /// Obal `NSColor(name:dynamicProvider:)` zůstává — vrací pořád tutéž
+    /// hodnotu, ale drží čitelné jméno v debuggeru a nechává jedno místo,
+    /// kam by se světlá varianta vracela, kdyby se rozhodnutí měnilo.
+    private static func adaptive(_ name: String, dark: CGFloat) -> NSColor {
+        NSColor(name: NSColor.Name(name)) { _ in NSColor(white: dark, alpha: 1) }
     }
 
-    private static func adaptive(_ name: String,
-                                 dark: NSColor, light: NSColor) -> NSColor {
-        NSColor(name: NSColor.Name(name)) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
-        }
+    private static func adaptive(_ name: String, dark: NSColor) -> NSColor {
+        NSColor(name: NSColor.Name(name)) { _ in dark }
     }
 
     /// Doba hudby v pravítku (fáze 14) — jantarová, v paletě nová:
@@ -58,13 +60,13 @@ enum TimelinePalette {
     static let fadeFill = NSColor.black.withAlphaComponent(0.35)
 
     /// Plocha pod stopami a za koncem projektu.
-    static let background = adaptive("timelineBackground", dark: 0.09, light: 0.78)
+    static let background = adaptive("timelineBackground", dark: 0.09)
     /// Pruh obrazové stopy. Nejsvětlejší — obraz je hlavní.
-    static let videoLane = adaptive("timelineVideoLane", dark: 0.24, light: 0.95)
+    static let videoLane = adaptive("timelineVideoLane", dark: 0.24)
     /// Pruh zvukové stopy.
-    static let audioLane = adaptive("timelineAudioLane", dark: 0.17, light: 0.88)
+    static let audioLane = adaptive("timelineAudioLane", dark: 0.17)
     /// Pruh titulkové stopy — nejtmavší; je úzký a vedlejší.
-    static let titleLane = adaptive("timelineTitleLane", dark: 0.13, light: 0.83)
+    static let titleLane = adaptive("timelineTitleLane", dark: 0.13)
 
     static func lane(for kind: TrackKind) -> NSColor {
         switch kind {
@@ -76,13 +78,13 @@ enum TimelinePalette {
 
     /// Pozadí pravítka a hlaviček. Mezi pozadím osy a pruhy, ať je poznat,
     /// že je to ovládací lišta a ne obsah.
-    static let chrome = adaptive("timelineChrome", dark: 0.14, light: 0.86)
+    static let chrome = adaptive("timelineChrome", dark: 0.14)
     /// Popisky timecode a jména stop.
-    static let text = adaptive("timelineText", dark: 0.68, light: 0.28)
+    static let text = adaptive("timelineText", dark: 0.68)
     /// Rysky pravítka.
-    static let tick = adaptive("timelineTick", dark: 0.42, light: 0.52)
+    static let tick = adaptive("timelineTick", dark: 0.42)
     /// Předěly mezi pravítkem, hlavičkami a plochou osy.
-    static let separator = adaptive("timelineSeparator", dark: 0.28, light: 0.66)
+    static let separator = adaptive("timelineSeparator", dark: 0.28)
 
     // MARK: Klipy
     //
@@ -93,60 +95,51 @@ enum TimelinePalette {
     /// Výplň obrazového klipu.
     static let clipVideoFill = adaptive(
         "clipVideoFill",
-        dark: NSColor(calibratedRed: 0.23, green: 0.34, blue: 0.55, alpha: 1),
-        light: NSColor(calibratedRed: 0.58, green: 0.69, blue: 0.87, alpha: 1))
+        dark: NSColor(calibratedRed: 0.23, green: 0.34, blue: 0.55, alpha: 1))
     /// Výplň zvukového klipu.
     static let clipAudioFill = adaptive(
         "clipAudioFill",
-        dark: NSColor(calibratedRed: 0.16, green: 0.41, blue: 0.30, alpha: 1),
-        light: NSColor(calibratedRed: 0.56, green: 0.78, blue: 0.64, alpha: 1))
+        dark: NSColor(calibratedRed: 0.16, green: 0.41, blue: 0.30, alpha: 1))
     /// Obrys klipu — ztmavená hrana, ať se sousedící klipy neslijí.
     static let clipStroke = adaptive(
         "clipStroke",
-        dark: NSColor(white: 0, alpha: 0.45),
-        light: NSColor(white: 0, alpha: 0.25))
+        dark: NSColor(white: 0, alpha: 0.45))
     /// Obrys vybraného klipu. Výběr přijde s krokem 7, barva ale patří sem,
     /// ať se paleta nerozšiřuje nadvakrát.
     static let clipSelectedStroke = adaptive(
         "clipSelectedStroke",
-        dark: NSColor(calibratedRed: 1.00, green: 0.79, blue: 0.28, alpha: 1),
-        light: NSColor(calibratedRed: 0.85, green: 0.55, blue: 0.00, alpha: 1))
+        dark: NSColor(calibratedRed: 1.00, green: 0.79, blue: 0.28, alpha: 1))
     /// Jméno klipu.
-    static let clipText = adaptive("clipText", dark: 0.94, light: 0.10)
+    static let clipText = adaptive("clipText", dark: 0.94)
 
     /// Výplň lichoběžníku přechodu. Fialová — jediná na ose, nesmí se plést
     /// s modrým obrazem, zeleným zvukem ani žlutým výběrem. Poloprůhledná,
     /// aby pod ní zůstaly čitelné okraje klipů, přes které se prolíná.
     static let transitionFill = adaptive(
         "transitionFill",
-        dark: NSColor(calibratedRed: 0.58, green: 0.44, blue: 0.86, alpha: 0.60),
-        light: NSColor(calibratedRed: 0.52, green: 0.36, blue: 0.80, alpha: 0.45))
+        dark: NSColor(calibratedRed: 0.58, green: 0.44, blue: 0.86, alpha: 0.60))
     /// Obrys lichoběžníku přechodu.
     static let transitionStroke = adaptive(
         "transitionStroke",
-        dark: NSColor(calibratedRed: 0.78, green: 0.66, blue: 1.00, alpha: 1),
-        light: NSColor(calibratedRed: 0.36, green: 0.20, blue: 0.62, alpha: 1))
+        dark: NSColor(calibratedRed: 0.78, green: 0.66, blue: 1.00, alpha: 1))
 
     /// Výplň titulkového klipu na T1. Terakotová — nesmí se plést s modrým
     /// obrazem, zeleným zvukem, fialovými přechody ani žlutým výběrem;
     /// od žluté ji drží dál ztmavení a příklon k červené.
     static let titleClipFill = adaptive(
         "titleClipFill",
-        dark: NSColor(calibratedRed: 0.55, green: 0.32, blue: 0.20, alpha: 1),
-        light: NSColor(calibratedRed: 0.87, green: 0.64, blue: 0.48, alpha: 1))
+        dark: NSColor(calibratedRed: 0.55, green: 0.32, blue: 0.20, alpha: 1))
     /// Pásek titulku z řeči v pruhu T1. Zvuková zelená s průhledností —
     /// řeč žije ve zvuku a pásek je jen projekce, ne uchopitelný objekt.
     static let speechStripFill = adaptive(
         "speechStripFill",
-        dark: NSColor(calibratedRed: 0.16, green: 0.41, blue: 0.30, alpha: 0.60),
-        light: NSColor(calibratedRed: 0.45, green: 0.68, blue: 0.53, alpha: 0.65))
+        dark: NSColor(calibratedRed: 0.16, green: 0.41, blue: 0.30, alpha: 0.60))
 
     /// Přehrávací hlava. Červená je konvence — jediná svislá červená čára
     /// v celém okně, nesmí se s ničím plést.
     static let playhead = adaptive(
         "timelinePlayhead",
-        dark: NSColor(calibratedRed: 1.00, green: 0.27, blue: 0.23, alpha: 1),
-        light: NSColor(calibratedRed: 0.80, green: 0.00, blue: 0.05, alpha: 1))
+        dark: NSColor(calibratedRed: 1.00, green: 0.27, blue: 0.23, alpha: 1))
 }
 
 /// Vrstva jednoho klipu. ŽÁDNÉ kreslení — jen barvy, obrys a `CATextLayer`

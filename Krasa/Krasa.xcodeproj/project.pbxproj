@@ -40,6 +40,13 @@
 		8B1E4D7A2C5F30619E8A4C2D /* RampEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9C2A4E7B1F50318C6E9A3B /* RampEditorView.swift */; };
 		C2F508B71A9E3D64B85072AF /* TimelineRulerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E7A1C9D5B08462FA1D73C86 /* TimelineRulerView.swift */; };
 		1A6BD73E902F84C5D3106E7B /* TrackHeadersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D40E2FA6C31597B0E4AD1B3 /* TrackHeadersView.swift */; };
+		F18200000000000000000001 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000001 /* DesignTokens.swift */; };
+		F18200000000000000000002 /* AppShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000002 /* AppShell.swift */; };
+		F18200000000000000000003 /* KrasaToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000003 /* KrasaToolbar.swift */; };
+		F18200000000000000000004 /* IconRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000004 /* IconRail.swift */; };
+		F18200000000000000000005 /* ViewerPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000005 /* ViewerPane.swift */; };
+		F18200000000000000000006 /* StatusBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000006 /* StatusBar.swift */; };
+		F18200000000000000000007 /* LegacySettingsPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000007 /* LegacySettingsPanel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -72,6 +79,13 @@
 		6D9C2A4E7B1F50318C6E9A3B /* RampEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RampEditorView.swift; sourceTree = "<group>"; };
 		3E7A1C9D5B08462FA1D73C86 /* TimelineRulerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineRulerView.swift; sourceTree = "<group>"; };
 		8D40E2FA6C31597B0E4AD1B3 /* TrackHeadersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackHeadersView.swift; sourceTree = "<group>"; };
+		F18100000000000000000001 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
+		F18100000000000000000002 /* AppShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShell.swift; sourceTree = "<group>"; };
+		F18100000000000000000003 /* KrasaToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KrasaToolbar.swift; sourceTree = "<group>"; };
+		F18100000000000000000004 /* IconRail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconRail.swift; sourceTree = "<group>"; };
+		F18100000000000000000005 /* ViewerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewerPane.swift; sourceTree = "<group>"; };
+		F18100000000000000000006 /* StatusBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBar.swift; sourceTree = "<group>"; };
+		F18100000000000000000007 /* LegacySettingsPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacySettingsPanel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -115,6 +129,7 @@
 				BD13434066203B2825EE5A5F /* Media */,
 				34AA73FFCE9BBCC557385235 /* Measure */,
 				8B4A0F27C6D91E53B7402AD8 /* Timeline */,
+				F18000000000000000000001 /* UI */,
 				E8CE4721331CF75E9478C7F2 /* Krasa.entitlements */,
 			);
 			path = Krasa;
@@ -164,6 +179,28 @@
 				3E7A1C9D5B08462FA1D73C86 /* TimelineRulerView.swift */,
 			);
 			path = Timeline;
+			sourceTree = "<group>";
+		};
+		F18000000000000000000001 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				F18000000000000000000002 /* Shell */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		F18000000000000000000002 /* Shell */ = {
+			isa = PBXGroup;
+			children = (
+				F18100000000000000000001 /* DesignTokens.swift */,
+				F18100000000000000000002 /* AppShell.swift */,
+				F18100000000000000000003 /* KrasaToolbar.swift */,
+				F18100000000000000000004 /* IconRail.swift */,
+				F18100000000000000000005 /* ViewerPane.swift */,
+				F18100000000000000000006 /* StatusBar.swift */,
+				F18100000000000000000007 /* LegacySettingsPanel.swift */,
+			);
+			path = Shell;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -274,6 +311,13 @@
 				1A6BD73E902F84C5D3106E7B /* TrackHeadersView.swift in Sources */,
 				8B1E4D7A2C5F30619E8A4C2D /* RampEditorView.swift in Sources */,
 				C2F508B71A9E3D64B85072AF /* TimelineRulerView.swift in Sources */,
+				F18200000000000000000001 /* DesignTokens.swift in Sources */,
+				F18200000000000000000002 /* AppShell.swift in Sources */,
+				F18200000000000000000003 /* KrasaToolbar.swift in Sources */,
+				F18200000000000000000004 /* IconRail.swift in Sources */,
+				F18200000000000000000005 /* ViewerPane.swift in Sources */,
+				F18200000000000000000006 /* StatusBar.swift in Sources */,
+				F18200000000000000000007 /* LegacySettingsPanel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

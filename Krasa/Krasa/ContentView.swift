@@ -26,6 +26,27 @@ final class AppModel: ObservableObject {
     /// Bez toho by „fullscreen" znamenal dvě třetiny obrazovky vedle sidebaru.
     @Published var chromeHidden = false
 
+    // MARK: Stav skořápky (fáze 18, modul 1)
+    //
+    // Nic z toho NEPATŘÍ do `Project` — jsou to stavy sezení, ne dokumentu.
+    // Do projektového souboru by se dostat neměly ani omylem.
+
+    /// Která sekce railu je vybraná. Rail určuje, co je v panelu vpravo.
+    @Published var railSection: RailSection = .media
+    /// Připnutý panel vpravo od osy (⌘4).
+    @Published var panelVisible = true
+    /// Okno je na celé obrazovce. Plní `WindowConfigurator` z notifikací
+    /// `didEnterFullScreen` / `didExitFullScreen` — `styleMask` se přepíná
+    /// už na ZAČÁTKU přechodu, takže se na něj ptát nestačí.
+    @Published var isFullscreen = false
+    /// Vypne overlaye nad obrazem (čipy, měřidlo, pilulka) i mimo měřicí
+    /// režim. Používá `--shell-gpu`, aby šel změřit jejich vliv na skládání.
+    @Published var overlaysSuppressed = false
+    /// Poslední naměřená hlasitost dodávky. Plní ji export — jinde se
+    /// hlasitost neměří, a měřidlo, které si čísla vymýšlí, je horší
+    /// než měřidlo, které přizná, že ještě nic neví.
+    @Published var lastLoudness: LoudnessReadout?
+
     let importer = MediaImporter()
     let controller = PlaybackController()
     /// Přepis řeči (fáze 8).
@@ -652,6 +673,13 @@ final class AppModel: ObservableObject {
                 status = "Měřím hlasitost… (\(profile.displayName))"
                 if let scan = try await LoudnessScanner.scan(asset: composition, audioMix: mix),
                    let measured = scan.integratedLUFS {
+                    // Měřidlo na obraze (fáze 18) ukazuje POSLEDNÍ naměřenou
+                    // hodnotu. Jinde se hlasitost neměří, takže dokud se
+                    // neexportovalo, měřidlo poctivě ukazuje pomlčky.
+                    lastLoudness = LoudnessReadout(
+                        lufs: measured,
+                        truePeakDB: scan.truePeakLinear > 0
+                            ? 20.0 * log10(scan.truePeakLinear) : -.infinity)
                     var gainDB = LoudnessNormalization.gainDecibels(
                         measured: measured, target: profile.targetLUFS)
                     // Strop: TRUE PEAK po zesílení ≤ −1 dBTP (fáze 16 —
@@ -3148,6 +3176,36 @@ final class AppModel: ObservableObject {
     func attach(_ view: PlayerHostView) { hostView = view }
     func attachTimeline(_ pane: TimelinePane) { timelinePane = pane }
 
+    // MARK: Akce toolbaru (fáze 18, modul 1)
+
+    /// Titulek na hlavu, na první titulkovou stopu. Tatáž operace, kterou
+    /// dosud nabízelo jen kontextové menu osy — toolbar ji zpřístupňuje,
+    /// nezakládá novou cestu do modelu.
+    var canAddTitle: Bool {
+        timeline.project.timeline.tracks.contains { $0.kind == .title }
+    }
+
+    func addTitleAtPlayhead() {
+        guard let track = timeline.project.timeline.tracks.first(where: { $0.kind == .title })
+        else {
+            status = "Projekt nemá titulkovou stopu."
+            return
+        }
+        timeline.addTitle(template: .plain, at: timeline.playhead, onTrack: track.id)
+    }
+
+    /// Zmrazení běží nad JEDNÍM vybraným klipem. U víc vybraných není co
+    /// zmrazit — hlava leží v jednom z nich a hádat, ve kterém, by bylo
+    /// horší než položku vypnout.
+    var canFreezeFrame: Bool {
+        timeline.selection.count == 1 && !isMeasuring
+    }
+
+    func freezeSelectedClip() {
+        guard let clipID = timeline.selection.first else { return }
+        freezeFrame(clipID: clipID)
+    }
+
     // MARK: Import
 
     func openFiles(directories: Bool) async {
@@ -3569,17 +3627,11 @@ struct ContentView: View {
         fullLayout
     }
 
+    /// Rozvržení okna drží od fáze 18 `AppShell` (toolbar → rail + obsah →
+    /// stavový řádek). `ContentView` zůstal kořenem kvůli `.task` níž:
+    /// rozcestník měřicích a kontrolních běhů z příkazové řádky.
     private var fullLayout: some View {
-        HSplitView {
-            sidebar
-                .frame(minWidth: model.chromeHidden ? 0 : 260,
-                       idealWidth: model.chromeHidden ? 0 : 300,
-                       maxWidth: model.chromeHidden ? 0 : 420)
-                .opacity(model.chromeHidden ? 0 : 1)
-            playerPane
-                .frame(minWidth: model.chromeHidden ? 0 : 640)
-        }
-        .frame(minWidth: model.chromeHidden ? 0 : 1000, minHeight: 640)
+        AppShell(model: model)
         .task {
             // Bez GUI: `--benchmark [cesty…]` změří v okně,
             // `--fullscreen [cesty…]` porovná okno s celou obrazovkou,
@@ -3668,211 +3720,12 @@ struct ContentView: View {
         }
     }
 
-    /// Vybraný klip drží `AppModel`, ne `@State` ve view.
-    ///
-    /// Jedno úložiště, žádná synchronizace — stejný důvod, proč geometrii
-    /// Popisek času natočení v sidebaru (fáze 17). Datum ze SOUBORU se
-    /// přiznává — po zkopírování z karty to bývá čas kopírování, ne
-    /// natáčení, a řadit se podle něj sice dá, ale věřit mu na minutu ne.
-    private static func creationText(_ date: Date, source: CreationDateSource?) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "d. M. yyyy HH:mm:ss"
-        let text = formatter.string(from: date)
-        return source == .fileSystem ? "\(text) (datum souboru)" : text
-    }
-
-    /// osy vlastní `TimelineController`. Se dvěma kopiemi by se po přetvoření
-    /// view rozešel zvýrazněný řádek od klipu načteného v přehrávači.
-    private var clipSelection: Binding<URL?> {
-        Binding(
-            get: { model.selected?.url },
-            set: { url in
-                guard let url,
-                      let clip = model.clips.first(where: { $0.url == url }),
-                      clip.url != model.selected?.url else { return }
-                Task { await model.select(clip) }
-            })
-    }
-
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ProjectStatusRow(store: model.projectStore)
-
-            HStack {
-                Button("Otevřít soubor") { Task { await model.openFiles(directories: false) } }
-                Button("Otevřít složku") { Task { await model.openFiles(directories: true) } }
-            }
-
-            Text(model.status)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            // ⚠️ Výběr přes `selection:`, NE přes `.onTapGesture` na řádku.
-            //
-            // Na macOS stojí `List` nad `NSTableView` a ten si myš bere na
-            // vlastní výběr — gesto uvnitř řádku se pak nespustí a klik na
-            // klip nedělá nic. Na iOSu tentýž kód funguje, takže se ta chyba
-            // snadno napíše a těžko všimne. Odhaleno 27. 07. 2026, ale je
-            // v projektu od fáze 1: dokud se první klip vybíral sám, nebylo
-            // poznat, že ručně vybrat nejde.
-            //
-            // Vedlejší zisk: `selection:` zvýrazní vybraný řádek. Předtím
-            // nešlo poznat, který klip je v přehrávači načtený.
-            List(model.clips, id: \.url, selection: clipSelection) { clip in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(clip.name).font(.system(.body, design: .monospaced))
-                    Text("\(clip.verdict.shortLabel) · \(String(format: "%.2f", clip.measuredFrameRate)) fps"
-                         + (clip.droppedFrames > 0 ? " · \(clip.droppedFrames) zahozených" : ""))
-                        .font(.caption)
-                        .foregroundStyle(clip.isVariable ? .orange : .secondary)
-                    // Čas natočení (fáze 17) — seznam je podle něj seřazený,
-                    // takže musí být vidět. U data ze SOUBORU se to přizná:
-                    // po kopírování z karty to bývá čas kopírování.
-                    if let date = clip.creationDate {
-                        Text(Self.creationText(date, source: clip.creationDateSource))
-                            .font(.caption2)
-                            .foregroundStyle(clip.creationDateSource == .fileSystem
-                                             ? .orange : .secondary)
-                    }
-                }
-            }
-
-            ProxyControls(timeline: model.timeline, proxies: model.proxies,
-                          onChangeLocation: { model.changeProxyDirectory() },
-                          onDelete: { model.deleteProxies() })
-
-            WhisperModelControls(transcription: model.transcription,
-                                 onRelocate: { model.relocateWhisperModel() },
-                                 onDelete: { model.deleteWhisperModel() })
-
-            if let progress = model.exportProgress {
-                VStack(alignment: .leading, spacing: 2) {
-                    ProgressView(value: progress)
-                    Text("Exportuju… \(Int(progress * 100)) %")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    Button("Exportovat film…") { model.exportMovie() }
-                        .disabled(model.clips.isEmpty || model.isMeasuring)
-                    // Hlasitost dodávky (fáze 7): normalizace na cílový
-                    // profil, nebo nechat mix, jak je.
-                    Picker("Hlasitost", selection: Binding(
-                        get: { model.loudnessProfile?.rawValue ?? "none" },
-                        set: { model.loudnessProfile = LoudnessProfile(rawValue: $0) })) {
-                        Text("Bez normalizace").tag("none")
-                        Text("Web / sociální sítě (−14 LUFS)").tag(LoudnessProfile.web.rawValue)
-                        Text("Vysílání EBU R128 (−23 LUFS)").tag(LoudnessProfile.broadcast.rawValue)
-                    }
-                    .controlSize(.small)
-                    .help("Export změří hlasitost celého filmu a dorovná ji na cíl. "
-                        + "Zesílení je omezené špičkami (−1 dBFS) — bez limiteru se přes ně nejde dostat poctivě.")
-                }
-            }
-
-            Button(model.isMeasuring ? "Měřím…" : "Změřit náhled v okně") {
-                Task { await model.runBenchmark() }
-            }
-            .disabled(model.isMeasuring || model.clips.isEmpty)
-
-            Button(model.isMeasuring ? "Měřím…" : "Okno vs celá obrazovka") {
-                Task { await model.runFullScreenComparison() }
-            }
-            .disabled(model.isMeasuring || model.selected == nil)
-
-            Text(verbatim: """
-                Srovnání běží na vybraném klipu: zahřívací běh a pak dvě kola v opačném \
-                pořadí. Počítej asi 4 minuty.
-
-                ⚠️ Po spuštění se aplikace nesmí dostat na pozadí ani na jiný Space. \
-                Když okno není vidět, systém ho přestane skládat, měření vyjde jako \
-                dokonalé a přitom neměřilo nic. Klikni na tlačítko a nech myš i \
-                klávesnici být.
-
-                Před spuštěním zmenši okno, ať je co porovnávat. A pusť vedle v Terminálu:
-                sudo powermetrics --samplers gpu_power,cpu_power -i 1000 > ~/krasa_gpu.txt
-                """)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                // Pevná šířka: při skrytém sidebaru se rámec smrskne na nulu
-                // a text bez tohohle by se zalomil na jedno slovo na řádek,
-                // čímž by natáhl výšku celého HSplitView na tisíce bodů.
-                .frame(width: 276, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if !model.reportLines.isEmpty {
-                ScrollView {
-                    Text(model.reportLines.joined(separator: "\n"))
-                        .font(.system(size: 10, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(minHeight: 160)
-            }
-        }
-        .padding(12)
-    }
-
-    private var playerPane: some View {
-        VStack(spacing: 0) {
-            // Titulkový overlay (fáze 8): kreslí se JEN když má co říct.
-            // Prázdný overlay by přepnul WindowServer do skládání a
-            // zkazil GPU baseline z fáze 1; při měření je schovaný celý
-            // (chromeHidden/isMeasuring), takže benchmarky měří totéž
-            // co dřív.
-            ZStack(alignment: .bottom) {
-                PlayerView(player: model.controller.player) { view in
-                    model.attach(view)
-                }
-                if !model.chromeHidden && !model.isMeasuring {
-                    // Grafické titulky (fáze 11) POD řečovými — řeč je
-                    // dole u spodní hrany, grafika výš; pořadí v ZStacku
-                    // rozhoduje jen při překryvu.
-                    TitleOverlay(timeline: model.timeline)
-                    SubtitleOverlay(timeline: model.timeline)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            // 🚩 Při měření náhledu se osa z hierarchie ODSTRANÍ, ne jen skryje.
-            //
-            // Dva důvody, každý sám o sobě dostatečný. Za prvé: timeline je
-            // první věc v projektu, nad kterou musí WindowServer něco skládat,
-            // a čísla z fáze 1 jsou naměřená bez ní — nechat ji na obrazovce
-            // znamená měřit něco jiného a tvrdit, že je to totéž. Za druhé:
-            // skrývání přes nulový rámec už jednou natáhlo layout na 4398
-            // bodů a měření to nepoznalo (27. 07. 2026). `if` tuhle past
-            // obchází celou; stav osy přežije v `AppModelu`.
-            if !model.chromeHidden {
-                Divider()
-                // Pás inspektoru (fáze 11, modul 3): editor rychlostní
-                // křivky vybraného klipu, NEBO inspektor vybraného
-                // titulku / úseku řeči — výběry se navzájem vylučují.
-                // Pevná výška ze stejného důvodu jako osa pod ním.
-                InspectorStrip(timeline: model.timeline)
-                    .frame(height: 132)
-                Divider()
-                // Pevná výška, ne `idealHeight`. Přehrávač i osa jsou oba
-                // pružné `NSViewRepresentable`, takže se o volné místo
-                // podělily napůl a pod třemi pruhy (156 bodů) zbylo přes
-                // dvě stě bodů prázdna. Tady si osa říká přesně o svoje;
-                // roztahovací dělič je věc kroku 3, až přibude pravítko.
-                TimelinePaneView(controller: model.timeline,
-                                 onMake: { model.attachTimeline($0) })
-                    .frame(height: 220)
-            }
-
-            TransportBar(controller: model.controller, hidden: model.chromeHidden)
-        }
-    }
 }
 
 /// Pás pod přehrávačem (fáze 11, modul 3): rozhoduje, co se v něm ukáže.
 /// Vlastní malé view — `selectedTitle` žije na `TimelineController`, což je
 /// vnořený `ObservableObject`, a ContentView by změnu neviděl (známá past).
-private struct InspectorStrip: View {
+struct InspectorStrip: View {
     @ObservedObject var timeline: TimelineController
 
     var body: some View {
@@ -4105,10 +3958,11 @@ private struct ColorGradePanel: View {
                     }
                 })) {
                 Text("Bez úpravy").tag(ColorPreset?.none)
-                Text("Jemný svatební").tag(ColorPreset?.some(.softWedding))
-                Text("Teplý film").tag(ColorPreset?.some(.warmFilm))
-                Text("Čistá pleť").tag(ColorPreset?.some(.cleanSkin))
-                Text("Černobílá").tag(ColorPreset?.some(.blackAndWhite))
+                // Názvy z jedné tabulky (`ColorPreset.displayName`) — čip na
+                // obraze a tenhle seznam se nesmí rozejít.
+                ForEach(ColorPreset.allCases, id: \.self) { preset in
+                    Text(preset.displayName).tag(ColorPreset?.some(preset))
+                }
             }
             .pickerStyle(.menu)
             .labelsHidden()
@@ -4199,7 +4053,7 @@ private struct SpeechInspector: View {
 /// Šablona tady dostává KONKRÉTNÍ podobu (písmo, velikost, pozice) —
 /// model nese jen její jméno. Velikosti jsou zlomky výšky náhledu,
 /// aby titulek vypadal stejně v malém okně i na celé obrazovce.
-private struct TitleOverlay: View {
+struct TitleOverlay: View {
     @ObservedObject var timeline: TimelineController
     @State private var cues: [TitleCue] = []
 
@@ -4292,7 +4146,7 @@ private struct TitleOverlay: View {
 ///
 /// Promítnuté titulky (`subtitleCues`) se přepočítávají jen při změně
 /// projektu; na tik hlavy se jen hledá v hotovém seřazeném poli.
-private struct SubtitleOverlay: View {
+struct SubtitleOverlay: View {
     @ObservedObject var timeline: TimelineController
     @State private var cues: [SubtitleCue] = []
 
@@ -4328,30 +4182,11 @@ private struct SubtitleOverlay: View {
     }
 }
 
-/// Jméno projektu a stav uložení (fáze 5). Vlastní malé view — vnořený
-/// `ObservableObject` by se v těle `ContentView` nepřekresloval.
-private struct ProjectStatusRow: View {
-    @ObservedObject var store: ProjectStore
-
-    var body: some View {
-        Text(store.displayName + suffix)
-            .font(.headline)
-            .lineLimit(1)
-            .help(store.fileURL?.path ?? "Projekt zatím není uložený — ⌘S ho uloží.")
-    }
-
-    private var suffix: String {
-        if store.isDirty { return " · neuloženo" }
-        guard let saved = store.lastSavedAt else { return " · ⌘S uloží" }
-        return " · uloženo " + saved.formatted(date: .omitted, time: .shortened)
-    }
-}
-
 /// Přepínač proxy a průběh generování (fáze 4). Vlastní malé view ze
 /// stejného důvodu jako `TransportBar`: SwiftUI nesleduje vnořené
 /// `ObservableObject`y, takže `model.proxies.progressText` by se v těle
 /// `ContentView` nikdy nepřekreslil.
-private struct ProxyControls: View {
+struct ProxyControls: View {
     @ObservedObject var timeline: TimelineController
     @ObservedObject var proxies: ProxyStore
     let onChangeLocation: () -> Void
@@ -4394,7 +4229,7 @@ private struct ProxyControls: View {
 /// důvodu jako `ProxyControls` — `transcription` je vnořený
 /// `ObservableObject`. Nestažený model se neukazuje vůbec: dokud
 /// uživatel titulky z řeči nepoužil, není co spravovat.
-private struct WhisperModelControls: View {
+struct WhisperModelControls: View {
     @ObservedObject var transcription: TranscriptionService
     let onRelocate: () -> Void
     let onDelete: () -> Void
@@ -4416,68 +4251,5 @@ private struct WhisperModelControls: View {
                     .lineLimit(2)
             }
         }
-    }
-}
-
-/// Ovládání přehrávání. Vlastní view schválně.
-///
-/// ⚠️ **SwiftUI nesleduje vnořené `ObservableObject`y.** `ContentView` drží
-/// `AppModel`, ale `currentTime` a `isPlaying` jsou publikované na
-/// `AppModel.controller`, což je jiný objekt — změna v něm tedy `ContentView`
-/// nepřekreslí. Projevovalo se to tak, že **časový údaj trvale ukazoval
-/// `0:00.000` a tlačítko se nikdy nepřepnulo na „Pauza"**, přestože
-/// přehrávání běželo a zvuk byl slyšet. V projektu to bylo od fáze 1
-/// a odhaleno až 27. 07. 2026 ruční zkouškou.
-///
-/// Řešením je `@ObservedObject` na controlleru — ale v malém view, ne
-/// v `ContentView`. Kdyby se překresloval celý obsah okna, dělo by se to
-/// třicetkrát za sekundu (tolikrát chodí pozorovatel času) a s ním by se
-/// třicetkrát za sekundu volalo `updateNSView` na časové ose. Takhle se
-/// překresluje jen tenhle proužek.
-private struct TransportBar: View {
-    @ObservedObject var controller: PlaybackController
-    let hidden: Bool
-
-    var body: some View {
-        HStack(spacing: 16) {
-            Button(controller.isPlaying ? "Pauza" : "Přehrát") {
-                controller.togglePlayPause()
-            }
-            .keyboardShortcut(.space, modifiers: [])
-
-            Button("◀︎ snímek") { controller.step(frames: -1) }
-                .keyboardShortcut(.leftArrow, modifiers: [])
-            Button("snímek ▶︎") { controller.step(frames: 1) }
-                .keyboardShortcut(.rightArrow, modifiers: [])
-
-            // JKL (fáze 17). Zkratky visí na ose, ne tady — písmeno bez
-            // modifikátoru by v SwiftUI střílelo i při psaní titulku.
-            // Tlačítka jsou tu pro myš a hlavně kvůli tomu, aby byla
-            // rychlost VIDĚT: „−2× (krokováním)" je přiznaná mez.
-            Button("J") { controller.shuttle(.backward) }
-            Button("K") { controller.shuttle(.pause) }
-            Button("L") { controller.shuttle(.forward) }
-            if controller.shuttleRate != 0 {
-                Text(controller.shuttleDescription)
-                    .font(.caption)
-                    .foregroundStyle(controller.isSteppingFallback ? .orange : .secondary)
-            }
-
-            Spacer()
-            Text(Self.timecode(controller.currentTime))
-                .font(.system(.body, design: .monospaced))
-        }
-        .padding(10)
-        .frame(height: hidden ? 0 : nil)
-        .opacity(hidden ? 0 : 1)
-        .clipped()
-    }
-
-    private static func timecode(_ time: CMTime) -> String {
-        guard time.isValid, time.seconds.isFinite else { return "—" }
-        let total = time.seconds
-        let minutes = Int(total) / 60
-        let seconds = total - Double(minutes * 60)
-        return String(format: "%d:%06.3f", minutes, seconds)
     }
 }

@@ -24,30 +24,24 @@ import TimelineModel
 /// Barvy editoru — stejný vzorec `NSColor(name:dynamicProvider:)` jako
 /// `TimelinePalette`, jen pár položek navíc.
 private enum RampEditorPalette {
-    private static func adaptive(_ name: String,
-                                 dark: NSColor, light: NSColor) -> NSColor {
-        NSColor(name: NSColor.Name(name)) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
-        }
+    /// Jen tmavá varianta — viz `TimelinePalette.adaptive` (fáze 18).
+    private static func adaptive(_ name: String, dark: NSColor) -> NSColor {
+        NSColor(name: NSColor.Name(name)) { _ in dark }
     }
 
     /// Čára křivky. Výrazná — je to hlavní obsah editoru.
     static let curve = adaptive("rampCurve",
-        dark: NSColor(calibratedRed: 0.55, green: 0.72, blue: 1.0, alpha: 1),
-        light: NSColor(calibratedRed: 0.15, green: 0.35, blue: 0.75, alpha: 1))
+        dark: NSColor(calibratedRed: 0.55, green: 0.72, blue: 1.0, alpha: 1))
     /// Výplň uzlu.
     static let node = adaptive("rampNode",
-        dark: NSColor(white: 0.92, alpha: 1),
-        light: NSColor(white: 0.20, alpha: 1))
+        dark: NSColor(white: 0.92, alpha: 1))
     /// Žlutá zóna pod mezí čistého zpomalení. Průhledná — je to podklad,
     /// ne obsah.
     static let zone = adaptive("rampZone",
-        dark: NSColor(calibratedRed: 1.0, green: 0.8, blue: 0.2, alpha: 0.16),
-        light: NSColor(calibratedRed: 0.95, green: 0.75, blue: 0.0, alpha: 0.22))
+        dark: NSColor(calibratedRed: 1.0, green: 0.8, blue: 0.2, alpha: 0.16))
     /// Hranice žluté zóny a text varování.
     static let zoneEdge = adaptive("rampZoneEdge",
-        dark: NSColor(calibratedRed: 1.0, green: 0.8, blue: 0.2, alpha: 0.9),
-        light: NSColor(calibratedRed: 0.72, green: 0.55, blue: 0.0, alpha: 1))
+        dark: NSColor(calibratedRed: 1.0, green: 0.8, blue: 0.2, alpha: 0.9))
 }
 
 final class RampEditorView: NSView {

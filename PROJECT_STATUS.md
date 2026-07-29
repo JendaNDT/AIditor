@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 16: moduly 1–2 hotové — fade úchyty a dBTP strop)*
+*Naposled aktualizováno: 29. 07. 2026 (⭐ VŠECHNY FÁZE 0–16 HOTOVÉ — před námi koukance a KILL-GATE 1)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -7,15 +7,25 @@ Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (v
 
 ## 📍 STAV (29. 07. 2026)
 
-**Fáze 0–9 HOTOVÉ (MVP) + vylepšovací fáze 10–15 HOTOVÉ; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → **hudba s dobami v pravítku, magnetem a dopasováním klipů na dobu** → **analýzy kvality (neostrost, hluchá místa) se značkami na klipech** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a LUFS normalizací → export SRT.
+**⭐ VŠECHNY NAPLÁNOVANÉ FÁZE HOTOVÉ: 0–9 (MVP) i vylepšovací 10–16; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → **hudba s dobami v pravítku, magnetem a dopasováním klipů na dobu** → **analýzy kvality (neostrost, hluchá místa) se značkami na klipech** → **zvukové fade úchyty** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a normalizací na −1 dBTP → export SRT.
 
-Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (365, 28 invariantů), `AudioEngine` (32), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
+Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (412, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 519 automatických testů, 0 selhání.** Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
 
-**Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
+**Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 16, modul 3 (poslední modul vývoje před kill-gate)** — správa modelu Whisperu (zobrazit velikost, smazat, přemístit) + drobnosti z koukanců: trim/roll zaražený přechodem tiše nepustí (duch má zčervenat), přechod nejde vybrat klikem do těla. Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: KOUKANCE RUKOU, pak KILL-GATE 1.** Vývoj podle plánu skončil — žádná další fáze nečeká. Seznam koukanců je níže v sekci „Příští krok"; projdou se najednou a co při nich vyleze, to se opraví. Pak svatba.
 
-## 🚧 FÁZE 16 — vymazlení a technické dluhy (moduly 1–2 HOTOVÉ 29. 07. 2026)
+⚠️ **Do kill-gate se nepřidávají funkce.** Kdyby při koukancích něco chybělo, zapiš to a rozhodni AŽ PO svatbě — plán tenhle bod formuluje jasně: „Zvládl jsi to, ale bolelo to → opravy toho, co bolelo. Žádné nové funkce, dokud to nebolí míň."
+
+## ✅ FÁZE 16 — vymazlení a technické dluhy (HOTOVÁ 29. 07. 2026)
+
+✅ **Modul 3 — správa modelu Whisperu a drobnosti z koukanců (29. 07. 2026): FÁZE 16 A CELÝ PLÁNOVANÝ VÝVOJ JSOU TÍM HOTOVÉ.**
+
+  - **Správa modelu přepisu** v sidebaru (ukazuje se, JEN když je model stažený — dokud uživatel titulky z řeči nepoužil, není co spravovat): velikost a umístění, **Smazat model** (ptá se — 1,5 GB po síti se nemaže na překlep; zahodí i model načtený v paměti, jinak by appka přepisovala z něčeho, co na disku není) a **Přemístit model…** (soubory se PŘESUNOU, ne stáhnou znovu; nová cesta jde do WhisperKitu přes `downloadBase` — ověřeno ve `WhisperKitConfig`, security-scoped bookmark vzorcem `ProxyStore`, při selhání přesunu se zůstane u staré složky místo tvrzení, že je přesunuto).
+  - **Drobnost z koukanců F10 ①: trim se teď o přechod OPŘE.** `transitionArms(clipID:)` vrací ramena, která musí zůstat uvnitř klipu, a náhled tažení je zařezává. Vybrána byla zarážka, ne zčervenání: „ruka se opře o zeď a klip se doveze přesně tam, kam smí" je poctivější než červený duch, který nic neudělá. **Testy vymáhají skutečný kontrakt** — náhled se porovnává s hledanou hranou, kde `trimStart`/`trimEnd` opravdu začne odmítat, ne s jiným vypočteným číslem. Trim, který střih ZRUŠÍ (odtažení od souseda), zarážka neomezuje — tam přechod legálně umírá s ním (pravidlo ① fáze 10).
+  - **Drobnost z koukanců F10 ②: přechod jde vybrat klikem do těla** — žlutý rámeček (týž jazyk výběru jako klipy a titulky), Delete ho smaže, klik do prázdna výběr ruší, výběry se navzájem vylučují.
+  - **Ověřeno screenshotem (`--transition-demo`)**: žlutý rámeček na lichoběžníku prolínačky a v sidebaru „Model přepisu: výchozí složka aplikace · 1,62 GB". Regrese: `--transition-check` po zásahu do trim mezí dává **číslo po čísle** totéž co ve fázi 10 (79/0; 0,7/12,9/13,1).
+  - *Koukanec rukou (v seznamu): tažení trimu se opře o přechod, výběr přechodu klikem a Delete, smazání a přemístění modelu.*
 
 ✅ **Modul 2 — true peak strop normalizace (29. 07. 2026).**
 
@@ -215,9 +225,9 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 
 **Poslední otevřené kritérium je zavřené.** Plynulost náhledu 4K/60 se ve spiku změřit nedala (přehrávač neexistoval) — fáze 1 ji zodpověděla a **27. 07. 2026 byla přeměřena po opravě metodiky: náhled běží přesně na stropu 60Hz displeje, bez sekání.**
 
-## ⏭️ Příští krok: VYLEPŠOVACÍ FÁZE 10–16, kill-gate na konci
+## ⏭️ Příští krok: KOUKANCE RUKOU, pak KILL-GATE 1
 
-**Změna kurzu 28. 07. 2026:** svatební materiál bude až ~koncem srpna, kill-gate 1 se přesouvá NA KONEC vývoje. Mezitím fáze 10–16 (nový plán v `IMPLEMENTACNI_PLAN.md`, sestavený výběrem z dokumentu `Projekt_Krasa_navrh_implementace.docx` + odložených drobností):
+**Změna kurzu 28. 07. 2026:** svatební materiál bude až ~koncem srpna, kill-gate 1 se přesunul NA KONEC vývoje. Vylepšovací fáze 10–16 (plán v `IMPLEMENTACNI_PLAN.md`, sestavený výběrem z dokumentu `Projekt_Krasa_navrh_implementace.docx` + odložených drobností) jsou **hotové všechny**:
 
 1. ✅ **F10 — přechody** (HOTOVÁ 28. 07.; GPU skok změřen — medián ~12 % s kompozicí)
 2. ✅ **F11 — texty a titulky + stopa T1** (HOTOVÁ 29. 07.; obě splátky fáze 8 splacené, export přes `frameDecorator` místo CoreAnimationTool — viz oprava v plánu)
@@ -225,9 +235,9 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 4. ✅ **F13 — barevné presety** (HOTOVÁ 29. 07.; vlastní `ColorVideoCompositor` ověřený `--color-check`, GPU skok ~24 %, UI v inspektoru)
 5. ✅ **F14 — hudební synchronizace** (HOTOVÁ 29. 07.; detekce ±0,1 BPM, doby v pravítku, magnet `.beat`, dopasování s přiznanými mezemi — VLAJKOVÁ)
 6. ✅ **F15 — analýzy kvality** (HOTOVÁ 29. 07.; neostrost 93×, hluchá místa s pravidlem „dekorace není chyba", značky s klik=seek — jen návrhy, nikdy automatický střih)
-7. 🚧 **F16 — vymazlení** (zvukové fade úchyty ✅, dBTP strop, správa Whisper modelu) **← PRÁVĚ TADY, poslední před kill-gate** (modul 1 hotový; zbývá dBTP a Whisper+drobnosti)
+7. ✅ **F16 — vymazlení** (HOTOVÁ 29. 07.; zvukové fade úchyty, strop −1 dBTP, správa Whisper modelu, dvě drobnosti z koukanců F10)
 
-Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou před kill-gate (seznam níže).
+**⭐ Tím plánovaný vývoj skončil.** Zbývají koukance rukou (seznam níže) — projdou se najednou — a pak kill-gate.
 
 **Seznam koukanců (odškrtávat po projití):**
 
@@ -237,6 +247,7 @@ Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou p�
 - [ ] **Barevné presety (F13, po modulu 3):** preset na klipu se projeví v náhledu při přehrávání i scrubování; intenzita mění sílu plynule; přehrávání s presety na 4K ose je plynulé; export vypadá jako náhled; preset + prolínačka + Ken Burns dohromady fungují.
 - [ ] **Hudba a doby (F14, po modulu 3):** Soubor → Přidat hudbu… položí skladbu na A2 a status řekne BPM s jistotou; jantarové doby v pravítku sedí na hudbě („raz" vyšší); tažení klipu se přichytává na doby (slaběji než na hrany, Shift vypíná); u ambientní hudby se tempo poctivě nenajde; dopasování klipu na dobu (modul 3) funguje a respektuje žlutou zónu.
 - [ ] **Analýzy kvality (F15):** po importu se na rozmazaných úsecích klipů objeví oranžové/červené proužky nahoře a na hluchých místech (ticho + tma/prázdno ≥ 5 s) šedé dole (chvíli to trvá — analýza jede na pozadí); klik do proužku skočí hlavou na začátek problému; ostrý/živý klip proužky nemá; tichý záběr na dekoraci se NEhlásí.
+- [ ] **Vymazlení (F16, drobnosti):** trim okraje klipu se opře o přechod (dál nepustí, ale duch nezmizí); klik do lichoběžníku přechod vybere (žlutý rámeček) a Delete ho smaže; v sidebaru je velikost modelu přepisu, „Smazat model" se ptá a „Přemístit model…" ho přesune bez nového stahování.
 - [ ] **Zvukové fade (F16):** na zvukovém klipu jsou v horních rozích úchyty (bílá kolečka); tažením vznikne klín nájezdu/dojezdu, Escape ruší, ⌘Z vrací; fade je slyšet při přehrávání i v exportu; na hraně s prolnutím zvuku fade nefunguje (přechod má přednost).
 - [ ] **Dotaz při zavírání (F5):** změna v projektu → ⌘Q ukáže Uložit/Neukládat/Zrušit (Escape ruší); týž dotaz po výběru souboru při ⌘O a importu; „Uložit" u neuloženého projektu přes „Uložit jako" — zrušení panelu ruší i zavírání.
 - [ ] **Hlasitost stop (F7):** posuvník v hlavičce A1/A2 mění hlasitost ZA BĚHU přehrávání bez zastavení; M ztlumí a vrátí; ⌘Z vrací tažení jedním krokem; hodnoty přežijí uložení a otevření projektu.

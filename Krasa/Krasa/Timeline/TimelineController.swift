@@ -41,6 +41,12 @@ final class TimelineController: ObservableObject {
     /// z přehrávače tudy NEchodí — jinak by vznikla smyčka seek → hlava → seek.
     var onUserSeek: ((Frames) -> Void)?
 
+    /// Transport z klávesnice (fáze 17): J / K / L. Osa přehrávač nezná —
+    /// jen řekne, co uživatel stiskl, a `AppModel` to přeloží na rychlost.
+    /// Vlastní enum schválně: `TimelineController` je bez AVFoundation.
+    enum ShuttleKey { case backward, pause, forward }
+    var onShuttle: ((ShuttleKey) -> Void)?
+
     /// Hlavu právě táhne uživatel. Po tu dobu se ignorují aktualizace
     /// z přehrávače — obousměrná vazba se nikdy nesmí zapnout naráz
     /// (`FAZE_2_VIEW.md`, sekce 5). Schválně ne `@Published`: je to příznak

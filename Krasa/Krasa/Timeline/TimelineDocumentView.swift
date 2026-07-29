@@ -1026,6 +1026,13 @@ final class TimelineDocumentView: NSView {
     /// Náhled fade během tažení — `applyFades` mu dává přednost před modelem.
     private var fadePreview: (clipID: ClipID, fades: AudioFades)?
 
+    /// Drží uživatel něco rozjetého? Auto-scroll za hlavou (fáze 17) se po
+    /// tu dobu MUSÍ vypnout — jinak by osa ujížděla pod taženým klipem.
+    var hasActiveDrag: Bool {
+        fadeDrag != nil || transitionDrag != nil || titleDrag != nil
+            || controller.interaction.isDragging
+    }
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
@@ -1417,6 +1424,19 @@ final class TimelineDocumentView: NSView {
                 controller.splitAtPlayhead(clipID)
             }
             return
+        }
+
+        // JKL (fáze 17). Písmena bez modifikátoru, proto AŽ za zkratkami
+        // s ⌘ — jinak by ⌘J spadlo sem. Zachytává se v ose, ne přes
+        // `keyboardShortcut` v SwiftUI: shortcut bez modifikátoru by
+        // střílel i při psaní textu titulku.
+        if event.modifierFlags.intersection([.command, .option, .control]).isEmpty {
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "l": controller.onShuttle?(.forward); return
+            case "j": controller.onShuttle?(.backward); return
+            case "k": controller.onShuttle?(.pause); return
+            default: break
+            }
         }
         super.keyDown(with: event)
     }

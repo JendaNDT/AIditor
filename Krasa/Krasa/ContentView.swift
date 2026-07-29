@@ -80,6 +80,17 @@ final class AppModel: ObservableObject {
         timeline.onTranscribeRequest = { [weak self] clipID in
             Task { await self?.performTranscription(clipID: clipID) }
         }
+        // JKL z osy → rychlost přehrávače (fáze 17).
+        timeline.onShuttle = { [weak self] key in
+            guard let self else { return }
+            let step: PlaybackController.ShuttleStep
+            switch key {
+            case .forward: step = .forward
+            case .backward: step = .backward
+            case .pause: step = .pause
+            }
+            self.status = "Přehrávání: " + self.controller.shuttle(step)
+        }
         subscriptions = [
             // Přehrávač → osa: při přehrávání jede hlava za časem přehrávače.
             // Smyčce brání dvojí pojistka: `isUserScrubbing` během tažení
@@ -1932,6 +1943,227 @@ final class AppModel: ObservableObject {
         try? await Task.sleep(nanoseconds: 25_000_000_000)
     }
 
+    /// Kvantitativní kontrola fáze 17, modulu 1 (`--jkl-check`).
+    ///
+    /// Tři měření, každé odpovídá jedné otázce plánu:
+    ///  A) drží žebřík JKL konvenci z NLE (L zrychluje, J tlumí, K sráží)?
+    ///  B) co náš přehrávač NA NAŠÍ KOMPOZICI opravdu umí — `canPlayReverse`
+    ///     a spol. se mají ZEPTAT, ne předpokládat — a jede čas při každé
+    ///     rychlosti skutečně tak, jak slibuje?
+    ///  C) zůstane hlava při přehrávání celé osy vidět a kolikrát se přitom
+    ///     osa hne? (Stránkování se pozná podle toho, že skoků je řádově
+    ///     míň než tiků hlavy.)
+    func verifyShuttleAndFollow() async {
+        print("=== A) žebřík JKL ===")
+        var ladderOK = true
+        controller.setShuttleRate(0)
+        // Bez načteného itemu přehrávač nic neumí — žebřík ale musí držet,
+        // to je čistá logika. Rychlost se čte z `shuttleRate`.
+        let script: [(TimelineController.ShuttleKey, Double)] = [
+            (.forward, 1), (.forward, 2), (.forward, 4), (.forward, 8), (.forward, 8),
+            (.backward, 4), (.backward, 2), (.backward, 1), (.backward, 0),
+            (.backward, -1), (.backward, -2), (.pause, 0), (.backward, -1),
+        ]
+        for (key, expected) in script {
+            let step: PlaybackController.ShuttleStep
+            switch key {
+            case .forward: step = .forward
+            case .backward: step = .backward
+            case .pause: step = .pause
+            }
+            controller.shuttle(step)
+            if controller.shuttleRate != expected {
+                print("❌ po \(key) čekáno \(expected)×, je \(controller.shuttleRate)×")
+                ladderOK = false
+            }
+        }
+        controller.setShuttleRate(0)
+        print(ladderOK ? "✅ žebřík 1→2→4→8 se stropem, J tlumí, K sráží na pauzu"
+                       : "❌ žebřík nesedí")
+
+        print("\n=== B) co přehrávač na kompozici umí ===")
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset — pusť s cestou ke klipům"); return
+        }
+        var project = Project.empty()
+        project.addAsset(source)
+        guard project.timeline.availableFrames(from: source.duration).count >= 600 else {
+            print("❌ asset je kratší než 20 s"); return
+        }
+        do {
+            let clip = Clip(assetID: source.id, timelineStart: .zero, duration: Frames(600),
+                            sourceStart: .zero)
+            try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        timeline.project = project
+        for _ in 0..<40 where builtTimeline == nil {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        guard let built = builtTimeline else { print("❌ kompozice nevznikla"); return }
+        controller.loadComposition(built.composition,
+                                   frameRate: project.timeline.frameRate,
+                                   audioMix: built.audioMix(project: project),
+                                   videoComposition: built.videoComposition)
+        for _ in 0..<40 where controller.player.currentItem?.status != .readyToPlay {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        guard let item = controller.player.currentItem, item.status == .readyToPlay else {
+            print("❌ item se nepřipravil"); return
+        }
+        print("zdroj: \(source.originalURL.lastPathComponent) (proxy: \(source.proxyURL != nil ? "ANO" : "NE"))")
+        print("canPlayReverse: \(item.canPlayReverse)   canPlayFastReverse: \(item.canPlayFastReverse)")
+        print("canPlayFastForward: \(item.canPlayFastForward)   canPlaySlowForward: \(item.canPlaySlowForward)")
+
+        /// Změří, kolik SEKUND času se ujelo za jednu sekundu reálného času.
+        func measure(rate: Double, from seconds: Double) async -> (moved: Double, fallback: Bool) {
+            controller.setShuttleRate(0)
+            controller.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            let before = controller.player.currentTime().seconds
+            let description = controller.setShuttleRate(rate)
+            let fallback = description.contains("krokováním")
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            let after = controller.player.currentTime().seconds
+            controller.setShuttleRate(0)
+            return (after - before, fallback)
+        }
+
+        for rate in [1.0, 2.0, 4.0, -1.0, -2.0] {
+            let start = rate < 0 ? 15.0 : 2.0
+            let (moved, fallback) = await measure(rate: rate, from: start)
+            let ratio = moved / rate
+            let verdict = ratio > 0.5 && ratio < 1.5 ? "✅" : "⚠️"
+            print(String(format: "%@ %+.0f× → za 1 s reálného času ujeto %+.2f s (%.0f %% slíbeného)%@",
+                         verdict, rate, moved, ratio * 100,
+                         fallback ? "  [krokováním, bez zvuku]" : ""))
+        }
+        controller.setShuttleRate(0)
+
+        // Krokovací fallback vynuceně: na téhle kompozici přehrávač reverse
+        // umí, takže by se ta větev jinak nespustila ani jednou.
+        controller.forcesSteppingFallback = true
+        for rate in [-1.0, -2.0] {
+            let (moved, fallback) = await measure(rate: rate, from: 15.0)
+            let ratio = moved / rate
+            print(String(format: "%@ %+.0f× vynuceně krokováním → ujeto %+.2f s (%.0f %% slíbeného)%@",
+                         ratio > 0.5 && ratio < 1.5 ? "✅" : "⚠️", rate, moved, ratio * 100,
+                         fallback ? "" : "  ❌ fallback se nespustil!"))
+        }
+        controller.forcesSteppingFallback = false
+        controller.setShuttleRate(0)
+
+        print("\n=== C) osa sleduje hlavu ===")
+        // Simulace přehrávání 20 s osy v okně 900 bodů při zoomu 4 b/snímek:
+        // do okna se vejde 225 snímků, osa má 600.
+        var geometry = TimelineGeometry(pointsPerFrame: 4)
+        let viewport = 900.0
+        let maxScroll = geometry.contentWidth(of: project) - viewport
+        var scrollX = 0.0
+        var jumps = 0
+        var invisible = 0
+        for frame in 0...600 {
+            let head = geometry.x(for: Frames(frame))
+            if head < scrollX || head > scrollX + viewport { invisible += 1 }
+            if let target = geometry.scrollToKeep(playhead: Frames(frame), scrollX: scrollX,
+                                                  viewportWidth: viewport, maxScrollX: maxScroll) {
+                scrollX = target
+                jumps += 1
+            }
+        }
+        print("601 tiků hlavy → \(jumps) skoků osy, hlava mimo okno \(invisible)× "
+              + "(scroll skončil na \(Int(scrollX)) b z \(Int(maxScroll)) b)")
+        print(jumps <= 5 && invisible == 0
+              ? "✅ stránkuje se (ne plynulé centrování) a hlava je vidět pořád"
+              : "❌ čekány jednotky skoků a nula neviditelných tiků")
+
+        // A totéž s odzoomováním, kde se celá osa do okna vejde: nesmí
+        // se scrollovat vůbec.
+        geometry.setZoom(1)
+        var stillScroll = 0.0
+        var stillJumps = 0
+        for frame in 0...600 {
+            if let target = geometry.scrollToKeep(playhead: Frames(frame), scrollX: stillScroll,
+                                                  viewportWidth: viewport,
+                                                  maxScrollX: max(0, geometry.contentWidth(of: project) - viewport)) {
+                stillScroll = target
+                stillJumps += 1
+            }
+        }
+        print(stillJumps == 0 ? "✅ odzoomovaná osa se pod hlavou nehne (0 skoků)"
+                              : "❌ odzoomovaná osa skákala \(stillJumps)×")
+
+        print("\n=== D) totéž v běžícím okně ===")
+        // Část C ověřuje matematiku, tahle napojení: hne se v reálné ose
+        // opravdu scroll, nebo se výsledek funkce ztratí cestou do AppKitu?
+        var live = timeline.geometry
+        live.setZoom(4)
+        timeline.geometry = live
+        NSApp.activate(ignoringOtherApps: true)
+        let deadline = Date().addingTimeInterval(10)
+        while timelinePane?.window == nil, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        guard let pane = timelinePane, let window = pane.window else {
+            print("❌ osa se nedostala do okna"); return
+        }
+        window.makeKeyAndOrderFront(nil)
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+
+        let clipView = pane.scrollView.contentView
+        // Nejdřív na začátek osy a nechat scroll dojet — teprve pak měřit
+        // výchozí pozici, jinak by se do rozdílu započítal skok ze seeku.
+        controller.seek(to: .zero)
+        timeline.setPlayheadFromPlayback(.zero)
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        let before = Double(clipView.bounds.origin.x)
+        controller.play()
+        var headAlwaysVisible = true
+        var samples = 0
+        let playDeadline = Date().addingTimeInterval(12)
+        while Date() < playDeadline {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            let headX = timeline.geometry.x(for: timeline.playhead)
+            let origin = Double(clipView.bounds.origin.x)
+            let width = Double(clipView.bounds.width)
+            if headX < origin - 1 || headX > origin + width + 1 { headAlwaysVisible = false }
+            samples += 1
+        }
+        controller.pause()
+        let after = Double(clipView.bounds.origin.x)
+        print(String(format: "scroll osy: %.0f b → %.0f b za 12 s přehrávání (okno %.0f b, %d vzorků)",
+                     before, after, Double(clipView.bounds.width), samples))
+        print(after > before ? "✅ osa se za hlavou opravdu posunula"
+                             : "❌ osa stojí — funkce počítá, ale scroll se nepohnul")
+        print(headAlwaysVisible ? "✅ hlava byla po celou dobu ve výřezu"
+                                : "❌ hlava z okna vypadla")
+
+        // Klávesy: části A–B testují `shuttle` přímo na přehrávači, tohle
+        // ověřuje CELÝ řetězec keyDown v ose → hook controlleru → rychlost.
+        func press(_ character: String, keyCode: UInt16) {
+            guard let event = NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil,
+                characters: character, charactersIgnoringModifiers: character,
+                isARepeat: false, keyCode: keyCode) else { return }
+            pane.documentView.keyDown(with: event)
+        }
+        controller.setShuttleRate(0)
+        press("l", keyCode: 37); press("l", keyCode: 37)     // L, L → 2×
+        let afterL = controller.shuttleRate
+        press("j", keyCode: 38)                              // J → 1×
+        let afterJ = controller.shuttleRate
+        press("k", keyCode: 40)                              // K → pauza
+        let afterK = controller.shuttleRate
+        controller.setShuttleRate(0)
+        print(afterL == 2 && afterJ == 1 && afterK == 0
+              ? "✅ klávesy z osy dojdou k přehrávači (LL→2×, J→1×, K→pauza)"
+              : "❌ klávesy nedošly: LL→\(afterL)×, J→\(afterJ)×, K→\(afterK)×")
+    }
+
     /// CLI ukázka fáze 16 (`--fade-demo`): zvukový klip s klíny fade.
     func runFadeDemo() async {
         guard let source = timeline.project.assets
@@ -2938,6 +3170,8 @@ struct ContentView: View {
                     await model.runFadeDemo()
                 } else if arguments.contains("--transition-demo") {
                     await model.runTransitionSelectionDemo()
+                } else if arguments.contains("--jkl-check") {
+                    await model.verifyShuttleAndFollow()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
@@ -3703,6 +3937,19 @@ private struct TransportBar: View {
                 .keyboardShortcut(.leftArrow, modifiers: [])
             Button("snímek ▶︎") { controller.step(frames: 1) }
                 .keyboardShortcut(.rightArrow, modifiers: [])
+
+            // JKL (fáze 17). Zkratky visí na ose, ne tady — písmeno bez
+            // modifikátoru by v SwiftUI střílelo i při psaní titulku.
+            // Tlačítka jsou tu pro myš a hlavně kvůli tomu, aby byla
+            // rychlost VIDĚT: „−2× (krokováním)" je přiznaná mez.
+            Button("J") { controller.shuttle(.backward) }
+            Button("K") { controller.shuttle(.pause) }
+            Button("L") { controller.shuttle(.forward) }
+            if controller.shuttleRate != 0 {
+                Text(controller.shuttleDescription)
+                    .font(.caption)
+                    .foregroundStyle(controller.isSteppingFallback ? .orange : .secondary)
+            }
 
             Spacer()
             Text(Self.timecode(controller.currentTime))

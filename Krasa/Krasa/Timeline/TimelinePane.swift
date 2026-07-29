@@ -114,6 +114,18 @@ final class TimelinePane: NSView {
             name: NSView.boundsDidChangeNotification,
             object: scrollView.contentView)
 
+        // Uživatel scrolluje rukou (fáze 17). Po tu dobu se osa za hlavou
+        // netahá — dvě ruce na jednom scrollu je přesně ta past, před
+        // kterou plán varuje. `boundsDidChange` tohle nerozliší: chodí
+        // stejně za scroll od uživatele i za scroll programový.
+        // <https://developer.apple.com/documentation/appkit/nsscrollview/willstartlivescrollnotification>
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(liveScrollWillStart(_:)),
+            name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(liveScrollDidEnd(_:)),
+            name: NSScrollView.didEndLiveScrollNotification, object: scrollView)
+
         changeSubscriptions = [
             controller.$project
                 .removeDuplicates()
@@ -141,7 +153,10 @@ final class TimelinePane: NSView {
             controller.$playhead
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)
-                .sink { [weak self] _ in self?.documentView.updatePlayhead() },
+                .sink { [weak self] _ in
+                    self?.documentView.updatePlayhead()
+                    self?.followPlayhead()
+                },
             // Dopočítané špičky a dlaždice vlny (krok 10). Verze roste na
             // pozadí dokončenou prací — refresh si hotové kusy vyzvedne.
             // Throttle: při scrollu přes neviděný obsah doběhne desítky
@@ -251,6 +266,53 @@ final class TimelinePane: NSView {
         rulerView.scrollX = Double(origin.x)
         headersView.scrollY = Double(origin.y)
         documentView.refreshClips()
+    }
+
+    // MARK: - Osa sleduje hlavu (fáze 17)
+
+    /// Uživatel právě scrolluje rukou.
+    private var isLiveScrolling = false
+    /// Uživatel si odscrolloval pryč od hlavy — následování se do odvolání
+    /// nechá být. Zruší se samo, jakmile je hlava zase ve výřezu: klik do
+    /// pravítka je vždycky uvnitř výřezu, takže „vrať se k hlavě" nepotřebuje
+    /// žádnou další cestu.
+    private var followSuspended = false
+
+    @objc private func liveScrollWillStart(_ notification: Notification) {
+        isLiveScrolling = true
+    }
+
+    @objc private func liveScrollDidEnd(_ notification: Notification) {
+        isLiveScrolling = false
+        followSuspended = playheadTargetScroll() != nil
+    }
+
+    /// Kam by se osa posunula, aby hlava zůstala vidět. `nil` = je vidět.
+    private func playheadTargetScroll() -> Double? {
+        let clipView = scrollView.contentView
+        let viewportWidth = Double(clipView.bounds.width)
+        return controller.geometry.scrollToKeep(
+            playhead: controller.playhead,
+            scrollX: Double(clipView.bounds.origin.x),
+            viewportWidth: viewportWidth,
+            maxScrollX: Double(documentView.frame.width) - viewportWidth)
+    }
+
+    /// Stránkovací posun za hlavou. Rozhodnutí KAM dělá `TimelineGeometry`
+    /// (otestované bez UI), tady zbývá jen „kdy ne" a samotný scroll.
+    private func followPlayhead() {
+        guard !controller.isUserScrubbing, !documentView.hasActiveDrag, !isLiveScrolling else { return }
+        guard let target = playheadTargetScroll() else {
+            followSuspended = false      // hlava je vidět → následování zase platí
+            return
+        }
+        guard !followSuspended else { return }
+
+        let clipView = scrollView.contentView
+        clipView.scroll(to: NSPoint(x: target, y: clipView.bounds.origin.y))
+        // Bez tohohle scroller nezná novou pozici a `boundsDidChange`
+        // nedorazí — pravítko i klipy by zůstaly na starém výřezu.
+        scrollView.reflectScrolledClipView(clipView)
     }
 
     // MARK: - Zoom (krok 8)

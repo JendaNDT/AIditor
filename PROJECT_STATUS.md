@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (FÁZE 18 ROZJETÁ — hotové moduly 1 a 2)*
+*Naposled aktualizováno: 29. 07. 2026 (FÁZE 18 ROZJETÁ — hotové moduly 1, 2 a 3)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,9 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (453, 29
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 3 — lišta osy: přepínače vrstev, citlivost, výřez, zoom.** Plán celé fáze je ve `FAZE_18_UI.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 7 — připnutý panel 452 se záložkami + záložka Rychlost.** Plán celé fáze je ve `FAZE_18_UI.md`.
 
-**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 → M7 → M8 → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
+**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 → M8 → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
 ⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
 
@@ -26,6 +26,36 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
+
+✅ **Modul 3 — lišta osy (29. 07. 2026).**
+
+  - **Pás 32 px** nad osou: přepínače `Miniatury` / `Vlny` / `Doby` / `Značky kvality`, posuvník
+    `Citlivost` s hodnotou, `Přichytávání`, výřez s `I`/`O`, zoom a `Fit ⇧Z`.
+  - **Vypnutá vrstva se NEPOČÍTÁ, ne jen neukazuje** — early-out v `rebuildClipInfo`,
+    `applyWaveform` a `drawBeatMarks`. Kdyby se jen skryla, přepínač by nic neušetřil.
+  - **Citlivost 0–1** (`UserDefaults`, přežívá restart, ne projekt) přepočítává jen KLASIFIKACI
+    hotových vzorků přes `qualityMarks(samples:sensitivity:)` — **analýzu nespouští**, takže je to
+    okamžité. Fáze 15 to měla v modelu, UI k tomu chybělo.
+  - **Přichytávání dostalo globální přepínač** vedle shiftu: dosud existovala jen shiftová cesta,
+    takže kdo chtěl hodinu stříhat bez magnetu, musel hodinu držet shift.
+  - **`⇧Z` (Fit) visí na `keyDown` osy**, ne na SwiftUI zkratce — „Z" je při psaní titulku pořád jen
+    písmeno (vzorec JKL z F17). Zoom umí spočítat jen `TimelinePane`: šířku výřezu zná scroll view.
+  - **Miniatury: přepínač existuje, vrstva ne** (přijde v M5). Je vypnutý a nese důvod v tooltipu —
+    je to **pojistka pro M5**, a ta nemá vznikat ve chvíli, kdy je zle.
+  - **Ověřeno `--layers-check`:** vypnutá vrstva nenechá **ani jednu** dlaždici vlny a **ani jeden**
+    proužek kvality (měřeno na skutečných nasazených vrstvách, ne na příznaku); citlivost
+    0,2/0,5/0,8 → **0/289/289** značek monotónně a **vzorky zůstaly nedotčené**.
+  - **⚠️ Měření ceny odhalilo anomálii — izolovanou, ale nevysvětlenou.** Deterministicky (rozptyl
+    uvnitř konfigurace 0,00–0,01 ms): všechny vrstvy zapnuté **0,29 ms**, jen vlny vypnuté **0,26**,
+    jen značky vypnuté **0,28**, vlny+značky vypnuté **0,25** — tedy přesně podle záměru. Ale
+    **jen doby vypnuté 0,70 ms** a všechny vypnuté 0,60 ms. Anomálie sedí na jediném příznaku
+    `beats`, přestože `drawBeatMarks` se s ním vypnutým vrací dřív, než zavolá `beatMarks()`, a
+    měřený projekt žádné doby nemá. Prakticky bez dopadu (rozpočet 16,67 ms/tik, `--timeline-bench`
+    dál 0 vypadlých tiků), **ale v M5 to musí být vysvětlené** — tam se přepínač stane pojistkou.
+    ⚠️ Kritérium plánu „scroll je měřitelně levnější" je tím splněné **jen zčásti**.
+  - **Regrese:** `--timeline-bench` 0 vypadlých tiků, `--shell-check` i `--status-check` beze změny.
+  - *Koukanec rukou (v seznamu): přepínače vrstev, posuvník citlivosti na reálně rozmazaném záběru,
+    ⇧Z, zoom posuvník, I/O tlačítka.*
 
 ✅ **Modul 2 — stav běžících analýz (29. 07. 2026).**
 

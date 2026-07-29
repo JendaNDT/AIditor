@@ -240,6 +240,61 @@ informační řádek. Ověřeno v obou režimech cache.
 **Přiznaná mez M2:** tečka proxy se ukáže, až proxy existují; u projektu bez nich je levá strana
 řádku prázdná. Je to záměr — tečka „Proxy 0/0" by uživatele naučila řádek nečíst.
 
+### ✅ M3 — lišta osy: vrstvy, citlivost, přichytávání, výřez, zoom (29. 07. 2026)
+
+**Postaveno:** `UI/Shell/TimelineLayerBar.swift` (pás 32 px), `TimelineLayers` a `qualitySensitivity`
+na `TimelineControlleru`, early-outy v `rebuildClipInfo` / `applyWaveform` / `drawBeatMarks`,
+`TimelinePane.zoomToFit()`, globální přepínač přichytávání, `⇧Z` na `keyDown` osy.
+
+**Vypnutá vrstva se NEPOČÍTÁ, ne jen neukazuje.** Kdyby se jen skryla, přepínač by nic neušetřil —
+a byl by to podvod na uživateli, který ho zmáčkl právě proto, že mu to jelo pomalu.
+
+**Přichytávání dostalo globální přepínač.** Dosud existovala jen shiftová cesta, takže kdo chtěl
+hodinu stříhat bez magnetu, musel hodinu držet shift. `snapping(for:)` je jedno místo, kde se obě
+cesty slévají: přepínač na sezení, shift na jedno tažení.
+
+**`⇧Z` visí na `keyDown` osy, ne na SwiftUI `keyboardShortcut`** — „Z" je při psaní titulku pořád jen
+písmeno (vzorec JKL z F17).
+
+**Miniatury: přepínač existuje, vrstva ne.** Je vypnutý a nese důvod v tooltipu. Existuje dřív než
+miniatury schválně — je to **pojistka pro M5**, a pojistka nemá vznikat ve chvíli, kdy je zle.
+
+**Ověřeno `--layers-check`:**
+- ✅ vypnutá vrstva nenechá **ani jednu** dlaždici vlny a **ani jeden** proužek kvality (měřeno
+  přes `drawnLayerCounts` na skutečných nasazených vrstvách, ne na příznaku);
+- ✅ citlivost 0,2 / 0,5 / 0,8 → **0 / 289 / 289** značek, monotónně, **a vzorky zůstaly nedotčené**
+  (posuvník přepočítává klasifikaci, analýzu nespouští).
+
+**⚠️ Měření ceny odhalilo anomálii, a ta zůstává otevřená.** 2000 klipů, zoom 5, rozptyl uvnitř
+konfigurace 0,00–0,01 ms (tedy deterministicky):
+
+| konfigurace | medián práce na tik |
+|---|---|
+| všechny vrstvy zapnuté | 0,29 ms |
+| jen vlny vypnuté | **0,26 ms** ✓ ušetří |
+| jen značky vypnuté | **0,28 ms** ✓ ušetří |
+| vlny + značky vypnuté | **0,25 ms** ✓ ušetří nejvíc |
+| **jen doby vypnuté** | **0,70 ms** ⚠️ dvojnásobek |
+| všechny vypnuté | 0,60 ms ⚠️ tažené příznakem dob |
+
+Vlny a značky se chovají přesně podle záměru. Anomálie je **izolovaná na jediný příznak `beats`** —
+a je tím divnější, že `drawBeatMarks` se s vypnutým příznakem vrací dřív, než vůbec zavolá
+`beatMarks()`, a měřený projekt žádnou mřížku dob nemá, takže by obě větve měly stát nula.
+Příčinu se vyčíst nepodařilo.
+
+Prakticky to nevadí (0,70 ms proti rozpočtu 16,67 ms na tik; `--timeline-bench` dál hlásí **0
+vypadlých tiků**), ale **v M5 to musí být vysvětlené** — tam se přepínač miniatur stane pojistkou,
+na které záleží, a pojistka, která zdražuje, je horší než žádná.
+
+⚠️ Kritérium plánu *„scroll je měřitelně levnější"* je tím **splněné jen zčásti**: levnější je
+u vln a značek, u dob ne. Nepředstírám opak.
+
+**Regrese:** `--timeline-bench` 0 vypadlých tiků, `--shell-check` i `--status-check` beze změny.
+
+**Přiznaná mez M3:** citlivost 0,5 a 0,8 dávají na syntetických vzorcích týž počet značek — propad
+je v nich skok (40 ze 100), takže oba prahy padnou nad něj. Na reálném materiálu se to liší; test
+proto vymáhá jen monotonii a rozdíl krajních hodnot, ne rozdíl každého kroku.
+
 ---
 
 ## 5. Roadmapa

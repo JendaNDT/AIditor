@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 13 HOTOVÁ)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 14: modul 1 hotový — BeatGrid v AudioEngine)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,7 +13,16 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (365, 28
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 14 — hudební synchronizace (VLAJKOVÁ), modul 1** — `BeatGrid` v `AudioEngine`: onsety (energie + spektrální tok přes vlastní FFT), odhad tempa, mřížka hlavních/vedlejších dob, ruční korekce prvního taktu a násobku tempa. Čistý Swift, testy na syntetických klikových stopách se známým tempem. Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 14 — hudební synchronizace, modul 2** — hudební mapa na ose: analýza hudebního klipu na A2 (`BeatDetector` nad `MonoAudioReader`, výsledek k assetu jako `Asset.beatGrid` — vzorec `transcript`), doby jako značky v pravítku a **magnetické přichytávání** střihů a klipů na doby = nový druh kandidáta v `TimelineGeometry` (otestovatelné bez UI; síla kandidáta mezi „hrana klipu" a „mřížka snímků"). Detail v `IMPLEMENTACNI_PLAN.md`.
+
+## 🚧 FÁZE 14 — hudební synchronizace (modul 1 HOTOVÝ 29. 07. 2026)
+
+✅ **Modul 1 — `BeatGrid` + `BeatDetector` v `AudioEngine` (29. 07. 2026).** Čistý Swift bez závislostí (vlastní FFT z fáze 7), **+16 testů, celkem 48 v balíčku, 0 selhání**; vše prošlo napoprvé.
+
+  - **`BeatGrid`** (Codable — poputuje k assetu do projektového souboru): tempo, `firstBeatTime` = FÁZE mřížky (ne nutně první slyšitelný úder — předtaktí existuje), doby na takt (výchozí 4), `downbeatOffset`, jistota. Dotazy `beats(from:to:)` / `nearestBeat(to:)`; **ruční korekce podle plánu**: `doubleTempo`/`halveTempo` (oktávová chyba detekce je legální dvojznačnost), `alignBeat(to:)` (posun fáze), `markDownbeat(at:)` (která doba je „raz" — automatická detekce taktů se NEDĚLÁ, je nespolehlivá i pro velké systémy; výchozí takt od první doby).
+  - **`BeatDetector.analyze`:** onset obálka (Hann rámce ~21 ms, poloviční krok, vlastní FFT; detekční funkce = půlvlnný spektrální tok + nárůst energie, každý normalizovaný — energie je kvadratická a tok by přehlušila) → tempo autokorelací obálky v mezích 60–180 BPM s mírnou log-normální preferencí ~120 BPM (autokorelace má stejná maxima na násobcích periody — váha vybírá hudebně pravděpodobnou oktávu, remízu, ne vítěze) a parabolickou interpolací vrcholu → fáze = posun s největším průměrem obálky → **zpřesnění lineární regresí časů onsetů proti indexům dob** (jen onsety do 15 % periody od předpovědi, dvě kola; bez ní by autokorelační rozlišení ~11 ms nechalo mřížku na konci tříminutové skladby ujíždět o desítky ms). Šum bez pulzace vrací `nil` (práh normalizované autokorelace 0,15), krátký signál taky.
+  - **Testy na klikových stopách se známým tempem:** 120 / 97,4 (neceločíselné) / 110 s fází 0,37 s / 128 se šumem / 70 (pomalé — preference nesmí přebít autokorelaci) — **tempo v toleranci ±0,1 BPM** (se šumem ±0,3), fáze ±15 ms modulo perioda; šum → `nil`; onsety sedí na klicích (20/20, ±25 ms); mřížka: rozsahy, hranice, nejbližší doba, korekce, Codable roundtrip.
+  - Vstupní kontrakt jako `WaveformSync`: mono `[Float]` + vzorkovací frekvence, převzorkování je věc volajícího.
 
 ## ✅ FÁZE 13 — barevné presety (HOTOVÁ 29. 07. 2026)
 
@@ -163,7 +172,7 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 2. ✅ **F11 — texty a titulky + stopa T1** (HOTOVÁ 29. 07.; obě splátky fáze 8 splacené, export přes `frameDecorator` místo CoreAnimationTool — viz oprava v plánu)
 3. ✅ **F12 — fotky a Ken Burns** (HOTOVÁ 29. 07.; fotka přes „still movie" mezisoubor, freeze frame jako fotka)
 4. ✅ **F13 — barevné presety** (HOTOVÁ 29. 07.; vlastní `ColorVideoCompositor` ověřený `--color-check`, GPU skok ~24 %, UI v inspektoru)
-5. **F14 — hudební synchronizace** (beat-grid na vlastní FFT, magnet na doby, dopasování tempa 90–115 % s respektem k limitu zpomalení — VLAJKOVÁ) **← PRÁVĚ TADY**
+5. 🚧 **F14 — hudební synchronizace** (beat-grid na vlastní FFT, magnet na doby, dopasování tempa 90–115 % s respektem k limitu zpomalení — VLAJKOVÁ) **← PRÁVĚ TADY** (modul 1 hotový: `BeatGrid`+`BeatDetector` v `AudioEngine`, ±0,1 BPM na klikových stopách; zbývá modul 2 mapa+magnet a modul 3 dopasování)
 6. **F15 — analýzy kvality** (neostrost, ticho/prázdno; jen návrhy, nikdy automatický střih)
 7. **F16 — vymazlení** (zvukové fade úchyty, dBTP strop, správa Whisper modelu)
 

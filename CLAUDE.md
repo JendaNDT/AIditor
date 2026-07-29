@@ -206,7 +206,20 @@ souseda by byl překryv, tedy chyba, a to šedesátkrát za sekundu. `beginInter
 Testy pustíš přes `cd TimelineModel && swift test`. Návrh a zdůvodnění v `FAZE_2_TIMELINE.md`.
 
 ### `AudioEngine/`
-Měření hlasitosti podle ITU-R BS.1770-4 (na něm stojí EBU R128) a cross-korelační synchronizace nahrávek. Čistý Swift, žádné závislosti (vlastní FFT — Accelerate by zabil přeložitelnost na Linuxu). **32 testů; hlasitost nezávisle ověřena proti `pyloudnorm` — shoda < 0,05 LU** (tolerance EBU je ±0,5 LU); sync na reálném zvuku najde posun s chybou < 0,1 ms i při SNR −3 dB.
+Měření hlasitosti podle ITU-R BS.1770-4 (na něm stojí EBU R128), cross-korelační synchronizace nahrávek a od fáze 14 detekce dob hudby (`BeatGrid` + `BeatDetector`). Čistý Swift, žádné závislosti (vlastní FFT — Accelerate by zabil přeložitelnost na Linuxu). **48 testů; hlasitost nezávisle ověřena proti `pyloudnorm` — shoda < 0,05 LU** (tolerance EBU je ±0,5 LU); sync na reálném zvuku najde posun s chybou < 0,1 ms i při SNR −3 dB; tempo na klikových stopách ±0,1 BPM.
+
+```swift
+// mřížka dob hudebního podkladu (fáze 14)
+if let grid = BeatDetector.analyze(samples: monoSamples, sampleRate: 48_000) {
+    grid.bpm                       // tempo (zpřesněné regresí přes onsety)
+    grid.beats(from: 0, to: 30)    // doby s příznakem „raz" (isDownbeat)
+    // ruční korekce: doubleTempo/halveTempo, alignBeat(to:), markDownbeat(at:)
+    // grid.confidence < ~0,3 = mřížce nevěř a přiznej to v UI
+}
+// šum/řeč bez pulzace vrací nil — mřížka se nevymýšlí
+```
+
+Vstup mono `[Float]` + frekvence (převzorkování je věc volajícího — kontrakt `WaveformSync`). Fáze mřížky (`firstBeatTime`) není nutně první slyšitelný úder (předtaktí); detekce taktů se nedělá automaticky, „raz" určuje uživatel přes `markDownbeat`.
 
 ```swift
 // sync klopáku: kam na osu reference patří začátek kandidáta

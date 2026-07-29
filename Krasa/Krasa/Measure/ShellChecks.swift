@@ -469,16 +469,26 @@ extension AppModel {
         print(String(format: "   zapnuté %.2f ms (rozptyl %.2f) · vypnuté %.2f ms (rozptyl %.2f)",
                      onMean, spread(true), offMean, spread(false)))
 
-        // ⚠️ ŽÁDNÁ pass/fail podmínka — ale ANI TVRZENÍ, že je to šum.
+        // ⚠️ ŽÁDNÁ pass/fail podmínka — ale ani tvrzení, že je to šum.
         //
-        // Naměřeno 29. 07. 2026 (ABBA, 2000 klipů, zoom 5): zapnuté 0,29 a
-        // 0,30 ms, vypnuté 0,61 a 0,61 ms. Rozptyl UVNITŘ konfigurace je
-        // 0,01 ms, mezi konfiguracemi 0,32 ms — je to tedy reprodukovatelné
-        // a je to OBRÁCENĚ, než by dávalo smysl: vypnuté vrstvy stojí dvakrát
-        // víc. Příčinu se z kódu vyčíst nepodařilo (`clearWaveTiles` na
-        // prázdné sadě ani skrývání proužků to vysvětlit neumí).
+        // Naměřeno 29. 07. 2026 (2000 klipů, zoom 5; rozptyl uvnitř téže
+        // konfigurace 0,00–0,01 ms, tedy deterministicky):
         //
-        // Prakticky to zatím nevadí: 0,61 ms proti rozpočtu 16,67 ms na tik
+        //   všechny zapnuté        0,29 ms
+        //   jen vlny vypnuté       0,26 ms   ✓ ušetří, jak má
+        //   jen značky vypnuté     0,28 ms   ✓ ušetří, jak má
+        //   vlny + značky vypnuté  0,25 ms   ✓ ušetří nejvíc
+        //   JEN DOBY VYPNUTÉ       0,70 ms   ⚠️ dvojnásobek
+        //   všechny vypnuté        0,60 ms   ⚠️ tažené příznakem dob
+        //
+        // Vlny i značky se tedy chovají PŘESNĚ podle záměru; anomálie je
+        // izolovaná na jediný příznak — `beats`. A je tím divnější, že
+        // `drawBeatMarks` s vypnutým příznakem dělá STRIKTNĚ MÍŇ práce
+        // (vrátí se dřív, než vůbec zavolá `beatMarks()`) a měřený projekt
+        // navíc žádnou mřížku dob nemá, takže by obě větve měly stát nula.
+        // Příčinu se vyčíst nepodařilo.
+        //
+        // Prakticky to zatím nevadí: 0,70 ms proti rozpočtu 16,67 ms na tik
         // a `--timeline-bench` dál hlásí nula vypadlých tiků. Ale **v M5 to
         // vysvětlené být musí** — tam se přepínač miniatur stane pojistkou,
         // na které záleží, a pojistka, která zdražuje, je horší než žádná.
@@ -504,10 +514,12 @@ extension AppModel {
         timeline.layers = TimelineLayers()
 
         print("")
-        print("   ⚠️ Vypnuté vrstvy vycházejí DRAŽ, a reprodukovatelně "
-              + "(rozptyl uvnitř konfigurace je řádově menší než mezi nimi).")
-        print("      Příčina neznámá, prakticky zatím bez dopadu (rozpočet je 16,67 ms/tik).")
-        print("      Otevřená otázka pro M5, kde se přepínač miniatur stane pojistkou.")
+        print("   ✓ vlny a značky ušetří, jak mají (0,25–0,28 proti 0,29 ms)")
+        print("   ⚠️ ANOMÁLIE izolovaná na příznak `beats`: s vypnutými dobami 0,70 ms,")
+        print("      přestože `drawBeatMarks` tehdy dělá striktně míň práce a měřený")
+        print("      projekt žádné doby nemá. Deterministické (rozptyl 0,00 ms).")
+        print("      Prakticky bez dopadu (rozpočet 16,67 ms/tik), ale v M5 to musí být")
+        print("      vysvětlené — tam se přepínač stane pojistkou, na které záleží.")
 
         print("")
         print("=== B) citlivost mění počet značek ===")

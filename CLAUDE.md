@@ -135,7 +135,7 @@ Testy pustíš přes `cd SpeedRampEngine && swift test`.
 ### `TimelineModel/`
 Logika, geometrie a interakce časové osy. Čistý Swift, závislosti
 `SpeedRampEngine` a od F14 `AudioEngine` (oba také čistý Swift), **žádné
-AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **375
+AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **384
 testů, ověřeno; 28 invariantů ve `validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
 křivku (uzly kotvené ve zdrojovém čase) a `rampPlaybackPlan` vydává
 segmentaci v celých tickách pro `scaleTimeRange`. Od vylepšovacích fází
@@ -167,7 +167,13 @@ navíc:
   se zvukem), `beatMarks()` promítá doby na osu inverzí `sourceOffset`
   (vzorec `subtitleCues`). Magnet: `SnapCandidate.Kind.beat` — SLABŠÍ než
   hrana klipu; `snapCandidates(beats:)` dostává doby od volajícího,
-  geometrie projekt nezná.
+  geometrie projekt nezná. Dopasování: `fitClipEndToBeat` (konstantní
+  rychlost 90–115 %, VŽDY nad limitem čistého zpomalení, spotřeba se
+  zachovává, souosé dvojče jde s klipem) a `rampClipToBeat` (zpomalení
+  dosedne na dobu; kotvy analyticky — easeInOut spotřebuje rozpětí ×
+  (1+slow)/2). Chyby nesou RADU (`noBeatInReach(nearest:)`), UI je
+  překládá do tooltipů vypnutých položek menu; o zapnutí položky
+  rozhoduje zkušební běh operace na kopii projektu.
 
 ```swift
 var project = Project.empty()                        // V1 + A1 + A2 + T1

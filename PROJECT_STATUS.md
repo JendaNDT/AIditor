@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (fáze 14: moduly 1–2 hotové — hudební mapa na ose a magnet na doby)*
+*Naposled aktualizováno: 29. 07. 2026 (fáze 14 HOTOVÁ — vlajková hudební synchronizace)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -7,15 +7,22 @@ Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (v
 
 ## 📍 STAV (29. 07. 2026)
 
-**Fáze 0–9 HOTOVÉ (MVP) + vylepšovací fáze 10–13 HOTOVÉ; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a LUFS normalizací → export SRT.
+**Fáze 0–9 HOTOVÉ (MVP) + vylepšovací fáze 10–14 HOTOVÉ; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → **hudba s dobami v pravítku, magnetem a dopasováním klipů na dobu** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a LUFS normalizací → export SRT.
 
 Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (365, 28 invariantů), `AudioEngine` (32), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
 
 **Běží vylepšovací fáze 10–16** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → barevné presety → hudební synchronizace (vlajková) → analýzy kvality → vymazlení. **KILL-GATE 1 (svatba) je až NA KONCI — materiál ~konec srpna 2026.** Koukance rukou autor odkládá na konec; konsolidovaný seznam je v sekci „Příští krok".
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 14 — hudební synchronizace, modul 3 (dopasování na dobu): FÁZE 14 SE JÍM UZAVŘE.** „Přizpůsobit klip" = konstantní změna rychlosti v mezích 90–115 %, ⚠️ **vždy nad limitem čistého zpomalení** (`výstupFps/zdrojFps` — žlutá zóna platí i tady); „rampa na úder" = preset `SpeedRampEngine` končící zpomalením přesně na době. **Při velké odchylce nevynucovat** — nabídnout trim nebo jiný bod (zásada přiznaných mezí). Detail v `IMPLEMENTACNI_PLAN.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 15 — analýzy kvality záběrů, modul 1** — detekce neostrosti: Laplaceova ostrost + hrany na zmenšených náhledech (2–5 vzorků/s), cache otiskem souboru (vzorec vln); barevné značky na klipu, klik = seek. Návrhová vrstva — žádné automatické zásahy. Detail v `IMPLEMENTACNI_PLAN.md`.
 
-## 🚧 FÁZE 14 — hudební synchronizace (moduly 1–2 HOTOVÉ 29. 07. 2026)
+## ✅ FÁZE 14 — hudební synchronizace (HOTOVÁ 29. 07. 2026, VLAJKOVÁ)
+
+✅ **Modul 3 — dopasování na dobu (29. 07. 2026): FÁZE 14 JE TÍM HOTOVÁ.** Čistý model (**+9 testů, celkem 384, 0 selhání — napoprvé**), UI je tenké menu nad otestovanými operacemi.
+
+  - **„Zarovnat konec na dobu hudby" (`fitClipEndToBeat`):** KONSTANTNÍ změna rychlosti — hraje se týž zdrojový úsek, spotřeba se zachovává (rychlosti křivky × f, délka ÷ f; bez křivky vznikne jeden uzel — jediný uzel = konstantní rychlost, vlastnost `SpeedMath`). Meze podle plánu: rychlost 90–115 % **a vždy nad limitem čistého zpomalení** — kandidátka doba, která by limit porušila, se přeskočí (test: 30fps zdroj na 30fps ose si místo bližšího zpomalení na 105 vybere zrychlení na 90). Obsazené doby (soused; dotyk je legální) se přeskakují; souosé svázané dvojče jde s klipem (délka i rychlost), nesouosé dostane jen rychlost. Žádná doba v dosahu → `noBeatInReach(nearest:)` — chyba NESE nejbližší dobu a UI z ní dělá radu.
+  - **„Zpomalení na dobu / rampa na úder" (`rampClipToBeat`):** preset 1× → easeInOut (15 snímků) → slow, kde zpomalení DOSEDNE přesně na dobu nejblíž hlavě. Kotvy **analyticky, žádná iterace**: před rampou jede klip 1× (zdrojová kotva = čas na ose) a easeInOut spotřebuje rozpětí = délka × (1+slow)/2 — táž symetrie jako referenční hodnota Spiku 0 (ramp 1→0,25→1 přes 5 s = 3,125 s). Test drží klíčovou záruku: `frameOffset` zdrojové kotvy konce rampy == snímek doby. Výchozí slow = max(0,25; limit zdroje); zdroj bez rezervy (30 fps na 30fps ose) → `noCleanSlowdown` — **automatika limit nepřekračuje**, ruční editor křivky se žlutou zónou ano (persona Alena).
+  - **Kontextové menu (jen obrazový klip, ne fotka):** o zapnutí položky rozhoduje **zkušební běh operace na kopii projektu** — menu nelže: vypnutá položka nese v tooltipu důvod přeložený z chyby modelu („nejbližší doba je na 0:00:03:15 — trimni klip…", „zdroj nemá dost snímků na čisté zpomalení", „na střihu leží přechod"). Akce jde přes controller s jedním undo krokem.
+  - *Koukanec rukou (v seznamu F14): obě položky menu na reálné hudbě a klipu.*
 
 ✅ **Modul 2 — hudební mapa na ose a magnet na doby (29. 07. 2026).**
 
@@ -181,8 +188,8 @@ Hlavní technické riziko projektu je zavřené. **Rozsah MVP je reálný, stav�
 2. ✅ **F11 — texty a titulky + stopa T1** (HOTOVÁ 29. 07.; obě splátky fáze 8 splacené, export přes `frameDecorator` místo CoreAnimationTool — viz oprava v plánu)
 3. ✅ **F12 — fotky a Ken Burns** (HOTOVÁ 29. 07.; fotka přes „still movie" mezisoubor, freeze frame jako fotka)
 4. ✅ **F13 — barevné presety** (HOTOVÁ 29. 07.; vlastní `ColorVideoCompositor` ověřený `--color-check`, GPU skok ~24 %, UI v inspektoru)
-5. 🚧 **F14 — hudební synchronizace** (beat-grid na vlastní FFT, magnet na doby, dopasování tempa 90–115 % s respektem k limitu zpomalení — VLAJKOVÁ) **← PRÁVĚ TADY** (moduly 1–2 hotové: detekce ±0,1 BPM, `Asset.beatGrid`, doby v pravítku, magnet `.beat`; zbývá modul 3 dopasování na dobu)
-6. **F15 — analýzy kvality** (neostrost, ticho/prázdno; jen návrhy, nikdy automatický střih)
+5. ✅ **F14 — hudební synchronizace** (HOTOVÁ 29. 07.; detekce ±0,1 BPM, doby v pravítku, magnet `.beat`, dopasování s přiznanými mezemi — VLAJKOVÁ)
+6. **F15 — analýzy kvality** (neostrost, ticho/prázdno; jen návrhy, nikdy automatický střih) **← PRÁVĚ TADY**
 7. **F16 — vymazlení** (zvukové fade úchyty, dBTP strop, správa Whisper modelu)
 
 Koukance z minulého zápisu zůstávají v platnosti — projdou se najednou před kill-gate (seznam níže).

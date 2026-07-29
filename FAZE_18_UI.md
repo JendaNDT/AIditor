@@ -295,6 +295,57 @@ u vln a značek, u dob ne. Nepředstírám opak.
 je v nich skok (40 ze 100), takže oba prahy padnou nad něj. Na reálném materiálu se to liší; test
 proto vymáhá jen monotonii a rozdíl krajních hodnot, ne rozdíl každého kroku.
 
+### ✅ M7 — připnutý panel 452 + záložka Rychlost (29. 07. 2026)
+
+**Postaveno:** `UI/Panels/PinnedPanel.swift` (hlavička s jménem klipu a metou, záložky, tělo se
+scrollem), `UI/Panels/SpeedTab.swift`, `TimelineController.setClassicRamp(_:slowSpeed:)`,
+`RampEditorView.nodePoints`. **Potíž #2 zadání je tím zavřená** — křivka má box 150 px v panelu
+širokém 452 místo 132 bodů výšky dělených s panelem barev.
+
+**Záložky jsou zatím dvě: Rychlost a Barva.** `Zvuk` a `Info` doplní M8 a do té doby se
+**neukazují** — prázdná záložka je horší než chybějící.
+
+**Korekce výšky je zapojená naostro**, ne jako ozdoba: mění náhled (nový `AVPlayerItem`) i export.
+⚠️ **Je to nastavení PROJEKTU, ne klipu, a jinak to nejde** — `audioTimePitchAlgorithm` je vlastnost
+`AVPlayerItem`u a výstupu čtečky, ne stopy ani segmentu. Přiznaná mez v1: drží se v `UserDefaults`,
+ne v projektovém souboru.
+
+**Tabulka důvodů „proč dopasování nejde" je teď jedna** (`TimelineError.beatFitReason`) pro kontextové
+menu i pro panel. Dvě kopie téhož textu by se rozešly, jakmile v modelu přibude případ.
+
+**⚠️ Tolerance 2 % u presetů — rozhodnutí, ne opomenutí.** Testovací klipy mají naměřeno **59,68 fps**,
+takže `pureSlowdownLimit` vyjde **0,5027** a preset „0,5×" by byl trvale nedostupný kvůli propadu
+0,54 % (asi jeden duplikovaný snímek z dvou set). Na 60fps materiálu — a ten je podle měření
+většinový — by z celé řady presetů byla ozdoba. **Žlutá zóna v editoru zůstává přesná**; tolerance
+platí jen pro presety.
+
+**Ověřeno `--panel-check`** (syntetické události na skutečném editoru v okně):
+- ✅ preset 0,5× dal rampu s nejnižší rychlostí 0,500× a spotřeba **33,700 s se vejde do zdroje
+  44,938 s** (kotvení přes `(1+slow)/2` drží);
+- ✅ „Bez rampy" rampu zruší, jeden preset = **jeden undo krok**;
+- ✅ box má **150 bodů** výšky a **428** šířky (proti dosavadním 132 na výšku);
+- ✅ dvojklik přidal uzel (3 → 4), tažení změnilo křivku (0,51 → 0,21), **⌘Z vrátil celé**,
+  Escape rozjeté tažení zrušil a křivka zůstala;
+- ✅ `⌘4` skryje panel a osa se rozšíří **z 666 na 1119 bodů**, tedy právě o 453 (panel + předěl).
+
+**⚠️ Dvě chyby byly v mém MĚŘENÍ, ne v kódu** — a obě by test „prošly":
+① tažení jsem porovnával přes `min()` rychlostí, ale přidaný uzel leží v nejnižším bodě křivky,
+takže po posunutí nahoru zůstalo minimum stejné a test by prošel i u tažení, které nic neudělá;
+② táhl jsem ze STŘEDU plochy, kde žádný uzel není — uzel leží tam, kam ho posadí mapování rychlosti
+na `y`. Kvůli ② dostal editor měřicí okno `nodePoints`, takže se pozice **čte, nehádá**.
+
+**Screenshot chytil, co měření nemohlo:** preset, který je zároveň aktivní i pod mezí, byl vykreslený
+jako vybraný a současně zašedlý — vypadalo to jako chyba kreslení. Aktivní preset se teď nevypíná;
+šedivět stav, který právě platí, uživatele mate. Vypnutá je jen volba, kterou by teprve zvolil.
+
+**Regrese:** `--export-check` **4739 snímků** (číslo po číslu jako baseline — sáhl jsem do exportu
+kvůli korekci výšky), `--timeline-bench` 0 vypadlých tiků, `--shell-check` i `--status-check` beze změny.
+
+**Přiznaná nesrovnalost k rozhodnutí:** kontextové menu „Zpomalit 0,25×" (`toggleClassicRamp`) mez
+čistého zpomalení **nekontroluje**, zatímco preset v panelu ji ctí. Na 60fps materiálu tedy jde přes
+menu nastavit rampu, kterou panel odmítne nabídnout. Není to nové — `toggleClassicRamp` se tak chová
+od F14 — ale teď je to vedle sebe vidět. Sjednotit to je věc rozhodnutí, ne úklidu, a M7 do něj nesahá.
+
 ---
 
 ## 5. Roadmapa

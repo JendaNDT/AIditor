@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (FÁZE 18 ROZJETÁ — hotové moduly 1, 2 a 3)*
+*Naposled aktualizováno: 29. 07. 2026 (FÁZE 18 ROZJETÁ — hotové moduly 1, 2, 3 a 7)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,9 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (453, 29
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 7 — připnutý panel 452 se záložkami + záložka Rychlost.** Plán celé fáze je ve `FAZE_18_UI.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 8 — záložky Barva, Zvuk a Info.** Plán celé fáze je ve `FAZE_18_UI.md`.
 
-**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 → M8 → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
+**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
 ⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
 
@@ -26,6 +26,43 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
+
+✅ **Modul 7 — připnutý panel 452 se záložkami (29. 07. 2026).**
+
+  - **Potíž #2 zadání zavřená:** křivka rychlosti má box **150 px** v panelu širokém 452, ne 132 bodů
+    výšky dělených s panelem barev. Hlavička nese jméno klipu a metu („zdroj 60 fps · 00:03:00"),
+    tělo scrolluje, `⌘4` panel skryje a osa se rozšíří **z 666 na 1119 bodů** (právě o 453).
+  - **Záložky zatím dvě — Rychlost a Barva.** Zvuk a Info doplní M8 a do té doby se NEUKAZUJÍ:
+    prázdná záložka je horší než chybějící.
+  - **Záložka Rychlost:** presety `Bez rampy / 0,5× / 0,25× / 0,125×`, editor křivky, čip segmentace
+    (`90 úseků`, `mez skoku nedosažitelná`), spotřeba zdroje, korekce výšky, dopasování na hudbu.
+  - **Korekce výšky je NOVÁ volba a je zapojená naostro** (náhled i export).
+    ⚠️ **Je to nastavení PROJEKTU, ne klipu, a jinak to nejde:** `audioTimePitchAlgorithm` je
+    vlastnost `AVPlayerItem`u a výstupu čtečky, jemnější zrno API nedovoluje. Přiznaná mez v1: drží
+    se v `UserDefaults`, ne v projektovém souboru.
+  - **⚠️ Tolerance 2 % u presetů — rozhodnutí, ne opomenutí.** Naměřeno 59,68 fps → mez 0,5027, takže
+    preset „0,5×" by byl trvale nedostupný kvůli propadu 0,54 %. Na 60fps materiálu (většinovém) by
+    z presetů byla ozdoba. **Žlutá zóna v editoru zůstává přesná.**
+  - **Tabulka důvodů „proč dopasování nejde" je teď jedna** (`TimelineError.beatFitReason`) pro
+    kontextové menu i panel.
+  - **Ověřeno `--panel-check`** syntetickými událostmi na skutečném editoru: preset 0,5× dal
+    nejnižší rychlost 0,500× a spotřeba **33,700 s se vejde do zdroje 44,938 s**; box **150×428**;
+    dvojklik přidal uzel (3 → 4), tažení změnilo křivku (0,51 → 0,21), **⌘Z vrátil celé**, Escape
+    rozjeté tažení zrušil; `⌘4` vrátí ose 453 bodů.
+  - **⚠️ Dvě chyby byly v MĚŘENÍ, ne v kódu, a obě by „prošly":** ① tažení se porovnávalo přes
+    `min()` rychlostí, ale přidaný uzel leží v nejnižším bodě křivky — po posunutí nahoru zůstalo
+    minimum stejné; ② táhlo se ze STŘEDU plochy, kde uzel není. Editor proto dostal měřicí okno
+    `nodePoints` a pozice se **čte, nehádá**.
+  - **Screenshot chytil, co měření nemohlo:** preset zároveň aktivní i pod mezí byl vykreslený jako
+    vybraný a současně zašedlý. Aktivní preset se teď nevypíná — šedivět stav, který právě platí,
+    vypadá jako chyba kreslení.
+  - **Regrese:** `--export-check` **4739 snímků** (sáhlo se do exportu kvůli korekci výšky),
+    `--timeline-bench` 0 vypadlých tiků, `--shell-check` i `--status-check` beze změny.
+  - **Přiznaná nesrovnalost k rozhodnutí:** kontextové menu „Zpomalit 0,25×" (`toggleClassicRamp`)
+    mez čistého zpomalení nekontroluje, panel ji ctí. Chová se tak od F14, ale teď je to vedle sebe
+    vidět. Sjednocení je věc rozhodnutí, ne úklidu.
+  - *Koukanec rukou (v seznamu): kreslení křivky myší v panelu, presety, ⌘4, korekce výšky na
+    zpomaleném záběru se zvukem.*
 
 ✅ **Modul 3 — lišta osy (29. 07. 2026).**
 

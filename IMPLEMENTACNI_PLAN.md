@@ -305,15 +305,20 @@ Nepoužívej `SwiftWhisper` — je zamrzlý na whisper.cpp z jara 2023 a nemá M
 
 ---
 
-### FÁZE 9 — Distribuce (3 týdny) → **v1.0** ✅ UZAVŘENA 28. 07. 2026 v rozsahu osobní aplikace (podpis/notarizace/Sparkle odloženy, zůstala migrace na Configuration)
+### FÁZE 9 — Distribuce (3 týdny) → **v1.0** ✅ UZAVŘENA 28. 07. 2026 v rozsahu osobní aplikace (podpis/notarizace/Sparkle odloženy; migrace na Configuration NEPROBĚHLA — viz níž)
 
 ~~Developer ID, hardened runtime, `notarytool`, `stapler`, Sparkle.~~
 
-**CELÁ DISTRIBUCE ODLOŽENA — rozhodnutí autora 28. 07. 2026: aplikace je zatím jen pro něj, Developer účet (99 USD/rok) se neplatí.** Bez účtu není podpis ani notarizace, bez šíření nemá smysl Sparkle. Appka se spouští z vlastního buildu na vlastním stroji. Z fáze 9 se udělala jen migrace na `AVVideoComposition.Configuration` (hotová). Kdyby se autor někdy rozhodl appku šířit, tahle sekce je návod, co bude potřeba.
+**CELÁ DISTRIBUCE ODLOŽENA — rozhodnutí autora 28. 07. 2026: aplikace je zatím jen pro něj, Developer účet (99 USD/rok) se neplatí.** Bez účtu není podpis ani notarizace, bez šíření nemá smysl Sparkle. Appka se spouští z vlastního buildu na vlastním stroji. Z fáze 9 se neudělalo nic — ani migrace kompozice (viz opravu níž). Kdyby se autor někdy rozhodl appku šířit, tahle sekce je návod, co bude potřeba.
 
 **Licencování a freemium limit VYNECHÁNY — rozhodnutí autora 28. 07. 2026: aplikace bude free.** Cena 1 490 Kč ze specifikace (sekce o monetizaci) neplatí.
 
-**+ Migrace kompozice na `AVVideoComposition.Configuration`.** Tohle je jediné místo, kam ten úkol patří — ne dřív.
+**+ Migrace kompozice na `AVVideoComposition.Configuration` — NEHOTOVÁ, a je to správně.**
+⚠️ **Oprava zápisu 30. 07. 2026:** dřívější verze tohohle odstavce tvrdila, že migrace „hotová" je.
+Není — ověřeno grepem, v `Krasa/` není ani jedno `#available(macOS 26.0, *)` a `CompositionBuilder`
+staví výhradně na `AVMutableVideoComposition`. A tak to má zatím zůstat: deployment target je 14.0,
+kde `Configuration` NEEXISTUJE, takže migrace znamená přidat druhou větev, ne vyměnit první
+(pravidlo v `CLAUDE.md`). Je to úkol před vydáním; dokud se appka nešíří, nemá kdo z něj mít užitek.
 
 - `CompositionBuilder` dostane dvě větve pod `if #available(macOS 26.0, *)`: novou přes `AVVideoComposition(configuration:)`, starou přes `AVMutableVideoComposition`. Obě za jedním vlastním rozhraním, ať se to nerozlézá po kódu.
 - Totéž pro `AVVideoCompositionInstruction.Configuration` a `AVVideoCompositionLayerInstruction.Configuration`.
@@ -428,17 +433,38 @@ Při tom se ověří i kritérium fáze 4 (plynulost na 200GB reálném materiá
 
 ---
 
-## Třetí vlna: fáze 17–21 (sestaveno 29. 07. 2026)
+## Třetí vlna: fáze 17–22 (sestaveno 29. 07. 2026, přečíslováno 30. 07. 2026)
+
+**Stav k 30. 07. 2026:** ✅ **fáze 17 hotová** (ergonomie střihu — osa sleduje hlavu, JKL,
+multi-výběr, schránka, chronologie, export výřezu). ✅ **Hotová je i fáze 18 — ale JINÁ, než
+měla tahle vlna v plánu:** 29. 07. 2026 zařadil autor před svatbu přestavbu UI podle
+`design_handoff_krasa_ui/` a ta dostala číslo 18 (plán v `FAZE_18_UI.md`, třináct modulů,
+hotovo 30. 07. 2026).
+
+⚠️ **Proto se zbytek vlny PŘEČÍSLOVAL o jedna nahoru** (V2 z 18 na 19, ducking na 20,
+multikamera na 21, stabilizace na 22; podmíněné fáze na 23 a 24). Ustoupila nepostavená fáze,
+ne postavená: číslo 18 je vypálené ve 45 zdrojových souborech aplikace, kdežto V2 zatím
+neexistuje ani řádkem. Kdo narazí na starší zápis „fáze 18 = V2“, ať ví, že je to text
+z 29. 07. 2026.
+
+**Nic z fází 19–22 se nezačne před kill-gate 1.** Pořadí smí svatba přeházet — to je celý
+smysl toho, že se stříhá dřív, než se tyhle fáze postaví.
 
 Sestaveno z návrhu vylepšení po dokončení fází 10–16, na základě průzkumu kódu — ne z přání, ale z toho, co v appce po dostavění plánu opravdu chybí. Tři pravidla, která tuhle vlnu drží pohromadě:
 
 1. **Fáze 17 je JEDINÁ, která smí přijít před kill-gate.** Nejsou to funkce, jsou to chybějící základy ovládání. Bez nich bude svatba bolet z důvodů, které s produktem nemají nic společného.
-2. **Pořadí 18–21 není závazné.** Kill-gate ho smí přeházet: co bude na svatbě bolet, jde nahoru. To je celý smysl toho, že se svatba stříhá dřív, než se tyhle fáze postaví.
+2. **Pořadí 19–22 není závazné.** Kill-gate ho smí přeházet: co bude na svatbě bolet, jde nahoru. To je celý smysl toho, že se svatba stříhá dřív, než se tyhle fáze postaví.
 3. **Každá fáze má kvantitativní ověření** (CLI kontrola se změřenými čísly), stejně jako fáze 10–16. Screenshot je doplněk, ne důkaz.
 
-### FÁZE 17 — Ergonomie střihu → v1.1 (PŘED kill-gate)
+### ✅ FÁZE 17 — Ergonomie střihu → v1.1 (PŘED kill-gate) · HOTOVÁ 29. 07. 2026
 
 Cíl: appka, ve které se dá strávit den, ne jen předvést funkce. Všechno níže je díra ověřená v kódu, ne domněnka.
+
+**Jak to dopadlo:** všechny tři moduly hotové, ověřené `--jkl-check`, `--select-check` a `--range-check`
+(čísla v `PROJECT_STATUS.md`). Dvě věci dopadly jinak, než plán čekal: zpětné přehrávání naše kompozice
+**umí** (`canPlayReverse` hlásí `true`), jen na 84 % rychlosti — krokovací fallback proto zůstává a kontrola
+ho **vynucuje**, aby nespouštěná cesta tiše neshnila. A auto-scroll musel dostat víc vypínačů, než plán
+předpokládal: vypíná se i během live scrollu, ne jen při scrubování a tažení.
 
 - **Modul 1 — osa sleduje hlavu + JKL.**
   - **Auto-scroll STRÁNKOVACÍ, ne plynulé centrování.** Když hlava opustí pravý okraj, skočí se tak, aby seděla v levé třetině. Plynulé centrování překresluje osu na každý tik hlavy (30×/s) — přesně to, čemu se fáze 2 vyhnula zúžením odběrů — a opticky je nepříjemné. Logika do modelu jako čistá funkce (`TimelineGeometry.scrollToKeep(playhead:in:)`), testovatelná bez UI.
@@ -455,9 +481,28 @@ Cíl: appka, ve které se dá strávit den, ne jen předvést funkce. Všechno n
   - **Řazení podle času** v sidebaru a příkaz „Uspořádat chronologicky" na ose. Dnes se řadí podle JMÉNA — u jedné kamery to projde (název je timestamp), u druhé kamery nebo telefonu hostů se chronologie rozsype. Svatba je chronologická událost.
   - **Export rozsahu:** in/out na ose, exportuje se jen výřez. Kontrola kusu filmu bez čekání na celek.
 
-**Hotovo když:** přehrání dvacetiminutové osy nevyžaduje sáhnout na scroll; preset na deset klipů je jedno kliknutí; klipy ze dvou kamer se poskládají v pořadí, ve kterém se natočily.
+**Hotovo když:** přehrání dvacetiminutové osy nevyžaduje sáhnout na scroll; preset na deset klipů je jedno kliknutí; klipy ze dvou kamer se poskládají v pořadí, ve kterém se natočily. ✅ **Splněno.**
 
-### FÁZE 18 — Druhá obrazová stopa (V2) → v1.2
+### ✅ FÁZE 18 — Přestavba UI podle design handoffu → v1.2 · HOTOVÁ 30. 07. 2026
+
+**Do plánu přibyla 29. 07. 2026 na pokyn autora**, mimo původní třetí vlnu — a s výslovným zrušením
+pravidla „do kill-gate se nepřidávají funkce". Zadáním je `design_handoff_krasa_ui/` (šest hi-fi obrazovek,
+rozměry v bodech na dodržení), plán a roadmapa všech třinácti modulů ve **`FAZE_18_UI.md`**.
+
+Třináct modulů ve čtyřech etapách: **A** rám okna, stavový řádek, lišta osy · **B** výšky stop, miniatury
+na klipech, přehled celé osy · **C** panel se záložkami, knihovna médií s přetažením · **D** list exportu,
+panel přepisu řeči, prázdný start, fullscreen náhled. Každý modul měl vlastní CLI bránu (`--shell-check`
+až `--fullscreen-ui-check`) a povinnou regresní sadu; **žádný se neodložil**.
+
+Model se přitom skoro nehnul — `topInset` v geometrii (M4), `duplicatedFrameShare` pro varování o duplikaci
+(M10) a `splitTranscriptSegment` + `speechCueRanges` pro editaci přepisu (M11), dohromady **+10 testů**.
+Formát projektového souboru zůstal na verzi 2.
+
+**Hotovo když:** šest potíží ze zadání je zavřených (sidebar mísící dokument a měření, 132 px na křivku
+rychlosti, transport bez hierarchie, neviditelné analýzy, osa bez vypínačů, chybějící knihovna médií).
+✅ **Splněno**, čísla u každého modulu v `PROJECT_STATUS.md`.
+
+### FÁZE 19 — Druhá obrazová stopa (V2) → v1.3
 
 Největší funkční díra: dnes je JEDNA obrazová stopa, takže neexistuje B-roll, druhá kamera ani obraz nad obrazem.
 
@@ -468,7 +513,7 @@ Největší funkční díra: dnes je JEDNA obrazová stopa, takže neexistuje B-
 - **Modul 3 — vrstvení v kompozici a exportu.** ⚠️ **Kritická oprava:** video kompozice dnes vzniká jen kvůli přechodu, Ken Burns nebo presetu. **Překryv dvou obrazových stop ji musí vynutit taky** — jinak si AVFoundation vybere stopu sama a výsledek je nepředvídatelný. v1 = plné překrytí (horní stopa zakrývá spodní); obraz v obraze (měřítko a pozice) je samostatná položka backlogu, ne součást téhle fáze.
 - **Ověření `--v2-check`:** export, kde klip na V2 překrývá V1 — změřený snímek v překryvu musí odpovídat zdroji z V2, snímek mimo překryv zdroji z V1.
 
-### FÁZE 19 — Ducking hudby pod řečí + jednotná obálka mixu → v1.3
+### FÁZE 20 — Ducking hudby pod řečí + jednotná obálka mixu → v1.4
 
 Nejotravnější ruční operace svatebního filmu. Všechny díly existují: přepis říká, KDE se mluví, mix umí volume rampy, `LoudnessMeter` umí měřit.
 
@@ -476,7 +521,7 @@ Nejotravnější ruční operace svatebního filmu. Všechny díly existují: p�
 - **Modul 2 — jednotná obálka mixu.** ⚠️ Dnes se do `AVMutableAudioMixInputParameters` sypou rampy ze tří nezávislých zdrojů (hlasitost stopy, crossfade, fade po klipech) a drží to pravidlo „hrana pod crossfadem fade nedostane". S duckingem jako čtvrtým zdrojem to přestane jít uhlídat. Správné řešení: spočítat pro každou stopu kompozice **JEDNU po částech lineární obálku** ze všech zdrojů a vydat ji jako uspořádanou sekvenci ramp. Je to úklid, který udělá mix správný konstrukcí místo pravidly — a je předpokladem, ne vedlejším produktem.
 - **Ověření `--duck-check`:** export hudby s řečí; RMS hudebního pásma během řeči proti RMS mimo ni, a kontrola, že se hlasitost vrací (nezůstane stažená).
 
-### FÁZE 20 — Multikamera, markery a třídění materiálu → v1.4
+### FÁZE 21 — Multikamera, markery a třídění materiálu → v1.5
 
 Tři nezávislé věci, které dohromady dělají práci s velkým materiálem snesitelnou. Každá stojí na něčem hotovém.
 
@@ -484,7 +529,7 @@ Tři nezávislé věci, které dohromady dělají práci s velkým materiálem s
 - **Modul 2 — markery.** `SnapCandidate.Kind.marker` je v modelu připravený a dosud nepoužitý. Marker patří OSE (ne stopě): čas, jméno, barva. M ho položí na hlavu, kreslí se v pravítku, přichytávání dostane zadarmo, seznam umí skákat. Při procházení hodin materiálu je to způsob, jak si dělat poznámky („polibek", „proslov"), aniž bys musel stříhat.
 - **Modul 3 — třídění a navigace podle kvality.** Fáze 15 už spočítala ostrost i hluchá místa a drží je v cache. Nad hotovými daty: filtr v sidebaru („jen ostré klipy"), skok na další problém klávesou, souhrn na klipu („12 s neostrého").
 
-### FÁZE 21 — Stabilizace obrazu → v1.5 — **SPIKE PRVNÍ, s právem přestat**
+### FÁZE 22 — Stabilizace obrazu → v1.6 — **SPIKE PRVNÍ, s právem přestat**
 
 **Zařazeno na výslovné přání autora 29. 07. 2026.** Do té doby byla podmíněná a plán ji odkládal se třemi výhradami. Ty výhrady NEZANIKLY: „gumový obraz" (vlnění z rolling shutteru globální transformací opravit NELZE), nutnost předvýpočtu, a možnost, že gimbal řeší problém líp než software. Proto fáze **začíná měřením, ne stavbou** — a modul 1 smí celou fázi zastavit.
 
@@ -509,13 +554,13 @@ Tři nezávislé věci, které dohromady dělají práci s velkým materiálem s
 
 ## Podmíněné fáze (po kill-gate 1, podle chuti)
 
-*(Stabilizace odsud 29. 07. 2026 ODEŠLA — autor ji zařadil do třetí vlny jako fázi 21.)*
+*(Stabilizace odsud 29. 07. 2026 ODEŠLA — autor ji zařadil do třetí vlny; po přečíslování je to fáze 22.)*
 
-### FÁZE 22 — Detekce momentů (bez biometrie) — **PODMÍNĚNÁ**
+### FÁZE 23 — Detekce momentů (bez biometrie) — **PODMÍNĚNÁ**
 
 Polibek, potlesk, tanec přes Vision detekci (obličeje-DETEKCE, pózy, pohyb) + pravidla — bez rozpoznávání identity, takže bez právního gate. Přesnost nebude vysoká (dokument to u prstenů sám přiznává); dělat jen, když po svatbě bude jasné, že ruční procházení bolí.
 
-### FÁZE 23 — Rozpoznávání obličejů (8–12 týdnů) — **PODMÍNĚNÁ, tři gaty**
+### FÁZE 24 — Rozpoznávání obličejů (8–12 týdnů) — **PODMÍNĚNÁ, tři gaty**
 
 Tohle není funkce. Je to samostatný projekt uvnitř projektu.
 
@@ -537,7 +582,7 @@ To poslední není leštění. Ente na tom pracovalo 21 měsíců s placeným t�
 
 ### Backlog (nezařazené, bez čísla)
 
-Automatický reframe 16:9 → 9:16 (Vision + dynamický crop), masky a sledování objektu (rozmazání SPZ/obličeje), **obraz v obraze** (měřítko a pozice klipu na V2 — navazuje na fázi 18), přepínání úhlů multikamery (sync řeší fáze 20), HDR end-to-end, slovenština, LUT soubory (.cube), generátor 48h teaseru, odšumění (`AVAudioEngine` — první skutečný důvod ho nasadit), zvuková obálka po klipech nad rámec fade. Optical flow zůstává škrtnutý. *(Ducking odsud 29. 07. 2026 odešel — je z něj fáze 19.)*
+Automatický reframe 16:9 → 9:16 (Vision + dynamický crop), masky a sledování objektu (rozmazání SPZ/obličeje), **obraz v obraze** (měřítko a pozice klipu na V2 — navazuje na fázi 19), přepínání úhlů multikamery (sync řeší fáze 21), HDR end-to-end, slovenština, LUT soubory (.cube), generátor 48h teaseru, odšumění (`AVAudioEngine` — první skutečný důvod ho nasadit), zvuková obálka po klipech nad rámec fade. Optical flow zůstává škrtnutý. *(Ducking odsud 29. 07. 2026 odešel — je z něj fáze 20.)*
 
 **Z dokumentu vědomě NEpřevzato:** SQLite/Core Data místo projektového souboru (náš JSON formát je hotový, deterministický a verzovaný — migrace bez užitku), přestavba UI na čtyři pracovní režimy (velká přestavba bez jasného přínosu pro jednoho uživatele; jednotlivé prvky — inspektor, režim exportu — můžou přijít postupně) a „učení z potvrzení uživatele" u momentů (nejasná hodnota, dost práce).
 

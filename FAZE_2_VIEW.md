@@ -2,6 +2,11 @@
 
 *Napsáno 27. 07. 2026. Navazuje na `FAZE_2_TIMELINE.md`, který popisuje hotový a otestovaný `TimelineModel`.*
 
+> **Historický dokument.** Návrh `TimelineView` z 27. 07. 2026, napsaný PŘED kódem. Osa je hotová
+> od fáze 2 a fáze 18 jí přidala miniatury, křivky na klipech, přehled celé osy i nové rozměry stop.
+> **Aktuální stav je v `PROJECT_STATUS.md` a `FAZE_18_UI.md`**; tenhle text drží zdůvodnění
+> návrhu — proč je osa v AppKitu, proč se během tažení do modelu nezapisuje a proč se recykluje.
+
 `TimelineModel` je hotový: 143 testů, žádná závislost na AppKitu ani AVFoundation.
 Zbývá poslední kus fáze 2 — **view**. Je to jediná část projektu, kterou nejde
 otestovat jinak než okem na běžící aplikaci, a proto je jediné rozumné zadání

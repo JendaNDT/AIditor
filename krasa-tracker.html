@@ -306,7 +306,7 @@ footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);color:v
 <div class="out" id="out"></div>
 
 <footer>
-  Projekt Krása · implementační tracker v3.0 · 28. 7. 2026 — fáze 0–9 hotové, běží vylepšovací fáze 10–16, kill-gate na konci<br>
+  Projekt Krása · implementační tracker v4.0 · 30. 7. 2026 — <b>fáze 0–18 hotové</b> (MVP 0–9, vylepšení 10–16, ergonomie 17, přestavba UI 18), 570 automatických testů. Dál koukance rukou a KILL-GATE 1 (svatba, materiál ~konec srpna 2026).<br>
   Stav se neukládá mezi načteními — po práci klikni na „Zkopírovat stav" a vlož ho do <code>PROJECT_STATUS.md</code>.
 </footer>
 
@@ -341,39 +341,47 @@ const PH=[
   note:"WhisperKit v1.0.0, model <code>openai_whisper-large-v3-v20240930</code> (= large-v3-turbo; pozor na názvosloví). Český přepis ověřen.",dm:"",
   ts:["Model přepisu kotvený ve zdroji + SRT (14 testů)","WhisperKit + stažení modelu (~1,5 GB)","Overlay v náhledu + export .srt"]},
  {id:9,tag:"F9",t:"Distribuce — uzavřena v osobním rozsahu",w:"hotovo 28. 7.",v:"",done:true,
-  note:"<b>Rozhodnutí autora: appka je free a jen pro něj — podpis, notarizace, Sparkle i licence ODLOŽENY.</b> Udělána jen migrace na Configuration (dvojí větev, ověřeno exportem).",dm:"",
-  ts:["Migrace na AVVideoComposition.Configuration","Zbytek odložen (návod zůstává v plánu)"]},
- {id:10,tag:"F10",t:"Přechody",w:"",v:"v0.10",
-  note:"Prolínačka, zatmívačka, audio crossfade. <b>První video kompozice v přehrávání — očekávaný GPU skok, změřit hned.</b>",
-  dm:"Přechod spotřebovává zdroj ZA střihem — validace přes rezervy zdroje. Na rampovaném střihu zatím zakázat.",
-  ts:["Model: Transition na střihu + testy","Kompozice A/B roll + opacity rampy","Audio crossfade přes AVAudioMix","UI: menu, kreslení na ose, délka tažením","Změřit GPU proti baseline"]},
- {id:11,tag:"F11",t:"Texty a titulky + stopa T1",w:"",v:"v0.11",
-  note:"Jména, datum, kapitoly, české šablony. Splácí editaci titulků z přepisu i pruh T1 na ose.",
-  dm:"Náhled overlay (vzorec SubtitleOverlay), export přes AVVideoCompositionCoreAnimationTool.",
-  ts:["Model: stopa .title + titulkový klip","Pruh T1 na ose (kreslí i titulky z řeči)","Náhled overlay + export přes CoreAnimationTool","České šablony","Editace textu titulku (inspektor)"]},
- {id:12,tag:"F12",t:"Fotky a Ken Burns",w:"",v:"v0.12",
-  note:"Fotky s jemným pohybem; freeze frame jako fotka na ose — <b>NE přes SpeedRampEngine</b> (invertibilita).",dm:"",
+  note:"<b>Rozhodnutí autora: appka je free a jen pro něj — podpis, notarizace, Sparkle i licence ODLOŽENY.</b> <b>Migrace na Configuration NEPROBĚHLA</b> a je to správně — <code>Configuration</code> na targetu 14.0 neexistuje, takže by to znamenalo druhou větev pod <code>#available(macOS 26.0, *)</code>. Úkol před vydáním. <i>(Opraveno 30. 7. — dřívější zápis tvrdil, že hotová je.)</i>",dm:"",
+  ts:["Rozhodnutí: appka je free a jen pro autora","Zbytek odložen (návod zůstává v plánu)"]},
+ {id:10,tag:"F10",t:"Přechody",w:"hotovo 28. 7.",v:"v0.10",done:true,
+  note:"Prolínačka, zatmívačky, audio crossfade. <b>GPU skok změřen: 0,25 → 12,9 % s prolínačkou</b> — kompozice se staví jen když je co skládat.",
+  dm:"Přechod patří STŘIHU: zanikne s ním, a operace, která by ho rozbila, se odmítne (blockedByTransition).",
+  ts:["Model: Transition na střihu + testy","Kompozice A/B roll + opacity rampy","Audio crossfade přes AVAudioMix","UI: menu, kreslení na ose, délka tažením","Změřen GPU proti baseline"]},
+ {id:11,tag:"F11",t:"Texty a titulky + stopa T1",w:"hotovo 29. 7.",v:"v0.11",done:true,
+  note:"Jména, datum, kapitoly, české šablony. <b>Formát souboru šel na verzi 2</b> (nový druh stopy .title).",
+  dm:"⚠️ AVVideoCompositionCoreAnimationTool se NEPOUŽIL — je dokumentovaný pro AVAssetExportSession, kterou projekt schválně nepoužívá. Titulky vypaluje frameDecorator v CFRRendereru (odchylka mimo titulek 0,14).",
+  ts:["Model: stopa .title + titulkový klip","Pruh T1 na ose (kreslí i titulky z řeči)","Náhled overlay + vypálení do exportu","České šablony","Editace textu titulku (inspektor)"]},
+ {id:12,tag:"F12",t:"Fotky a Ken Burns",w:"hotovo 29. 7.",v:"v0.12",done:true,
+  note:"Fotky přes „still movie“ mezisoubor (jeden ProRes snímek s vpáleným aspect-fitem) — do AVComposition se fotka vložit nedá.",dm:"",
   ts:["Import fotek jako asset","Klip s volnou délkou na V1","Ken Burns přes TransformRamp","Freeze frame: snímek → fotka"]},
- {id:13,tag:"F13",t:"Barevné presety",w:"",v:"v0.13",
-  note:"Teplý film, čistá pleť, ČB — per klip s intenzitou. Další kandidát na GPU skok, měřit.",
-  dm:"Rozhodnout: applyingCIFiltersWith vs vlastní compositor. Kritérium: shoda náhled/export.",
+ {id:13,tag:"F13",t:"Barevné presety",w:"hotovo 29. 7.",v:"v0.13",done:true,
+  note:"Vlastní <code>AVVideoCompositing</code>, NE applyingCIFiltersWithHandler (ten filtruje jen první stopu a naše kompozice má od F10 dvě dráhy). <b>GPU skok medián 24 %.</b>",
+  dm:"Dvě pasti CoreImage, obě chytila kvantitativní kontrola: pracovní prostor musí být týž jako u zdroje, a CIColorMatrix počítá na nepremultiplikovaných hodnotách.",
   ts:["Volba techniky + měření","Presety jako řetězce CIFilterů","Intenzita 0–100 % per klip","UI v inspektoru/menu"]},
- {id:14,tag:"F14",t:"Hudební synchronizace — VLAJKOVÁ",w:"",v:"v0.14",
-  note:"Beat-grid na vlastní FFT, magnet střihů na doby, dopasování tempa. <b>Sedí na hotové jádro (AudioEngine + SpeedRampEngine).</b>",
-  dm:"Dopasování 90–115 % VŽDY nad limitem čistého zpomalení (žlutá zóna platí i tady). Při velké odchylce nevynucovat.",
-  ts:["BeatGrid v AudioEngine + testy na klikách","Mapa dob na ose + magnet (TimelineGeometry)","Dopasování tempa klipu 90–115 %","Rampa na úder (preset SpeedRampEngine)"]},
- {id:15,tag:"F15",t:"Analýzy kvality",w:"",v:"v0.15",
-  note:"Neostrost a ticho/prázdno. <b>Jen návrhová vrstva — analýza nikdy sama nestříhá.</b>",
-  dm:"Laplace přes vImage na zmenšeninách, 2–5 vzorků/s, cache otiskem. Tichý záběr na dekoraci NENÍ chyba.",
-  ts:["Detekce neostrosti + značky na klipu","Detekce ticha/prázdna (zvuk × obraz)","Cache analýz","Citlivost v nastavení"]},
- {id:16,tag:"F16",t:"Vymazlení a dluhy",w:"",v:"v1.0-osobní",
-  note:"Poslední fáze před svatbou.",dm:"",
+ {id:14,tag:"F14",t:"Hudební synchronizace — VLAJKOVÁ",w:"hotovo 29. 7.",v:"v0.14",done:true,
+  note:"Beat-grid na vlastní FFT (±0,1 BPM na klikových stopách), magnet na doby, dopasování klipu na dobu. Nízká jistota mřížky se přiznává.",
+  dm:"Dopasování 90–115 % VŽDY nad limitem čistého zpomalení. Doby jsou kotvené ve ZDROJOVÉM čase, takže s nimi trim ani přesun nehnou.",
+  ts:["BeatGrid v AudioEngine + testy na klikách","Mapa dob na ose + magnet","Dopasování tempa klipu 90–115 %","Rampa na úder"]},
+ {id:15,tag:"F15",t:"Analýzy kvality",w:"hotovo 29. 7.",v:"v0.15",done:true,
+  note:"Neostrost a hluchá místa. <b>Klasifikace relativně k mediánu CELÉHO assetu</b> — absolutní prahy nefungují a trim by jinak klasifikaci měnil.",
+  dm:"Vzorky se do projektu NEUKLÁDAJÍ, drží je SharpnessStore s cache otiskem (verze výpočtu je součást otisku).",
+  ts:["Detekce neostrosti + značky na klipu","Detekce ticha/prázdna (zvuk × obraz)","Cache analýz","Citlivost v liště osy"]},
+ {id:16,tag:"F16",t:"Vymazlení a dluhy",w:"hotovo 29. 7.",v:"v1.0-osobní",done:true,
+  note:"Zvukové fade úchyty, strop normalizace na <b>true peak −1 dBTP</b> (4× převzorkování — špička vzorků na reálném klipu lhala o 1,2 dB), správa modelu přepisu.",dm:"",
   ts:["Zvukové fade úchyty na klipech","Strop normalizace na true peak (dBTP)","Správa modelu Whisperu","Koukance a drobnosti z používání"]},
- {id:17,tag:"F17–F19",t:"Podmíněné po kill-gate",w:"",v:"",
-  note:"<b>F17</b> stabilizace (nejtěžší z výběru — možná ji vyřeší gimbal), <b>F18</b> detekce momentů bez biometrie, <b>F19</b> rozpoznávání obličejů (tři gaty: právní, licenční, poptávkový — detail v plánu). Backlog F20+: reframe 9:16, masky, PiP, multicam UI, HDR, slovenština, LUTs, ducking.",
-  dm:"",ts:["Rozhodne se až po svatbě"]}
+ {id:17,tag:"F17",t:"Ergonomie střihu",w:"hotovo 29. 7.",v:"v1.1",done:true,
+  note:"Osa sleduje hlavu (stránkuje), JKL, multi-výběr, schránka, chronologie, export výřezu. <b>Zpětné přehrávání naše kompozice UMÍ</b> — na 84 % rychlosti; krokovací fallback proto zůstává a kontrola ho vynucuje, aby nespouštěná cesta neshnila.",dm:"",
+  ts:["Auto-scroll za hlavou + JKL","Multi-výběr a schránka (čerstvý LinkID!)","Hromadné operace na výběru","Chronologie podle času natočení","Export výřezu I—O"]},
+ {id:18,tag:"F18",t:"Přestavba UI podle design handoffu",w:"hotovo 30. 7.",v:"v1.2",done:true,
+  note:"<b>Třináct modulů, každý za vlastní CLI branou; žádný se neodložil.</b> Zadání: design_handoff_krasa_ui (šest hi-fi obrazovek), plán ve FAZE_18_UI.md. Model se skoro nehnul (+10 testů, formát souboru beze změny).",
+  dm:"Cena zůstává na stole: třináct sessions čerstvého kódu, který nikdo neodzkoušel na zakázce. Drží ho regresní sada — ergonomii ověří až koukance a svatba.",
+  ts:["A: rám okna, stavový řádek, lišta osy","B: výšky stop, miniatury na klipech, přehled osy","C: panel se záložkami, knihovna médií + drop","D: list exportu, panel přepisu řeči","D: prázdný start a fullscreen náhled"]},
+ {id:19,tag:"F19+",t:"Třetí vlna — až po svatbě",w:"",v:"",
+  note:"<b>F19</b> druhá obrazová stopa (V2), <b>F20</b> ducking hudby pod řečí + jednotná obálka mixu, <b>F21</b> multikamera, markery a třídění materiálu, <b>F22</b> stabilizace (spike první, s právem přestat). Podmíněné: <b>F23</b> detekce momentů, <b>F24</b> rozpoznávání obličejů (tři gaty).",
+  dm:"⚠️ Přečíslováno 30. 7. — číslo 18 dostala přestavba UI, protože je vypálené ve 45 zdrojových souborech; ustoupila nepostavená fáze.",
+  ts:["Pořadí rozhodne svatba: co bolelo, jde nahoru"]}
 ];
-const GATES={16:{t:"KILL-GATE 1 — na konci vývoje",q:"Sestříhej touhle appkou celou reálnou svatbu. Od začátku do konce. Bez cheatů. (Materiál ~konec srpna 2026.)",
+const GATES={18:{t:"KILL-GATE 1 — na konci vývoje",q:"Sestříhej touhle appkou celou reálnou svatbu. Od začátku do konce. Bez cheatů. (Materiál ~konec srpna 2026.)",
   li:["Zvládl jsi to a nebylo to utrpení → hotovo; podmíněné fáze podle chuti","Zvládl jsi to, ale bolelo to → opravy toho, co bolelo; žádné nové funkce","Nezvládl jsi to → zastav a zúži. Nejdůležitější rozhodnutí v plánu.","Při gate se ověří i 200GB kritérium F4, přepis reálné řeči a všechny koukance"]}};
 const FIX=[
  ["1","<b>AVMutableVideoComposition je od macOS 26 deprecated, ale používá se dál.</b> Náhrada <code>AVVideoComposition.Configuration</code> je <code>@available(macOS 26.0, *)</code> — na macOS 14–25 neexistuje.","Hlavní cesta zůstává deprecated API. Migrace až ve fázi 9 jako druhá větev. <i>Dřívější text tvrdil opak — byla to chyba.</i>"],
@@ -389,7 +397,7 @@ const FIX=[
  ["+","<b>AVAssetExportSession ignoruje frameDuration</b> → export přes <code>AVAssetWriter</code>. <b>Zvuk v proxy jen jako LPCM</b> — AAC by přidal vlastní priming.","Zjištění z průběhu spiku, všechna ověřená měřením."],
  ["11","<b>OpenAI „large-v3-turbo“ se v repozitáři whisperkit-coreml jmenuje <code>openai_whisper-large-v3-v20240930</code></b> (podle data vydání). Přípona <code>_turbo</code> tam značí komprimované varianty WhisperKitu — jinou věc.","S doslovným jménem z plánu stažení spadne na modelsUnavailable. Nalezeno 28. 7. při fázi 8."],
  ["12","<b>Dekodéry AAC se neshodnou na rozjezdu:</b> afconvert a čtení přes AVComposition se liší přesně o 528 vzorků (11,00 ms).","Interní cesty appky (sync, přehrávač, export) čtou všechny přes kompozici → jsou konzistentní. Další patrona do pravidla „zvuk jen přes AVComposition“. Nalezeno 28. 7. při ověřování syncu."],
- ["13","<b><code>AVAudioMix.volume</code> má dokumentovaný rozsah jen 0,0–1,0</b> — zesílení přes něj by stálo na nedokumentovaném chování.","Normalizační gain se násobí přímo do vzorků (float32, vDSP) v CFRRendereru. Strop špiček −1 dBFS, poctivě hlášený."]
+ ["13","<b><code>AVAudioMix.volume</code> má dokumentovaný rozsah jen 0,0–1,0</b> — zesílení přes něj by stálo na nedokumentovaném chování.","Normalizační gain se násobí přímo do vzorků (float32, vDSP) v CFRRendereru. Strop špiček <b>−1 dBTP (true peak, 4× převzorkování)</b>, poctivě hlášený — špička vzorků mezivzorkovou špičku nevidí a na reálném klipu lhala o 1,2 dB."]
 ];
 
 const S={};PH.forEach(p=>S[p.id]=new Set(p.done?p.ts.map((_,i)=>i):[]));

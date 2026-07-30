@@ -2,6 +2,12 @@
 
 *Návrh před psaním kódu. 27. 07. 2026, druhá verze po nezávislé revizi.*
 
+> **Historický dokument.** Tohle je návrh `TimelineModelu` z 27. 07. 2026, napsaný PŘED kódem.
+> Modul je dávno postavený a od té doby ho rozšířily fáze 3 a 10–18 (rampy, přechody, titulky,
+> fotky, barvy, hudba, kvalita, fade, schránka, chronologie). **Aktuální stav modelu je
+> v `CLAUDE.md` (sekce `TimelineModel/`) a v `PROJECT_STATUS.md`**; tenhle text zůstává kvůli
+> zdůvodnění návrhu — proč jsou invarianty takové, jaké jsou, a proč model nezná AVFoundation.
+
 Čistá logika časové osy: typy, invarianty, operace, undo a seznam testů. **Žádné AVFoundation, žádné UI.** Modul musí jít přeložit a otestovat sám o sobě, stejně jako `SpeedRampEngine`.
 
 ---

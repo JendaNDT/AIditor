@@ -157,8 +157,8 @@ Testy pustíš přes `cd SpeedRampEngine && swift test`.
 ### `TimelineModel/`
 Logika, geometrie a interakce časové osy. Čistý Swift, závislosti
 `SpeedRampEngine` a od F14 `AudioEngine` (oba také čistý Swift), **žádné
-AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **453
-testů, ověřeno; 29 invariantů ve `validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
+AVFoundation ani AppKit** — přeloží se a otestuje i na Linuxu. **463
+testů, ověřeno 30. 07. 2026; 29 invariantů ve `validate()`.** Od fáze 3 umí `sourceConsumption`/`sourceOffset` rychlostní
 křivku (uzly kotvené ve zdrojovém čase) a `rampPlaybackPlan` vydává
 segmentaci v celých tickách pro `scaleTimeRange`. Od vylepšovacích fází
 navíc:
@@ -255,6 +255,16 @@ navíc:
   obrácené body = CELÝ projekt), v `CFRRendereru` volitelný `timeRange` =
   `reader.timeRange` + `startSession(atSourceTime:)` + posunutá mřížka
   slotů; zapisovač časy odečte, takže soubor začíná nulou.
+- **Přestavba UI (F18) se modelu skoro nedotkla — a to je záměr.** Tři
+  přírůstky, +10 testů, formát souboru beze změny: `TimelineGeometry.topInset`
+  (M4; výchozí NULA, aby se nepohnulo nic, co na geometrii stojí — aplikace si
+  své rozvržení předává konstruktorem `TimelineGeometry.krasa`),
+  `duplicatedFrameShare(of:)` (M10; průměr z `max(0, 1 − v(t)/limit)`, tedy
+  pravidlo projektu o duplikaci snímků — varovný blok v listu exportu z něj
+  počítá z MATERIÁLU, ne z konstanty v UI) a `splitTranscriptSegment
+  (atCharacter:)` + `speechCueRanges` (M11; čas řezu se dělí POMĚREM ZNAKŮ —
+  přiznaná heuristika, protože naše cesta WhisperKitu vrací časy na úsek,
+  ne na slovo).
 
 ```swift
 var project = Project.empty()                        // V1 + A1 + A2 + T1
@@ -337,6 +347,6 @@ Vstup se NEOŘEZÁVÁ — 32-bit float zdroje (DJI Mic, Zoom F3) nesou hodnoty p
 - **Licencování a freemium — odloženo 28. 07. 2026 na pokyn autora: aplikace bude zatím FREE.** Ceny a PRO verze ve specifikaci (1 490 Kč) neplatí. Kill-gate 2 přeformulován v plánu na „deset cizích lidí ji použije" místo „prodat".
 - **Svatební asistent (checklist, záběrový plán, BPM plánovač) — škrtnut 28. 07. 2026 na pokyn autora.** Produkt je čistě videoeditor; specifikace (sekce 4.4) ho sice obsahuje, ale platí plán. Pravidlo „záběry na zpomalení toč na 120 fps" tím nezaniká — říká ho žlutá zóna v editoru křivek a duplikace snímků musí zůstat v UI přiznaná.
 - Optical flow dopočet mezisnímků — škrtnuto, je to výzkumný problém.
-- **Stabilizace obrazu už škrtnutá NENÍ** — 29. 07. 2026 ji autor zařadil jako fázi 21 (třetí vlna). Výhrady ale platí: „gumový obraz" z rolling shutteru globální transformací opravit nejde, proto v1 jen AFINNÍ registrace (ne homografie), korekce se aplikuje ve VLASTNÍM compositoru (per-snímková transformace přes instrukce = tisíce instrukcí na klip), ořez je viditelný a fáze začíná spikem s právem přestat.
-- Rozpoznávání obličejů — až za v1.0 a jen po projití právního a licenčního gate (viz plán, podmíněná fáze 23).
+- **Stabilizace obrazu už škrtnutá NENÍ** — 29. 07. 2026 ji autor zařadil do třetí vlny (po přečíslování 30. 07. je to fáze 22). Výhrady ale platí: „gumový obraz" z rolling shutteru globální transformací opravit nejde, proto v1 jen AFINNÍ registrace (ne homografie), korekce se aplikuje ve VLASTNÍM compositoru (per-snímková transformace přes instrukce = tisíce instrukcí na klip), ořez je viditelný a fáze začíná spikem s právem přestat.
+- Rozpoznávání obličejů — až za v1.0 a jen po projití právního a licenčního gate (viz plán, podmíněná fáze 24).
 - Freeze frame a zpětné přehrávání v `SpeedRampEngine` — rozbilo by invertibilitu mapování.

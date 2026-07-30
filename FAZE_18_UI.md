@@ -2,6 +2,19 @@
 
 *Sestaveno 29. 07. 2026. Zdroj zadání: `design_handoff_krasa_ui/README.md` + šest prototypů v `designs/`.*
 
+> ## ✅ HOTOVO 30. 07. 2026 — všech třináct modulů, každý za svou branou
+>
+> Fáze doběhla za dva dny. Žádný modul se neodložil, žádná brána nespadla natrvalo.
+> **Co je pod tímhle rámečkem, je PLÁN, jak byl napsaný 29. 07.** — u každého modulu je
+> pod tabulkou dopsané, jak to dopadlo a v čem se realita s plánem rozešla.
+> Naměřená čísla, nálezy a přiznané meze jsou v `PROJECT_STATUS.md`.
+>
+> Co se z plánu vědomě NEUDĚLALO: přepínač „přehrávat jen výřez" ve fullscreen náhledu
+> (změna v přehrávací cestě, ne v UI), popisek `sync −0,42 s` na klipu (model ten posun
+> nedrží), viditelnost a zámek stopy v hlavičkách (model pro ně nemá stav).
+> Odchylky od litery návrhu — kotvení miniatur ve zdrojovém čase, neztlumená ikona
+> Nastavení na prázdném startu, širší timecode ve fullscreenu — jsou zdůvodněné u modulů 5, 12 a 13.
+
 Plán pokrývá **všech šest obrazovek návrhu do posledního prvku**. Není to seznam přání — je to
 pořadí modulů, kde každý dál staví na hotovém a každý má vlastní kontrolu, kterou se pozná, že
 funguje. Vzorec je tentýž jako u fází 10–17: **model a logika s testy → tenké UI nad tím →

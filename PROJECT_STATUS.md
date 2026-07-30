@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotové moduly 1, 2, 3, 7, 8, 4, 5)*
+*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotové moduly 1, 2, 3, 7, 8, 4, 5, 6; etapy A, B, C)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,9 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (453, 29
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 6 — přehled celé osy** (pás 46 px pod stopami: bloky klipů, hlava, rámeček viditelného výřezu; brána `--overview-check`). Plán celé fáze je ve `FAZE_18_UI.md`. **Nejrizikovější modul plánu (M5, miniatury) je za námi a bránu R1 uhájil.**
+**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 9 — knihovna médií a přetažení** (pás 330 px vpravo v horním pásu: karty s náhledy z `ThumbnailStore`, filtry, přetažení do osy; brána `--library-check`). Plán celé fáze je ve `FAZE_18_UI.md`. **Etapy A, B i C jsou hotové až na M9; nejrizikovější modul plánu (M5, miniatury) bránu R1 uhájil.**
 
-**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
+**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
 ⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
 
@@ -26,6 +26,47 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
+
+✅ **Modul 6 — přehled celé osy (30. 07. 2026). ETAPA B HOTOVÁ.**
+
+  - **`TimelineOverviewView`:** pás 46 bodů pod stopami — popisek „přehled", pás 26 bodů se slitými
+    bloky klipů (obraz 9 nahoře, zvuk 8 pod ním), červená hlava, rámeček viditelného výřezu, celková
+    délka mono vpravo. **Vlastní mapování celé osy na svou šířku**, ne `TimelineGeometry` (ta je
+    o zoomu). Klik = skok hlavou, tažení rámečku = scroll osy.
+  - **Bloky se slévají:** hodinová osa s 2320 klipy má **dva bloky** místo 2320 vrstev — sousedící
+    klipy s mezerou pod bod jsou jeden blok. Přehled má říct „tady je materiál a tady díra".
+    Přestavba jen při změně otisku (délka, počet klipů, šířka): **tři změny zoomu nepřestavěly nic.**
+  - **Souboj s auto-scrollem (riziko modulu) ošetřený a změřený:** během tažení rámečku se osa za
+    hlavou netahá (hlava skočila do poloviny hodinové osy, scroll se nepohnul), po puštění platí
+    pravidlo ručního scrollu, a **klik do přehledu je výslovná navigace, která odstavení ruší**.
+  - **Ověřeno `--overview-check`, 16 kontrol:** klik na 0 / 25 / 75 / 100 % hodinové osy položí hlavu
+    přesně na 0 / 26 970 / 80 910 / 107 880 (odchylka nula); tažení rámečku na 50 % a 20 % dá výřez
+    začínající přesně na 53 940 a 21 576 snímku; aktualizace výřezu stojí **0,001–0,002 ms**.
+    ⚠️ **Plánovaná tolerance „1 snímek" je z konstrukce nedosažitelná** a kontrola to říká nahlas:
+    jeden bod pásu je na hodinové ose **218 snímků**, takže kritérium je „do jednoho bodu".
+  - **⚠️ NÁLEZ, který platí obecně: `Project.duration` je O(klipů) a alokuje přitom dvě pole**
+    (`flatMap` + `map` v `Queries.swift`) — na 2000 klipech ~1,5 ms. První verze modulu ji čtla při
+    každém zápisu rámečku, tedy za každý tik scrollu, a medián práce na tik vyskočil **z 0,95 na
+    2,45 ms** (A/B proti HEAD, rozptyl 0,02). Uložením se to vrátilo na 0,96. **Táž past byla
+    i v pravítku** — `drawExportRange` volal `duration` dvakrát za kreslení, jen aby zjistil, že
+    výřez není nastavený; kreslení pravítka spadlo z **0,88 na 0,08 ms**. Zapsané v CLAUDE.md.
+  - **⚠️ A ta obrácená závislost potřetí, tentokrát izolovaná na JEDINÝ ŘÁDEK.** Po opravě pravítka
+    `--timeline-bench` hlásí medián **1,95 ms** místo 0,97 — s MENŠÍ prací. A/B na tom řádku
+    (třikrát každá varianta, rozptyl 0,02) to opakuje pokaždé. Vysvětlení jako u anomálie `beats`:
+    ten údaj měří dobu `scroll(to:)` na hlavním vlákně, a **když vlákno mezi tiky nemá co dělat,
+    platí se za probuzení** (rampa frekvence, studená cache). Součet práce na snímek se nezměnil
+    (~2 ms z 16,67), vypadlé tiky 0–1. **Kdo bude příště srovnávat s 0,95 ms, ať ví, že to číslo
+    bylo dražší, ne lepší.**
+  - **Přiznaný důsledek podle předpovědi M4:** 46 bodů pásu znamená, že se stopy (344) do okna
+    z návrhu nevejdou a svisle se scrolluje. Vlastnost návrhu.
+  - **⚠️ Vedlejší nález o ⇧Z:** podlaha zoomu (`minPointsPerFrame` 0,02) dovolí do výřezu 562 bodů
+    nejvýš ~27 700 snímků, tedy **~15 minut** — hodinovou osu fit do okna nedostane a rámeček výřezu
+    správně zůstává. Snižovat podlahu není v zájmu hit testingu; navigaci na dlouhé ose přebírá
+    právě přehled.
+  - **Regrese:** `--select-check` 15 ✅, `--range-check` 9 ✅ (i pruh výřezu v pravítku, kterého se
+    oprava dotkla), `--shell-check` 16 hodnot, `--thumb-check` beze změny.
+  - *Koukanec rukou (v seznamu): tažení rámečku po dlouhé ose, klik do přehledu při přehrávání,
+    chování po ručním odscrollování.*
 
 ✅ **Modul 5 — miniatury na klipech, křivka rampy a popisky (30. 07. 2026). BRÁNA R1 DRŽÍ.**
 

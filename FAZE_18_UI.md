@@ -408,6 +408,66 @@ celý klip je dojezd a nájezd zmizel. Vychází to z `setAudioFadesOnSelection`
 nájezd na `délka − dojezd`. Rozdělit zbytek napůl by bylo asi milejší, ale je to změna chování
 hromadné operace, ne úklid.
 
+### ✅ M6 — přehled celé osy (30. 07. 2026) · etapa B hotová
+
+**Postaveno:** `Timeline/TimelineOverviewView.swift` (nový) — pás 46 bodů pod stopami: popisek
+„přehled", pás 26 bodů se slitými bloky klipů (obraz 9 nahoře, zvuk 8 pod ním), červená hlava,
+rámeček viditelného výřezu a celková délka mono vpravo. Zapojení v `TimelinePane`.
+Kontrola `Measure/OverviewChecks.swift` (`--overview-check`, **16 ověření, 0 neshod**).
+
+**Vlastní mapování, ne `TimelineGeometry`** — geometrie je o zoomu, přehled ukazuje vždy celou osu
+na své šířce. **Bloky se slévají:** sousedící klipy s mezerou pod bod jsou jeden blok, takže hodinová
+osa s 2320 klipy má **2 bloky** místo 2320 vrstev; přehled říká „tady je materiál a tady díra".
+Přestavba jen při změně otisku (délka, počet klipů, šířka) — **tři změny zoomu nepřestavěly nic**.
+
+**Souboj s auto-scrollem (riziko modulu) je ošetřený a změřený ve třech krocích:** ① během tažení
+rámečku se osa za hlavou netahá (hlava skočila do poloviny hodinové osy, scroll se nepohnul);
+② po puštění platí pravidlo ručního scrollu — osa nechá být, dokud hlava sama nevjede do výřezu;
+③ **klik do přehledu je výslovná navigace a odstavení ruší**, takže se osa za hlavou posune.
+
+| ověření | naměřeno |
+|---|---|
+| klik na 0 / 25 / 75 / 100 % hodinové osy | hlava přesně na 0 / 26 970 / 80 910 / 107 880 (odchylka 0) |
+| tažení rámečku na 50 % a 20 % | výřez začíná přesně na 53 940 a 21 576 snímku |
+| cena aktualizace výřezu za tik (2000 klipů) | **0,001–0,002 ms** |
+
+**⚠️ Plánovaná tolerance „1 snímek" je z konstrukce nedosažitelná** a kontrola to říká nahlas:
+přehled mapuje hodinu (107 880 snímků) na 498 bodů, takže **jeden bod pásu = 218 snímků**.
+Kritérium je proto „do jednoho bodu pásu" a to číslo se vypisuje.
+
+**⚠️ NÁLEZ: `Project.duration` je O(klipů) a alokuje přitom dvě pole** (`flatMap` + `map`
+v `Queries.swift`) — na 2000 klipech **~1,5 ms**. První verze modulu ji čtla při každém zápisu
+rámečku výřezu, tedy při každém tiku scrollu, a medián práce na tik vyskočil **z 0,95 na 2,45 ms**
+(A/B proti HEAD, třikrát každá varianta, rozptyl 0,02). Uložením do `cachedTotalFrames` se to
+vrátilo na 0,96. **Táž past byla i v pravítku:** `drawExportRange` volal `hasExportRange`
+a `exportRange`, tedy `duration` dvakrát za každé kreslení, jen aby zjistil, že výřez není
+nastavený — kreslení pravítka spadlo z **0,88 na 0,08 ms**.
+
+**⚠️ A ještě jednou ta obrácená závislost, tentokrát izolovaná na JEDEN ŘÁDEK.** Po opravě pravítka
+`--timeline-bench` hlásí medián **1,95 ms** místo 0,97 — s méně prací. A/B na tom jediném řádku
+(třikrát každá varianta, rozptyl 0,02 ms) to potvrzuje opakovaně. Vysvětlení je totéž jako
+u anomálie `beats` z M3: ten údaj měří dobu `scroll(to:)` na hlavním vlákně, a **když vlákno mezi
+tiky nemá co dělat, platí se za probuzení** (rampa frekvence, studená cache). Součet práce na snímek
+se nezměnil (~2 ms z 16,67), vypadlé tiky zůstávají 0–1. **Kdo bude příště srovnávat s 0,95 ms,
+musí vědět, že se srovnává s číslem, které bylo dražší.**
+
+**Přiznaný důsledek podle předpovědi M4:** pás ukrajuje 46 bodů, takže se stopy (344) do okna
+z návrhu už nevejdou a svisle se scrolluje. Vlastnost návrhu, ne chyba.
+
+**⚠️ Vedlejší nález o ⇧Z:** `TimelineGeometry.minPointsPerFrame` je 0,02, takže do výřezu 562 bodů
+se vejde nejvýš ~27 700 snímků, tedy **~15 minut**. Na hodinové ose fit dojede na podlahu a rámeček
+výřezu správně zůstává — a je to přesně ten případ, pro který přehled vznikl. Snižovat podlahu
+zoomu není v zájmu hit testingu (jeden bod by byl přes dvě sekundy); přehled tu roli přebírá.
+
+**Regrese:** `--select-check` 15 ✅, `--range-check` 9 ✅ (včetně pruhu výřezu v pravítku, kterého
+se oprava dotkla), `--shell-check` všech 16 hodnot, `--thumb-check` beze změny, `--timeline-bench`
+0–1 vypadlých tiků.
+
+*Koukanec rukou (v seznamu): tažení rámečku po dlouhé ose, klik do přehledu při přehrávání,
+chování po ručním odscrollování.*
+
+---
+
 ### ✅ M5 — miniatury na klipech, křivka rampy, popisky (30. 07. 2026) · brána R1 drží
 
 **Postaveno:** `Timeline/ThumbnailStore.swift` (nový) a v `ClipLayer` pás miniatur, křivka rychlosti
@@ -791,15 +851,15 @@ Podle rozhodnutí z 2.1 jde **všech 13 modulů před svatbou**, v jednom sledu.
 | M8 ✅ | záložky Barva, Zvuk, Info | C | nízké | `--panel-check` |
 | M4 ✅ | výšky stop, hlavičky 104 | B | nízké | `--layout-check` |
 | M5 ✅ | **miniatury na klipech** | B | **R1 — nejvyšší, BRÁNA DRŽÍ** | `--timeline-bench`, `--thumb-check` |
-| M6 | přehled celé osy | B | střední | `--overview-check` |
+| M6 ✅ | přehled celé osy | B | střední | `--overview-check` |
 | M9 | knihovna médií a přetažení | C | střední | `--library-check` |
 | M10 | list exportu | D | střední | `--export-check`, `--export-ui-check` |
 | M11 | panel přepisu řeči | D | střední | `--transcript-ui-check` |
 | M12 | prázdný start | D | nízké | `--empty-start-check` |
 | M13 | fullscreen aplikace a náhledu | D | střední | `--fullscreen-ui-check` |
 
-**Pořadí: M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 → M9 → M10 → M11 → M12 → M13
-→ 🚧 KILL-GATE 1.**
+**Pořadí: M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 → M10 → M11 → M12
+→ M13 → 🚧 KILL-GATE 1.** (Etapy A, B i C hotové — zbývá M9 z etapy C a celá etapa D.)
 
 Proč zrovna takhle, když se jede všechno: **ergonomie napřed, kosmetika vzadu.** Prvních pět modulů
 zavírá potíže #2, #3 a #4 ze zadání a nepřidává funkce — kdyby došel čas nebo se něco zadrhlo, jsou

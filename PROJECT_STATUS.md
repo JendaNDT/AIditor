@@ -1,5 +1,5 @@
 # Projekt AIditor – Project Status
-*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 HOTOVÁ — všech 13 modulů; přejmenováno na AIditor; dál koukance rukou a KILL-GATE 1)*
+*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 HOTOVÁ — všech 13 modulů; přejmenováno na AIditor, zveřejněno na GitHubu, existuje instalátor a ikona; dál koukance rukou a KILL-GATE 1)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -25,6 +25,56 @@ Odkaz na `Projekt_Krasa_navrh_implementace.docx` (dokument mimo repozitář) tak
 SpeedRampEngine 53, AudioEngine 54), `swift build` MediaProbe prošel, `--shell-check`
 sedí na zadání v okně i na celé obrazovce. Bundle appky nese `CFBundleName = AIditor`
 a `CFBundleIdentifier = cz.projektkrasa.Krasa` — přesně jak má.
+
+## 🌍 ZVEŘEJNĚNO NA GITHUBU (30. 07. 2026, na pokyn autora)
+
+**https://github.com/JendaNDT/AIditor**, veřejný repozitář, větev `main`.
+Tím se **ruší odklad distribuce z 28. 07. 2026** — appka je dál FREE a jen pro autora,
+ale kód je od teď venku.
+
+- **Specifikace v repozitáři NENÍ, a to ani v historii.** Obsahuje obchodní část (ceník,
+  analýza trhu, srovnání s konkurencí, persony), a repozitář je veřejný. Vyškrtnutá
+  z celé historie přes `git filter-branch`; `git rev-list --objects main | grep -i
+  specifikace` vrací **nulu objektů**. Soubor leží dál v pracovní složce a je
+  v `.gitignore` — čti ho normálně, jen ho necommituj.
+- **Přibyly `README.md` a `LICENSE` (MIT).**
+- ⚠️ **Nikdy `git push --all`.** Stará větev `claude/gracious-mclean-fe7830` (worktree
+  v `.claude/`) má vlastních commitů nula, ale drží starou historii **se specifikací**.
+  Dokud existuje, posílá se výhradně `main`.
+- Commity nesou `jenda@Jenda--MacBook-Air.local` (lokální hostname), takže se na GitHubu
+  nespojí s účtem. Přepsat 196 commitů kvůli tomu nestojí za to; pro budoucí commity
+  stačí nastavit `git config --global user.email`.
+- Přístup jde přes **SSH klíč** (`~/.ssh/id_ed25519`, ed25519), ne přes token.
+
+## 📦 INSTALÁTOR A IKONA (30. 07. 2026)
+
+**DMG:** `AIditor.app` + zkratka na `/Applications`, dělané `hdiutil`em z Release buildu.
+Ověřené celou cestou: obraz se připojí, podpis uvnitř je platný, kopie vytažená z obrazu
+se spustí a projde `--shell-check`. Release build 21 MB, obraz 10 MB.
+
+⚠️ **Appka je podepsaná jen AD-HOC — na cizím Macu ji Gatekeeper odmítne.** Na stroji není
+žádný certifikát (`security find-identity -p codesigning` → *0 valid identities found*),
+takže `Signature=adhoc`, `TeamIdentifier=not set`. Změřeno `spctl`: appka **rejected**,
+obraz **rejected** (`source=no usable signature`), appka s příznakem karantény **rejected**.
+Autorovi to funguje, protože bez stažení z internetu se karanténa nenastaví; kdokoli jiný
+musí projít System Settings → Privacy & Security → *Open Anyway*.
+
+**Do distribuce mimo autorův stroj chybí:** ① Apple Developer Program (99 $/rok),
+② certifikát *Developer ID Application*, ③ `ENABLE_HARDENED_RUNTIME = YES` (teď `NO`,
+notarizace ho vyžaduje — chce to pak proklepnout se sandboxem a WhisperKitem),
+④ notarizace `notarytool` + `stapler`. Kroky ① a ② i přihlašovací údaje ke ④ jsou na
+autorovi, zbytek je práce na jednu session.
+
+**Ikona:** sada dodaná autorem (žiletka řezající filmový pás), zapojená přes asset katalog
+`AIditor/AIditor/Assets.xcassets/AppIcon.appiconset` — deset velikostí 16–512 včetně `@2x`,
+`ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`. V bundlu `AppIcon.icns` a `Assets.car`,
+`CFBundleIconName = AppIcon`, ověřeno vytažením přes `NSWorkspace.icon(forFile:)`.
+
+⚠️ **Kresba nemá alfa kanál** (`hasAlpha: no`, PNG color type 2) — tmavé pozadí je zapečené.
+Na macOS 26 to nevadí, protože **systém si ikonu maskuje do svého tvaru sám**; projeví se to
+jen jako „rámeček v rámečku". Na macOS 14–15, které appka pořád podporuje, maska není a
+zapečené pozadí by bylo v rozích vidět. Vyřeší se doříznutím kresby superelipsou, až to
+bude vadit.
 
 ## 📍 STAV (30. 07. 2026)
 

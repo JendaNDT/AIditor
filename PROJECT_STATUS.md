@@ -27,6 +27,34 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
 
+🛠 **Oprava M3 — lišta osy neviděla změny (30. 07. 2026).** Past vnořeného
+`ObservableObject` POTŘETÍ (po `selectedTitle` v F11 a `selectedSpeech` v M11).
+
+  - **Co bylo špatně:** `TimelineLayerBar` pozorovala jen `AppModel`, ale čte a mění stav
+    `TimelineControlleru` (vrstvy, přichytávání, citlivost, zoom, výřez). Controller je
+    vnořený `ObservableObject`, takže jeho `objectWillChange` k liště nedošel — **pilulky
+    měnily vzhled až při nejbližším překreslení z jiného důvodu** (typicky změna `status`).
+    Kreslení NA OSE správně bylo: AppKit se na controller odebírá sám.
+  - **⚠️ Prosté `@ObservedObject var timeline` v liště je druhá past, ne řešení.** Na témže
+    objektu tepe `playhead` (30×/s během přehrávání) a `interaction` (každý pohyb myší při
+    tažení). Lišta by se překreslovala celé přehrávání i celé tažení klipu.
+  - **Řešení: `TimelineBarState`** — malý `ObservableObject` s CÍLENÝMI odběry
+    (`$layers`, `$snappingEnabled`, `$qualitySensitivity`, `$interaction.geometry.pointsPerFrame`,
+    body výřezu), všude `removeDuplicates()`. Vlastní objekt, ne `@Published` pole na
+    `AppModelu`: tam by tažení posuvníku zoomu 60×/s překreslovalo CELOU skořápku.
+    Zápis jde dál napřímo do `model.timeline` — **psát se smí, pozorovat ne**.
+  - **Vedlejší úklid staré pasti z M6:** popisek výřezu potřebuje `Project.duration` (O(klipů),
+    dvě alokace), a počítal se v KAŽDÉM průchodu `body`, dvakrát. Teď se počítá jen při změně
+    bodů nebo projektu (projekt přes `debounce` 250 ms) a `body` čte hotový text.
+  - **Ověřeno `--layers-check`, nová část C (12 kontrol):** 60 posunů hlavy nepřekreslilo lištu
+    **ani jednou**, zatímco controller se přitom ohlásil **59×** — obě poloviny problému
+    změřené jedním číslem. Každý ovladač (vrstva, přichytávání, citlivost, zoom) se v zrcadle
+    projeví a stojí **právě jedno** překreslení; výřez se objeví i zmizí a **out bod na konci
+    filmu se za výřez nevydává**. Snímek okna (`Snapshots/lista-osy.png`) ukazuje lištu
+    v nastaveném stavu — čísla vidí mechanismus, vzhled jen obrázek.
+  - **Regrese:** `--timeline-bench` **0 vypadlých tiků** (medián práce 1,89 ms),
+    `--range-check` ✅, `--shell-check` ✅, `--empty-start-check` ✅.
+
 ✅ **Modul 12 — prázdný start (30. 07. 2026).**
 
   - **Okno bez materiálu je TÝŽ rám, jen jiný obsah:** místo přehrávače **zóna přetažení**
@@ -433,6 +461,8 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
     dál 0 vypadlých tiků), **ale v M5 to musí být vysvětlené** — tam se přepínač stane pojistkou.
     ⚠️ Kritérium plánu „scroll je měřitelně levnější" je tím splněné **jen zčásti**.
   - **Regrese:** `--timeline-bench` 0 vypadlých tiků, `--shell-check` i `--status-check` beze změny.
+  - ⚠️ **Lišta se dodatečně opravovala** — pozorovala jen `AppModel` a změny controlleru k ní
+    nedošly (viz „Oprava M3" nahoře, 30. 07. 2026).
   - *Koukanec rukou (v seznamu): přepínače vrstev, posuvník citlivosti na reálně rozmazaném záběru,
     ⇧Z, zoom posuvník, I/O tlačítka.*
 

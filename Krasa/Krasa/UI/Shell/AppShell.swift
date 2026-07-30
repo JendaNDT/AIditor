@@ -150,7 +150,7 @@ struct AppShell: View {
                 // Prázdná osa nemá co kreslit ani co přiblížit — lišta je
                 // ztlumená (zadání: `opacity .4`), ale zůstává na místě, aby
                 // se okno po importu nepřeskládalo.
-                TimelineLayerBar(model: model)
+                TimelineLayerBar(model: model, bar: model.timelineBar)
                     .opacity(model.showsEmptyStart ? 0.4 : 1)
                     .disabled(model.showsEmptyStart)
                 hairline

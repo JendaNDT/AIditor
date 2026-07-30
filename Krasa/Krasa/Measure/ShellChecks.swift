@@ -555,7 +555,99 @@ extension AppModel {
               "vzorky zůstaly nedotčené (\(timeline.sharpnessSamples.count) assetů)")
 
         print("")
-        print(failures == 0 ? "✅ VRSTVY A CITLIVOST SEDÍ" : "❌ neshod: \(failures)")
+        print("=== C) lišta VIDÍ změny osy, a nehýbe se za jízdy ===")
+        //
+        // Past vnořeného `ObservableObject`: `TimelineController` žije uvnitř
+        // `AppModelu`, takže lišta, která pozoruje jen model, jeho
+        // `objectWillChange` nedostane a pilulky se přepínají „až se něco
+        // jiného hne". Odebírat rovnou controller je ale druhá past: tepe
+        // `playhead`, tedy 30×/s během přehrávání. Obojí se měří ČÍSLY.
+        let bar = timelineBar
+        let savedSensitivity = timeline.qualitySensitivity   // ⚠️ žije v UserDefaults
+        let savedZoom = timeline.geometry.pointsPerFrame
+        var barChanges = 0
+        var controllerChanges = 0
+        let barCounter = bar.objectWillChange.sink { _ in barChanges += 1 }
+        let controllerCounter = timeline.objectWillChange.sink { _ in controllerChanges += 1 }
+        defer {
+            barCounter.cancel()
+            controllerCounter.cancel()
+        }
+
+        // ⚠️ Bez `await` — debounce projektu doručuje na hlavní frontě
+        // a jediné uspání uprostřed by do počítadla pustilo cizí změnu.
+        for step in 0..<60 { timeline.setPlayheadFromPlayback(Frames(step * 2)) }
+        check(barChanges == 0,
+              "60 posunů hlavy nepřekreslilo lištu ANI JEDNOU "
+              + "(controller se přitom ohlásil \(controllerChanges)×)")
+
+        func changed(_ label: String, _ mutate: () -> Void, _ matches: () -> Bool) {
+            let before = barChanges
+            mutate()
+            check(matches(), "\(label): zrcadlo sedí s controllerem")
+            check(barChanges == before + 1,
+                  "\(label): právě jedno překreslení lišty (\(barChanges - before))")
+        }
+
+        changed("miniatury", { timeline.layers.thumbnails.toggle() },
+                { bar.layers.thumbnails == timeline.layers.thumbnails })
+        changed("přichytávání", { timeline.snappingEnabled.toggle() },
+                { bar.snappingEnabled == timeline.snappingEnabled })
+        changed("citlivost", { timeline.qualitySensitivity = 0.8 },
+                { bar.qualitySensitivity == timeline.qualitySensitivity })
+        changed("zoom", {
+            var geometry = timeline.geometry
+            geometry.setZoom(12)
+            timeline.geometry = geometry
+        }, { bar.pointsPerFrame == timeline.geometry.pointsPerFrame })
+
+        // Výřez chodí přes `receive(on:)` — text se čte zpětně z controlleru,
+        // a ve `willSet` by tam ještě byla stará hodnota. Proto jediný odskok
+        // na frontu, ne synchronní očekávání.
+        let rate = timeline.project.timeline.frameRate
+        timeline.setInPoint(Frames(120))
+        timeline.setOutPoint(Frames(360))
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        let expected = Timecode(Frames(120), frameRate: rate).shortText
+        check(bar.exportRangeText?.contains(expected) == true,
+              "výřez se v liště objevil: „\(bar.exportRangeText ?? "nic")\" obsahuje \(expected)")
+
+        timeline.clearExportRange()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        check(bar.exportRangeText == nil,
+              "po zrušení bodů popisek zmizel (\(bar.exportRangeText ?? "nic"))")
+
+        // Out bod NA KONCI projektu není výřez — „nic nevybráno" a „vybráno
+        // vše" nesmí vypadat stejně (pravidlo fáze 17). Tohle je jediné místo,
+        // kvůli kterému zrcadlo vůbec potřebuje `Project.duration`.
+        timeline.setOutPoint(timeline.project.duration)
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        check(bar.exportRangeText == nil,
+              "out bod na konci filmu se za výřez nevydává (\(bar.exportRangeText ?? "nic"))")
+
+        // ⚠️ Čísla ukážou, že se zrcadlo hýbe; jak lišta VYPADÁ, ukáže jen
+        // obrázek. Pošesté v řadě to byl snímek okna, co chytil layoutovou
+        // chybu, kterou měření vidět nemohlo (M12, prázdný `ScrollView`).
+        timeline.setInPoint(Frames(120))
+        timeline.setOutPoint(Frames(360))
+        timeline.layers.beats = false
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        if let shot = Self.writeWindowSnapshot(of: window, name: "lista-osy") {
+            print("   snímek lišty → \(shot.path)")
+        }
+
+        timeline.clearExportRange()
+        timeline.qualitySensitivity = savedSensitivity
+        var restored = timeline.geometry
+        restored.setZoom(savedZoom)
+        timeline.geometry = restored
+        timeline.layers = TimelineLayers()
+        timeline.snappingEnabled = true
+
+        print("")
+        print(failures == 0 ? "✅ VRSTVY, CITLIVOST A LIŠTA SEDÍ" : "❌ neshod: \(failures)")
     }
 
     // MARK: - Koukanec

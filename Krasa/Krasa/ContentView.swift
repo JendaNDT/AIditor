@@ -135,6 +135,11 @@ final class AppModel: ObservableObject {
     /// Stav časové osy. Žije v modelu, ne ve view — `TimelinePaneView` se
     /// smí kdykoli přetvořit, `TimelineController` to nesmí pocítit.
     let timeline = TimelineController()
+    /// Úzké zrcadlo controlleru pro lištu nad osou (F18/M3, oprava 30. 07. 2026).
+    /// Vlastní malý `ObservableObject`, ne `@Published` pole tady: kdyby stav
+    /// lišty visel na modelu, tažení posuvníku zoomu by 60×/s překreslovalo
+    /// celou skořápku. Proč vůbec zrcadlo: `TimelineBarState`.
+    let timelineBar: TimelineBarState
     private(set) var hostView: PlayerHostView?
     /// Pane osy — jen pro výkonový test, který potřebuje scroll view.
     private(set) weak var timelinePane: TimelinePane?
@@ -165,6 +170,7 @@ final class AppModel: ObservableObject {
 
     init() {
         loudnessProfile = Self.storedLoudnessProfile()
+        timelineBar = TimelineBarState(timeline: timeline)
         // Osa → přehrávač: uživatel posunul hlavu, přehrávač skočí.
         timeline.onUserSeek = { [weak self] frame in
             self?.seekPlayer(toTimelineFrame: frame)

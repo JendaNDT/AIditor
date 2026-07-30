@@ -17,6 +17,14 @@ import TimelineModel
 
 struct TimelineLayerBar: View {
     @ObservedObject var model: AppModel
+    /// ⚠️ Stav se ČTE odsud, ne z `model.timeline`. `TimelineController` je
+    /// vnořený `ObservableObject` a jeho změny sem nedojdou — pilulky by
+    /// měnily vzhled až při nejbližším překreslení z jiného důvodu.
+    /// Odebírat rovnou controller nejde: `playhead` na něm tepe 30×/s během
+    /// přehrávání. Podrobnosti v `TimelineBarState`.
+    ///
+    /// ZÁPIS jde dál napřímo do `model.timeline` — psát se smí, pozorovat ne.
+    @ObservedObject var bar: TimelineBarState
 
     var body: some View {
         HStack(spacing: 7) {
@@ -32,7 +40,7 @@ struct TimelineLayerBar: View {
 
             divider
 
-            BarPill(title: "Přichytávání", isOn: model.timeline.snappingEnabled,
+            BarPill(title: "Přichytávání", isOn: bar.snappingEnabled,
                     help: "Magnet na hrany klipů, doby hudby a mřížku snímků.") {
                 model.timeline.snappingEnabled.toggle()
             }
@@ -61,20 +69,20 @@ struct TimelineLayerBar: View {
             // Od modulu 5 zapojené naostro. Vypnutá vrstva se NEPOČÍTÁ:
             // early-out je v `applyThumbnails`, takže se nezadá ani jeden
             // požadavek na dekódování snímku.
-            BarPill(title: "Miniatury", isOn: model.timeline.layers.thumbnails,
+            BarPill(title: "Miniatury", isOn: bar.layers.thumbnails,
                     help: "Pás miniatur v dolní části obrazových klipů.") {
                 model.timeline.layers.thumbnails.toggle()
             }
 
-            BarPill(title: "Vlny", isOn: model.timeline.layers.waveforms,
+            BarPill(title: "Vlny", isOn: bar.layers.waveforms,
                     help: "Vlnové průběhy na zvukových klipech.") {
                 model.timeline.layers.waveforms.toggle()
             }
-            BarPill(title: "Doby", isOn: model.timeline.layers.beats,
+            BarPill(title: "Doby", isOn: bar.layers.beats,
                     help: "Jantarové rysky dob hudby v pravítku.") {
                 model.timeline.layers.beats.toggle()
             }
-            BarPill(title: "Značky kvality", isOn: model.timeline.layers.qualityMarks,
+            BarPill(title: "Značky kvality", isOn: bar.layers.qualityMarks,
                     help: "Proužky neostrosti u horní hrany klipu a hluchých míst u spodní.") {
                 model.timeline.layers.qualityMarks.toggle()
             }
@@ -89,15 +97,15 @@ struct TimelineLayerBar: View {
                 .font(KrasaUI.Font.status)
                 .foregroundStyle(KrasaUI.textTertiary)
             Slider(value: Binding(
-                get: { model.timeline.qualitySensitivity },
+                get: { bar.qualitySensitivity },
                 set: { model.timeline.qualitySensitivity = $0 }), in: 0...1)
                 .controlSize(.mini)
                 .tint(KrasaUI.warn)
                 .frame(width: 80)
-                .disabled(!model.timeline.layers.qualityMarks)
+                .disabled(!bar.layers.qualityMarks)
                 .help("Přepočítá ZNAČKY z hotových vzorků — analýza se nespouští znovu, "
                       + "takže je to okamžité. Výš = hlásí se i mírnější propady ostrosti.")
-            Text(Self.decimal(model.timeline.qualitySensitivity))
+            Text(Self.decimal(bar.qualitySensitivity))
                 .font(KrasaUI.Font.monoSmall)
                 .foregroundStyle(KrasaUI.textSecondary)
                 .frame(width: 26, alignment: .leading)
@@ -110,7 +118,9 @@ struct TimelineLayerBar: View {
         HStack(spacing: 6) {
             // Kreslí se jen když je výřez opravdu výřez — jinak by „nic
             // nevybráno" a „vybráno vše" vypadalo stejně (pravidlo fáze 17).
-            if let text = exportRangeText {
+            // Text počítá `TimelineBarState`, ne tohle `body`: potřebuje
+            // `Project.duration`, a ta je O(klipů) (past z M6).
+            if let text = bar.exportRangeText {
                 Text(text)
                     .font(KrasaUI.Font.monoSmall)
                     .foregroundStyle(KrasaUI.textSecondary)
@@ -122,15 +132,6 @@ struct TimelineLayerBar: View {
                 model.timeline.setOutPoint(model.timeline.playhead)
             }
         }
-    }
-
-    private var exportRangeText: String? {
-        let timeline = model.timeline
-        guard timeline.hasExportRange else { return nil }
-        let range = timeline.exportRange
-        let rate = timeline.project.timeline.frameRate
-        return "výřez \(Timecode(range.lowerBound, frameRate: rate).shortText)"
-            + "–\(Timecode(range.upperBound, frameRate: rate).shortText)"
     }
 
     private func markButton(_ title: String, help: String,
@@ -173,8 +174,7 @@ struct TimelineLayerBar: View {
     private static let maxZoom = 60.0
 
     private var zoomSliderValue: Double {
-        let value = model.timeline.geometry.pointsPerFrame
-        let clamped = min(max(value, Self.minZoom), Self.maxZoom)
+        let clamped = min(max(bar.pointsPerFrame, Self.minZoom), Self.maxZoom)
         return log(clamped / Self.minZoom) / log(Self.maxZoom / Self.minZoom)
     }
 

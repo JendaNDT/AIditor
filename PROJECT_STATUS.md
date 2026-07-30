@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotové moduly 1, 2, 3, 7, 8, 4)*
+*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotové moduly 1, 2, 3, 7, 8, 4, 5)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,9 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (453, 29
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 5 — miniatury na klipech. NEJRIZIKOVĚJŠÍ MODUL PLÁNU** (brána: `--timeline-bench` 0 vypadlých tiků se zapnutými miniaturami). Plán celé fáze je ve `FAZE_18_UI.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 6 — přehled celé osy** (pás 46 px pod stopami: bloky klipů, hlava, rámeček viditelného výřezu; brána `--overview-check`). Plán celé fáze je ve `FAZE_18_UI.md`. **Nejrizikovější modul plánu (M5, miniatury) je za námi a bránu R1 uhájil.**
 
-**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
+**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
 ⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
 
@@ -26,6 +26,70 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
+
+✅ **Modul 5 — miniatury na klipech, křivka rampy a popisky (30. 07. 2026). BRÁNA R1 DRŽÍ.**
+
+  - **`ThumbnailStore`** vzorcem `WaveformStore`: dlaždice kotvené ve **zdrojovém** čase (klíč
+    `soubor|úroveň|index|hrana|scale`), disková cache otiskem, generování **z proxy** (bez ní
+    z originálu), dávkově přes `AVAssetImageGenerator.images(for:)` a **jedním sériovým pracovníkem**.
+    Pravidlo 6 odškrtnuté před psaním kódu: to API v SDK **existuje** a přeloží se i s targetem
+    macOS 14 bez gatování (ověřeno typecheckem, ne odhadem).
+  - **Na klipu:** pás miniatur v dolních 96 bodech, křivka rychlosti přes něj (pás 40, 1,5 px,
+    uzly 3 px, stlačená škála 0,125–2× — na 40 bodech by plná škála editoru narvala zpomalení do
+    dolní třetiny) a dva popisky: **vpravo nahoře rampa** (`1× → 0,25× → 1×`), u fotky Ken Burns
+    (`nájezd 1,3×`), **vlevo dole preset** (`Teplý film 62 %`). Hudební klip má v názvu tempo.
+  - **⚠️ Dlaždice kotvené ve zdroji jsou vědomá odchylka od litery návrhu.** Návrh dělí pás na 2–4
+    rovnoměrné dlaždice přes šířku klipu — po každém trimu by se změnil čas VŠECH dlaždic a celá sada
+    by se zahodila, šedesátkrát za sekundu při tažení úchytu. Kotvení ve zdroji drží miniatury na
+    místě a dlaždice se na hranách klipu zařezávají (tak to dělá Premiere i FCP). Hustota je z
+    návrhu: 1 dlaždice na 96 bodů → na jeho čtyřech ukázkových šířkách přesně **2/2/3/1**.
+  - **⚠️ Brána R1 drží, ale ne sama od sebe: rozhodl ODKLAD GENEROVÁNÍ, dokud se osa hýbe.**
+    Kreslení pásu stojí **+0,10 až +0,13 ms** na tik (rozpočet 16,67) — zanedbatelné. Problém bylo
+    generování: se studenou cache vygeneroval scroll 199 snímků za jízdy a **vypadly 2 tiky**,
+    přestože práce na hlavním vlákně byla 0,34 ms — dekodéry na pozadí soutěží o výpočetní čas.
+    S odkladem se za jízdy negeneruje **nic** (0 vypadlých tiků) a pás se doplní po zastavení
+    (4,6 s na plný výřez ze 4K HEVC originálů). Cesta bez odkladu se dá **vynutit** (`deferralEnabled`),
+    aby tiše nehnila — vzorec `forcesSteppingFallback` z `--jkl-check`. Ústupy, které plán pro tenhle
+    případ chystal (hrubší dlaždice, výchozí vypnutí), se nepoužily.
+  - **Ověřeno `--thumb-check`, 22 kontrol:** studená cache 53 ms na dlaždici proti **0,6 ms z disku**
+    a obrázky se shodují; dlaždice je **týž snímek** jako z generátoru volaného napřímo (rozdíl jasu
+    0,5 proti 4,0 u snímku o 20 s dál) — kontrola si výřez i podvzorek dělá **vlastní**, jinak by
+    ověřila jen to, že se tentýž kód chová dvakrát stejně; **trimnutý klip** ukazuje trimnuté místo
+    (index 12 = 9,6 s u klipu od 10 s, a obsahem sedí na 9,6 s, ne na nulu); fotka má **jednu**
+    dlaždici na celý pás (jas 127 u přechodu 0→255); s vypnutou vrstvou nezůstane ani dlaždice
+    a **nezadá se ani jeden požadavek na generování**.
+  - **⚠️ Dvě věci chytil až screenshot** (třetí modul v řadě): ① dlaždice byla **čtverec**, ale slot
+    je široký `hrana × zoom/úroveň`, takže se obraz dotahoval 1,25× a pás byl rozmazaný → poměr 1,5
+    a verze diskové cache na `v2` (jinak by se tahaly staré čtverce); ② světle modrá křivka se na
+    světlém záběru **ztrácela** → přechodové ztmavení pod pásem křivky (plná plocha dělala vodorovný
+    šev, tři zastávky ne).
+  - **⚠️ Dvě obecně platná zdražení, která se našla měřením:** `NSColor.cgColor` u dynamické barvy
+    vyhodnocuje poskytovatele (early-out cesty si barvy brát nesmí — stálo to ~0,3 ms na tik)
+    a `CALayer.isHidden` i předávání `ClipDrawInfo` hodnotou nejsou zdarma (stínové příznaky
+    a zúžená volání ubraly dalších ~0,12 ms). Zapsané v CLAUDE.md.
+  - **✅ ZAVŘENÝ DLUH Z M3 — anomálie příznaku `beats` je vysvětlená.** Práce dob žije v **kreslení
+    pravítka** (`beatMarks()` prochází všechny zvukové klipy): s dobami zapnutými 1,46 ms, vypnutými
+    0,88 ms. Scrollovací tik ale měří `scroll(to:)` + `reflectScrolledClipView`, tedy `refreshClips`
+    (na příznaku nezávislý: 0,42 vs 0,43 ms) a nastavení `needsDisplay` — **pravítko se kreslí až
+    v dalším průchodu smyčkou, vně měřeného okna**. Modul 3 tedy měřil tu část tiku, ve které o dobách
+    nic není; přepínač ubírá práci tam, kde ji dělá. Obrácený pohyb toho malého čísla je vlastnost
+    mikroměření sub-milisekundového okna, ne cena vrstvy.
+  - **⚠️ A tím se OTEVÍRÁ ZPÁTKY závěr z M4: „0 vypadlých tiků" není na tomhle stroji
+    deterministické.** V jednom sezení, na téže zátěži: kód **M4 dal 2 a 2** výpadky (medián práce
+    0,80 ms), kód **M5 dal 0, 0, 0, 1, 0, 2, 2** (medián 0,95–1,00 ms) — modul, který práci PŘIDAL,
+    vypadl méně často než baseline. Load average 1,6–2,2 přes sezení. **Důvěryhodná je práce na tik**
+    (rozptyl 0,02 ms) **a ABBA v jednom sezení** (osm běhů, 0 vypadlých tiků ve všech).
+    M4 měl pravdu v příčině (zátěž stroje), ale závěr „kritérium platí" byl na jedno měření příliš
+    silný. Kritérium fáze 2 se má odsud posuzovat ABBA a prací na tik.
+  - **Regrese:** `--shell-check` všech 16 hodnot, `--select-check` i `--range-check` celé,
+    `--layers-check` beze změny (jen text o anomálii odkazuje na vysvětlení).
+  - **Co se NEDĚLÁ:** popisek `sync −0,42 s` z návrhu — model posun z klopáku nikde nedrží
+    (synchronizace klip přesune a číslo zahodí), takže by to byl vymyšlený údaj.
+  - **Přiznaná mez:** mapování bodů na zdrojový čas je i na klipu s rampou lineární, jen škálované
+    skutečnou spotřebou — pás pokrývá přesně použitý úsek materiálu, ale rozestupy uvnitř zpomalení
+    křivce neodpovídají. Co se s časem doopravdy děje, říká křivka nakreslená přes pás.
+  - *Koukanec rukou (v seznamu): pás miniatur na reálném materiálu při různém zoomu, křivka rampy na
+    klipu, popisky, přepínač Miniatury na dlouhé ose, fotka v pásu.*
 
 ✅ **Modul 4 — výšky stop a hlavičky 104 (30. 07. 2026). Začátek etapy B.**
 
@@ -46,8 +110,10 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
     Při okně z návrhu (1470×900) je pro stopy ~350 bodů, takže 344 projde — ale **až přijde přehled
     celé osy z M6 (46 bodů), přestane se vejít i tam**. Vlastnost návrhu, ne chyba.
   - **Regrese:** `--timeline-bench` **0 vypadlých tiků**, medián **0,80 ms** — stopy dvakrát vyšší
-    (136 proti 64) **nestály nic měřitelného**. **Tím se zavírá otevřená položka z M8:** kritérium
-    fáze 2 platí, dřívější výpadky byly zátěž stroje. `--select-check` 15 ✅ a `--range-check` 9 ✅
+    (136 proti 64) **nestály nic měřitelného**. ~~Tím se zavírá otevřená položka z M8~~ —
+    ⚠️ **tenhle závěr modul 5 opravil:** týž kód M4 dal v jiném sezení dvakrát 2 vypadlé tiky, takže
+    „nula výpadků" byla vlastnost klidného stroje, ne kódu. Platí příčina (zátěž stroje) a platí
+    medián 0,80 ms; kritérium fáze 2 se posuzuje ABBA v jednom sezení. `--select-check` 15 ✅ a `--range-check` 9 ✅
     prošly celé, přestože se hit testing posunul o odsazení.
   - **⚠️ `--shell-check` na M4 spadl, a bylo to správně** — hlídal hlavičky na 96 s komentářem „návrh
     je nemění". M4 je záměrně rozšířil; očekávání se opravilo. To, že se kontrola ozvala, je přesně

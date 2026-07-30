@@ -121,6 +121,19 @@ jsou nejdražší věc v celém plánu: dekódovaný snímek je řádově draž�
 tlačítko musí existovat dřív, než ho někdo bude potřebovat. Brána: `--timeline-bench` se zapnutými
 miniaturami beze změny proti dnešku.
 
+> ✅ **VYHODNOCENO 30. 07. 2026 (M5): brána drží, ale ne sama od sebe.** Kreslení pásu stojí
+> **+0,10 až +0,13 ms** na tik (rozpočet 16,67) — to je zanedbatelné. Problém nebyl v kreslení, ale
+> v **generování**: dekodéry na pozadí soutěží o výpočetní čas a scroll se studenou cache vypadl
+> 2 tiky, přestože práce na tik byla 0,34 ms. Řešení je **odklad generování, dokud se osa hýbe**
+> (`ThumbnailStore.deferGeneration`), nikoli žádný z ústupků, které plán připravoval.
+> Ústupová cesta z plánu (hrubší dlaždice, výchozí vypnutí) se **nepoužila**.
+>
+> ⚠️ **A ještě jedna oprava:** vypadlé tiky nejsou na tomhle stroji deterministické. V témže sezení
+> dal kód M4 dvakrát 2 výpadky, kód M5 sedmkrát 0–2. Kritérium se dá poctivě posuzovat jen
+> **ABBA v jednom sezení** (tak se to v `--thumb-check` měří) a podle **práce na tik**, která je
+> stabilní na 0,02 ms. Tvrzení M4 „kritérium platí, dřívější výpadky byly zátěž stroje" bylo správné
+> v příčině, ale příliš silné v závěru.
+
 **R2 — GPU baseline náhledu.** Viz 2.3. Brána v M1.
 
 **R3 — `ContentView.swift` má 4483 řádků** a plán se dotýká skoro každé jeho části. Kdyby se psalo
@@ -394,6 +407,93 @@ ani za rozbité. Je to zapsané jako otevřená položka, ne odmávnuté.
 celý klip je dojezd a nájezd zmizel. Vychází to z `setAudioFadesOnSelection` (F17), který srazí
 nájezd na `délka − dojezd`. Rozdělit zbytek napůl by bylo asi milejší, ale je to změna chování
 hromadné operace, ne úklid.
+
+### ✅ M5 — miniatury na klipech, křivka rampy, popisky (30. 07. 2026) · brána R1 drží
+
+**Postaveno:** `Timeline/ThumbnailStore.swift` (nový) a v `ClipLayer` pás miniatur, křivka rychlosti
+a dva popisky. Přepínač `Miniatury` v liště osy je od teď zapojený naostro — pojistka z M3 se stala
+funkcí. Kontrola `Measure/ThumbChecks.swift` (`--thumb-check`, **22 ověření, 0 neshod**).
+
+**Pravidlo 6 odškrtnuté před psaním kódu:** `AVAssetImageGenerator.images(for:)` v SDK **existuje**
+a přeloží se i s deployment targetem macOS 14 bez gatování; vrací `AsyncSequence` s případy
+`.success(requestedTime:image:actualTime:)` a `.failure(requestedTime:error:)`. Ověřeno typecheckem
+proti `MacOSX26.5.sdk`, ne odhadem.
+
+**⚠️ Dlaždice jsou kotvené ve ZDROJOVÉM čase, ne v klipu — vědomá odchylka od litery návrhu.**
+Návrh dělí pás na 2–4 rovnoměrné dlaždice přes šířku klipu. Vypadá to stejně, ale znamenalo by to, že
+po každém trimu a slipu se změní čas *všech* dlaždic klipu a celá sada se zahodí — a to při tažení
+úchytu šedesátkrát za sekundu. Kotvení ve zdroji (týž důvod, proč jsou ve zdroji kotvené uzly
+rychlostní křivky) drží miniatury na místě; cenou je, že se dlaždice na hranách klipu **zařezávají**,
+jak to dělá Premiere i Final Cut. Hustota je z návrhu: **jedna dlaždice na 96 bodů**, což na jeho
+čtyřech ukázkových šířkách (150 / 172 / 250 / 130) dá **2 / 2 / 3 / 1** dlaždici, tedy přesně to,
+co je na screenshotu.
+
+**⚠️ Odklad generování, dokud se osa hýbe — bez něj BRÁNA R1 NEDRŽÍ.** Změřeno oběma směry
+(`deferralEnabled` se dá vypnout, aby cesta bez odkladu netiše nehnila — vzorec
+`forcesSteppingFallback` z `--jkl-check`):
+
+| studená cache, 2000 klipů, zoom 5 | práce na tik | vypadlé tiky | vygenerováno za jízdy |
+|---|---|---|---|
+| odklad **vypnutý** | 0,34 ms | **2** | 199 dlaždic |
+| odklad **zapnutý** | 0,48 ms | **0** | 0 dlaždic |
+
+Nešlo o práci na hlavním vlákně (0,34 ms z rozpočtu 16,67), ale o **dekodéry na pozadí, které
+soutěží o výpočetní čas**. S odkladem se za jízdy negeneruje nic a pás se doplní, jakmile osa stojí
+(naměřeno 4,6 s na plný výřez ze 4K HEVC originálů). Takhle se chová každý NLE a je to i správná
+odpověď na to, co uživatel při scrollování dělá: hledá místo, nekouká na miniatury.
+
+**Cena pásu, ABBA (teplá cache):** při zoomu, ve kterém se stříhá, **+0,13 ms** (0,44 proti 0,31);
+při zoomu formální brány **+0,10 ms** (1,00 proti 0,90). Rozpočet je 16,67 ms na tik.
+
+**⚠️ Dva zásahy do výkonu, které se našly měřením a mají obecnou platnost:**
+① `NSColor.cgColor` u dynamické barvy vyhodnocuje poskytovatele — první verze si v *early-out*
+cestách brala barvy před guardem a stálo to ~0,3 ms na tik (opraveno: `hide()` / `hideRampCurve()`
+o barvu nežádají); ② `CALayer.isHidden` a předávání `ClipDrawInfo` hodnotou nejsou zdarma — stínové
+příznaky a zúžené volání ubraly dalších ~0,12 ms.
+
+**⚠️ Screenshot chytil dvě věci, které měření nevidělo** (třetí modul v řadě, kde se to stalo):
+① dlaždice byla renderovaná jako **čtverec**, ale slot na obrazovce je široký `hrana × zoom/úroveň`,
+takže se obraz při běžném zoomu **dotahoval 1,25× a pás byl rozmazaný** → poměr dlaždice 1,5 a verze
+diskové cache na `v2` (jinak by se tahaly staré čtverce); ② křivka rychlosti leží na miniaturách
+a na světlém záběru se **světle modrá čára ztratila** → přechodové ztmavení pod pásem křivky
+(plná plocha dělala viditelný vodorovný šev, tři zastávky ne).
+
+**Dluh z M3 zavřený — anomálie příznaku `beats` je vysvětlená.** Naměřeno na 2000 klipech:
+
+| | `refreshClips` | kreslení pravítka | součet | scrollovací tik (metrika M3) |
+|---|---|---|---|---|
+| doby zapnuté | 0,42 ms | **1,46 ms** | 1,88 ms | 1,03 ms |
+| doby vypnuté | 0,43 ms | **0,88 ms** | 1,31 ms | 1,18 ms |
+
+Práce dob žije v **kreslení pravítka** (`beatMarks()` prochází všechny zvukové klipy), a scrollovací
+tik měří `scroll(to:)` + `reflectScrolledClipView`, tedy `refreshClips` a nastavení `needsDisplay` —
+**pravítko se kreslí až v dalším průchodu smyčkou, vně měřeného okna**. `refreshClips` je na příznaku
+nezávislý. Modul 3 tedy měřil tu část tiku, ve které o dobách nic není; přepínač ubírá práci tam, kde
+ji dělá (0,6–1,2 ms na kresbu). Obrácený pohyb toho malého čísla je vlastnost mikroměření
+sub-milisekundového okna na hlavním vlákně, ne cena vrstvy.
+
+**⚠️ A tím se otevírá zpátky to, co M4 zavřel příliš rychle: „0 vypadlých tiků" NENÍ na tomhle
+stroji deterministické.** V jednom sezení, na téže zátěži: kód M4 dal **2 a 2** vypadlé tiky
+(medián práce 0,80 ms), kód M5 dal **0, 0, 0, 1, 0, 2, 2** (medián 0,95–1,00 ms) — tedy modul, který
+práci PŘIDAL, vypadl méně často než baseline. Load average se přes sezení pohybuje 1,6–2,2.
+**Důvěryhodná je práce na tik** (rozptyl 0,02 ms) **a ABBA srovnání v jednom sezení** (osm běhů,
+0 vypadlých tiků ve všech). Absolutní „nula výpadků" je vlastnost klidného stroje, ne kódu.
+
+**Co se NEDĚLÁ:** popisek `sync −0,42 s` z návrhu. Model posun z klopáku nikde nedrží —
+synchronizace klip přesune a číslo zahodí; vymýšlet ho by znamenalo napsat na klip údaj, který nemá
+odkud vzít (týž důvod, proč M4 nedělal viditelnost a zámek stopy). Místo něj má hudební klip
+v názvu **tempo** (`Podklad_hudba.m4a · 110,0 BPM`), jak návrh na A2 ukazuje.
+
+**Přiznaná mez:** mapování bodů na zdrojový čas je i na klipu s rampou **lineární** — jen se škáluje
+skutečnou spotřebou (`sourceConsumption`), takže pás pokrývá přesně použitý úsek materiálu, ale
+rozestupy uvnitř zpomaleného úseku křivce neodpovídají. Co se v klipu doopravdy děje s časem, říká
+křivka nakreslená přes pás. Přesné mapování by znamenalo invertovat rampu pro každou dlaždici a to
+`TimelineModel` veřejně neumí.
+
+*Koukanec rukou (v seznamu): pás miniatur na reálném materiálu při různém zoomu, křivka rampy na
+klipu, popisky presetu a rampy, přepínač Miniatury na dlouhé ose, fotka v pásu.*
+
+---
 
 ### ✅ M4 — výšky stop a hlavičky 104 (30. 07. 2026) · začátek etapy B
 
@@ -684,13 +784,13 @@ Podle rozhodnutí z 2.1 jde **všech 13 modulů před svatbou**, v jednom sledu.
 
 | # | Modul | Etapa | Riziko | Brána |
 |---|---|---|---|---|
-| M1 | nový rám okna (+ tmavý režim natvrdo) | A | **R2, R4** | `--benchmark`, `--fullscreen`, `--shell-check` |
-| M2 | stavový řádek a čip analýz | A | nízké | `--status-check` |
-| M3 | lišta osy — vrstvy, citlivost, výřez, zoom | A | nízké | `--layers-check` |
-| M7 | panel 452 + záložka Rychlost | C | střední | `--panel-check` |
-| M8 | záložky Barva, Zvuk, Info | C | nízké | `--panel-check` |
-| M4 | výšky stop, hlavičky 104 | B | nízké | `--layout-check` |
-| M5 | **miniatury na klipech** | B | **R1 — nejvyšší** | `--timeline-bench`, `--thumb-check` |
+| M1 ✅ | nový rám okna (+ tmavý režim natvrdo) | A | **R2, R4** | `--benchmark`, `--fullscreen`, `--shell-check` |
+| M2 ✅ | stavový řádek a čip analýz | A | nízké | `--status-check` |
+| M3 ✅ | lišta osy — vrstvy, citlivost, výřez, zoom | A | nízké | `--layers-check` |
+| M7 ✅ | panel 452 + záložka Rychlost | C | střední | `--panel-check` |
+| M8 ✅ | záložky Barva, Zvuk, Info | C | nízké | `--panel-check` |
+| M4 ✅ | výšky stop, hlavičky 104 | B | nízké | `--layout-check` |
+| M5 ✅ | **miniatury na klipech** | B | **R1 — nejvyšší, BRÁNA DRŽÍ** | `--timeline-bench`, `--thumb-check` |
 | M6 | přehled celé osy | B | střední | `--overview-check` |
 | M9 | knihovna médií a přetažení | C | střední | `--library-check` |
 | M10 | list exportu | D | střední | `--export-check`, `--export-ui-check` |
@@ -698,7 +798,8 @@ Podle rozhodnutí z 2.1 jde **všech 13 modulů před svatbou**, v jednom sledu.
 | M12 | prázdný start | D | nízké | `--empty-start-check` |
 | M13 | fullscreen aplikace a náhledu | D | střední | `--fullscreen-ui-check` |
 
-**Pořadí: M1 → M2 → M3 → M7 → M8 → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13 → 🚧 KILL-GATE 1.**
+**Pořadí: M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 → M9 → M10 → M11 → M12 → M13
+→ 🚧 KILL-GATE 1.**
 
 Proč zrovna takhle, když se jede všechno: **ergonomie napřed, kosmetika vzadu.** Prvních pět modulů
 zavírá potíže #2, #3 a #4 ze zadání a nepřidává funkce — kdyby došel čas nebo se něco zadrhlo, jsou

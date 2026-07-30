@@ -70,6 +70,17 @@ struct KrasaApp: App {
                 Button("Přidat fotky…") { model.addPhotos() }
                 Button("Přidat hudbu…") { model.addMusic() }
             }
+            // Fullscreen náhled (fáze 18, modul 13). ⌃⌘F systémový (celá
+            // aplikace) zůstává systému — tohle je NÁHLED, tedy jiná věc:
+            // okno se vyprázdní na obraz a overlay.
+            CommandGroup(after: .toolbar) {
+                Button(model.previewFullscreen
+                       ? "Zpět do editoru" : "Náhled na celou obrazovku") {
+                    model.togglePreviewFullscreen()
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .disabled(!model.previewFullscreen && !model.canEnterPreviewFullscreen)
+            }
             CommandGroup(replacing: .saveItem) {
                 Button("Uložit projekt") { model.saveProject() }
                     .keyboardShortcut("s")

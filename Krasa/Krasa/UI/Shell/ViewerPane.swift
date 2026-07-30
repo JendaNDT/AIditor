@@ -26,8 +26,11 @@ struct ViewerPane: View {
     @ObservedObject var model: AppModel
 
     /// Overlaye jsou vidět, jen když se nic neměří a nejsou potlačené.
+    /// Ve fullscreen náhledu (M13) taky ne — ten má vlastní ovládání a čipy
+    /// a dvě sady přes sebe by se překrývaly.
     private var overlaysVisible: Bool {
         !model.chromeHidden && !model.isMeasuring && !model.overlaysSuppressed
+            && !model.previewFullscreen
     }
 
     var body: some View {
@@ -37,9 +40,11 @@ struct ViewerPane: View {
             PlayerView(player: model.controller.player) { view in
                 model.attach(view)
             }
-            // Odsazení jen v běžném provozu. Při měření dostane obraz
-            // celou plochu — jinak by se měřila jiná plocha než dřív.
-            .padding(model.chromeHidden ? 0 : KrasaUI.Metric.viewerPadding)
+            // Odsazení jen v běžném provozu. Při měření a ve fullscreen
+            // náhledu dostane obraz celou plochu — jinak by se měřila jiná
+            // plocha než dřív a náhled by měl kolem sebe rám.
+            .padding(model.chromeHidden || model.previewFullscreen
+                     ? 0 : KrasaUI.Metric.viewerPadding)
 
             if overlaysVisible {
                 ViewerChips(timeline: model.timeline)
@@ -57,7 +62,9 @@ struct ViewerPane: View {
                 SubtitleOverlay(timeline: model.timeline)
 
                 TransportPill(controller: model.controller,
-                              frameRate: model.timeline.project.timeline.frameRate)
+                              frameRate: model.timeline.project.timeline.frameRate,
+                              onFullscreen: model.canEnterPreviewFullscreen
+                                  ? { model.enterPreviewFullscreen() } : nil)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, 24)
             }
@@ -72,6 +79,18 @@ struct ViewerPane: View {
             // zóna je uvnitř pásu s pevnou výškou, ne kolem něj.
             if model.showsEmptyStart {
                 EmptyStartDropZone(model: model)
+            }
+
+            // Fullscreen náhled (modul 13). Titulky z řeči zůstávají — jsou
+            // součástí obrazu, ne ovládání — a ve stavu `ovládání` se zvedají
+            // nad scrub lištu (zadání: 212 místo 108 bodů od spodní hrany).
+            if model.previewFullscreen {
+                if model.previewSubtitles {
+                    TitleOverlay(timeline: model.timeline)
+                    SubtitleOverlay(timeline: model.timeline)
+                        .padding(.bottom, model.fullscreenOverlay == .controls ? 104 : 0)
+                }
+                FullscreenPreviewOverlay(model: model)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -206,6 +225,8 @@ struct LoudnessReadout: Equatable {
 private struct TransportPill: View {
     @ObservedObject var controller: PlaybackController
     let frameRate: Int
+    /// Vstup do fullscreen náhledu (M13). `nil` = není co promítat.
+    var onFullscreen: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -236,6 +257,18 @@ private struct TransportPill: View {
 
             glyphButton("▶", help: "O snímek vpřed") { controller.step(frames: 1) }
             glyphButton("L", help: "Vpřed (JKL)") { _ = controller.shuttle(.forward) }
+
+            if let onFullscreen {
+                divider
+                Button(action: onFullscreen) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 12))
+                        .foregroundStyle(KrasaUI.textSecondary)
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
+                .help("Náhled na celou obrazovku ⇧⌘F (⎋ zpět)")
+            }
 
             // Čip rychlosti jen když se opravdu shuttluje. Oranžový je
             // vyhrazený krokovacímu fallbacku — je to přiznaná mez, ne ozdoba.

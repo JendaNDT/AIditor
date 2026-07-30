@@ -68,6 +68,9 @@
 		F1820000000000000000001B /* TranscriptUIChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000001B /* TranscriptUIChecks.swift */; };
 		F1820000000000000000001C /* EmptyState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000001C /* EmptyState.swift */; };
 		F1820000000000000000001D /* EmptyStartChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000001D /* EmptyStartChecks.swift */; };
+		F18200000000000000000020 /* FullscreenPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000020 /* FullscreenPreview.swift */; };
+		F18200000000000000000021 /* MiniTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000021 /* MiniTimeline.swift */; };
+		F18200000000000000000022 /* FullscreenUIChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000022 /* FullscreenUIChecks.swift */; };
 		F1820000000000000000000E /* AudioTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000E /* AudioTab.swift */; };
 		F1820000000000000000000F /* InfoTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000F /* InfoTab.swift */; };
 /* End PBXBuildFile section */
@@ -130,6 +133,9 @@
 		F1810000000000000000001B /* TranscriptUIChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptUIChecks.swift; sourceTree = "<group>"; };
 		F1810000000000000000001C /* EmptyState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyState.swift; sourceTree = "<group>"; };
 		F1810000000000000000001D /* EmptyStartChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStartChecks.swift; sourceTree = "<group>"; };
+		F18100000000000000000020 /* FullscreenPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenPreview.swift; sourceTree = "<group>"; };
+		F18100000000000000000021 /* MiniTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniTimeline.swift; sourceTree = "<group>"; };
+		F18100000000000000000022 /* FullscreenUIChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullscreenUIChecks.swift; sourceTree = "<group>"; };
 		F1810000000000000000000E /* AudioTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTab.swift; sourceTree = "<group>"; };
 		F1810000000000000000000F /* InfoTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoTab.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -216,6 +222,7 @@
 				F18100000000000000000018 /* ExportUIChecks.swift */,
 				F1810000000000000000001B /* TranscriptUIChecks.swift */,
 				F1810000000000000000001D /* EmptyStartChecks.swift */,
+				F18100000000000000000022 /* FullscreenUIChecks.swift */,
 			);
 			path = Measure;
 			sourceTree = "<group>";
@@ -265,6 +272,7 @@
 		F18000000000000000000001 /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				F18000000000000000000007 /* Fullscreen */,
 				F18000000000000000000002 /* Shell */,
 				F18000000000000000000003 /* Panels */,
 				F18000000000000000000004 /* Library */,
@@ -272,6 +280,15 @@
 				F18000000000000000000006 /* Transcript */,
 			);
 			path = UI;
+			sourceTree = "<group>";
+		};
+		F18000000000000000000007 /* Fullscreen */ = {
+			isa = PBXGroup;
+			children = (
+				F18100000000000000000020 /* FullscreenPreview.swift */,
+				F18100000000000000000021 /* MiniTimeline.swift */,
+			);
+			path = Fullscreen;
 			sourceTree = "<group>";
 		};
 		F18000000000000000000002 /* Shell */ = {
@@ -418,6 +435,9 @@
 				F1820000000000000000001B /* TranscriptUIChecks.swift in Sources */,
 				F1820000000000000000001C /* EmptyState.swift in Sources */,
 				F1820000000000000000001D /* EmptyStartChecks.swift in Sources */,
+				F18200000000000000000020 /* FullscreenPreview.swift in Sources */,
+				F18200000000000000000021 /* MiniTimeline.swift in Sources */,
+				F18200000000000000000022 /* FullscreenUIChecks.swift in Sources */,
 				2F71D6C304AB859E1D3E7F0A /* TimelineController.swift in Sources */,
 				A9E3B57C1F0842D6C7B93E15 /* TimelineDocumentView.swift in Sources */,
 				74CB19E8D3A05F2718BE6C40 /* TimelinePane.swift in Sources */,

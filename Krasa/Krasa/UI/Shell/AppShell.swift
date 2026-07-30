@@ -86,7 +86,10 @@ struct AppShell: View {
     @ObservedObject var model: AppModel
 
     private var mode: ShellMode { model.isFullscreen ? .fullscreenApp : .window }
-    private var chromeVisible: Bool { !model.chromeHidden }
+    /// Chrome je pryč při měření (M1) i ve fullscreen náhledu (M13). V obou
+    /// případech se ODEBÍRÁ z hierarchie, nekryje — a `ViewerPane` v obou
+    /// zůstává na témže místě stromu, takže se `PlayerView` nepřetváří.
+    private var chromeVisible: Bool { !model.chromeHidden && !model.previewFullscreen }
 
     var body: some View {
         VStack(spacing: 0) {

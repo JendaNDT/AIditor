@@ -79,6 +79,38 @@ final class AppModel: ObservableObject {
     /// `didEnterFullScreen` / `didExitFullScreen` — `styleMask` se přepíná
     /// už na ZAČÁTKU přechodu, takže se na něj ptát nestačí.
     @Published var isFullscreen = false
+
+    // MARK: Fullscreen náhled (fáze 18, modul 13)
+
+    /// Náhled přes celou obrazovku, bez skořápky. **Není to jiné okno ani jiný
+    /// přehrávač** — je to TÁŽ hierarchie, jen se z ní odebere chrome (vzorec
+    /// `chromeHidden` z modulu 1). Druhé okno by znamenalo druhý `AVPlayerView`,
+    /// a stěhování přehrávače mezi okny je přesně ta cesta, na které projekt
+    /// jednou strávil den honěním „černého náhledu".
+    @Published private(set) var previewFullscreen = false
+    /// Co je nad obrazem: nic / ovládání / mini osa.
+    @Published private(set) var fullscreenOverlay: FullscreenOverlay = .controls
+    /// Mini osu vyvolanou přes ⇧T časovač neschovává — je to volba, ne mávnutí
+    /// myší. Myší vytažená mini osa (kurzor u spodní hrany) zmizí jako ovládání.
+    private(set) var fullscreenTimelinePinned = false
+    /// Byl fullscreen okna zapnutý UŽ PŘED náhledem? Pak se z něj po ⎋ nevrací
+    /// do okna — uživatel si ho zapnul sám a nemá o něj přijít.
+    private var wasAppFullscreenBeforePreview = false
+    private var overlayIdleTimer: Timer?
+
+    enum FullscreenOverlay { case clean, controls, timeline }
+
+    /// Po jaké nečinnosti overlay zmizí (zadání: ~2 s).
+    static let overlayIdleSeconds: TimeInterval = 2
+
+    /// Titulky z řeči v náhledu. Jen stav sezení a jen pro fullscreen —
+    /// v okně se overlay titulků nevypíná.
+    @Published var previewSubtitles = true
+
+    /// Délka filmu ve snímcích. Drží se tady, protože `Project.duration`
+    /// je O(klipů) (past z M6) a scrub lišta ji potřebuje při každém posunu
+    /// hlavy. Plní odběr `timeline.$project` v `init`.
+    @Published private(set) var totalFrames: Frames = .zero
     /// Vypne overlaye nad obrazem (čipy, měřidlo, pilulka) i mimo měřicí
     /// režim. Používá `--shell-gpu`, aby šel změřit jejich vliv na skládání.
     @Published var overlaysSuppressed = false
@@ -249,6 +281,15 @@ final class AppModel: ObservableObject {
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] hasMedia in self?.hasMedia = hasMedia },
+            // Délka filmu pro scrub lištu a mini osu fullscreen náhledu (M13).
+            // ⚠️ `Project.duration` je O(klipů) a alokuje dvě pole (past z M6),
+            // takže se počítá tady — jednou za změnu projektu, s debounce —
+            // a NE v těle overlaye, které se překresluje s hlavou.
+            timeline.$project
+                .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
+                .map { $0.duration }
+                .removeDuplicates()
+                .sink { [weak self] duration in self?.totalFrames = duration },
         ]
 
         projectStore.refreshRecentProjects()
@@ -3679,6 +3720,90 @@ final class AppModel: ObservableObject {
         timeline.setPlayheadFromUser(clip.timelineStart)
     }
 
+    // MARK: - Fullscreen náhled (fáze 18, modul 13)
+
+    /// ⇧⌘F. Zapnout jde jen s obrazem — náhled prázdné osy by byl černý
+    /// obdélník, ze kterého se dá vyjít jen ⎋.
+    var canEnterPreviewFullscreen: Bool { hasMedia && !isMeasuring }
+
+    func togglePreviewFullscreen() {
+        previewFullscreen ? exitPreviewFullscreen() : enterPreviewFullscreen()
+    }
+
+    func enterPreviewFullscreen() {
+        guard !previewFullscreen, canEnterPreviewFullscreen else { return }
+        previewFullscreen = true
+        fullscreenTimelinePinned = false
+        setOverlay(.controls)
+        // ⚠️ Okno se do fullscreenu posílá, jen když v něm ještě není.
+        // `FullScreenSwitch.set` to sice pozná taky, ale ZPÁTKY se musí vědět,
+        // jestli fullscreen patřil nám, nebo uživateli.
+        guard let window = hostView?.window else { return }
+        wasAppFullscreenBeforePreview = FullScreenSwitch.isFullScreen(window)
+        if !wasAppFullscreenBeforePreview {
+            Task { await FullScreenSwitch.set(true, on: window) }
+        }
+    }
+
+    func exitPreviewFullscreen() {
+        guard previewFullscreen else { return }
+        previewFullscreen = false
+        fullscreenTimelinePinned = false
+        overlayIdleTimer?.invalidate()
+        overlayIdleTimer = nil
+        // Tažení scrub lišty končí s overlayem — je to gesto SwiftUI nad
+        // view, které právě mizí, a do modelu se při něm nezapisuje nic než
+        // poloha hlavy (tu si uživatel odtáhl vědomě).
+        //
+        // Tažení NA OSE se tu neruší schválně: osa v náhledu vůbec není
+        // v hierarchii, takže v ní žádné běžet nemůže. ⎋ nad osou dál obsluhuje
+        // `TimelineDocumentView.keyDown`.
+        guard !wasAppFullscreenBeforePreview, let window = hostView?.window else { return }
+        Task { await FullScreenSwitch.set(false, on: window) }
+    }
+
+    /// Myš se pohnula. `nearBottom` = kurzor v posledních ~60 bodech, tedy
+    /// v pruhu, kde návrh chce mini osu.
+    func noteFullscreenMouseActivity(nearBottom: Bool) {
+        guard previewFullscreen else { return }
+        if fullscreenTimelinePinned {
+            setOverlay(.timeline)
+        } else {
+            setOverlay(nearBottom ? .timeline : .controls)
+        }
+    }
+
+    /// ⇧T. Připnutá mini osa přestává mizet nečinností.
+    func toggleFullscreenTimeline() {
+        guard previewFullscreen else { return }
+        fullscreenTimelinePinned.toggle()
+        if fullscreenTimelinePinned {
+            overlayIdleTimer?.invalidate()
+            overlayIdleTimer = nil
+            fullscreenOverlay = .timeline
+        } else {
+            setOverlay(.controls)
+        }
+    }
+
+    private func setOverlay(_ state: FullscreenOverlay) {
+        if fullscreenOverlay != state { fullscreenOverlay = state }
+        overlayIdleTimer?.invalidate()
+        guard !fullscreenTimelinePinned else { return }
+        // `Timer` na hlavní smyčce v `.common` režimu: v `.default` by se
+        // během tažení scrub lišty (modální smyčka tažení) nespustil, takže
+        // by overlay po puštění zmizel se zpožděním celého tažení.
+        let timer = Timer(timeInterval: Self.overlayIdleSeconds, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.previewFullscreen, !self.fullscreenTimelinePinned
+                else { return }
+                self.fullscreenOverlay = .clean
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        overlayIdleTimer = timer
+    }
+
     func attach(_ view: PlayerHostView) { hostView = view }
     func attachTimeline(_ pane: TimelinePane) { timelinePane = pane }
     /// Terč přetažení na prázdném startu (fáze 18, modul 12). Drží se `weak`
@@ -3686,6 +3811,10 @@ final class AppModel: ObservableObject {
     /// protokolu `NSDraggingDestination` — vzorec z modulu 9.
     func attachDropZone(_ view: FileDropView) { dropZoneView = view }
     private(set) weak var dropZoneView: FileDropView?
+    /// Sledovač myši ve fullscreen náhledu (M13) — jen pro
+    /// `--fullscreen-ui-check`, který se ho ptá na sledovací oblasti.
+    func attachMouseWatcher(_ view: MouseWatchView) { mouseWatcherView = view }
+    private(set) weak var mouseWatcherView: MouseWatchView?
 
     // MARK: Akce toolbaru (fáze 18, modul 1)
 
@@ -4297,6 +4426,8 @@ struct ContentView: View {
                     await model.verifyTranscriptUI()
                 } else if arguments.contains("--empty-start-check") {
                     await model.verifyEmptyStart()
+                } else if arguments.contains("--fullscreen-ui-check") {
+                    await model.verifyFullscreenUI()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

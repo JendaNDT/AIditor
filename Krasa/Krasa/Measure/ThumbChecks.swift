@@ -111,7 +111,16 @@ extension AppModel {
         // 12 dlaždic" na šest vyžádaných a část A padala, přestože kód byl
         // v pořádku. Store se dá oslovit přímo, takže izolace nic neztratí.
         timeline.layers.thumbnails = false
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        // ⚠️ A od modulu 9 nestačí vypnout OSU: dlaždice si žádá i knihovna
+        // médií (hrana 104) a ta je v okně pořád. Kontrola proto přepne rail
+        // na `Řeč`, čímž se knihovna z horního pásu vymění za Zdroje řeči.
+        // Bez toho hlásila „vygenerováno 7 dlaždic" v druhém průchodu a
+        // vypadalo to na chybu v mezipaměti — chyba byla v izolaci měření.
+        // (Našlo se v modulu 13; `--thumb-check` se od M6 nepouštěl.)
+        let railBefore = railSection
+        railSection = .speech
+        try? await Task.sleep(nanoseconds: 700_000_000)
+        defer { railSection = railBefore }
 
         // Studená cache: naše dlaždice se z disku vyhodí, aby se opravdu
         // generovaly. Je to mezipaměť, ne dokument — smazat ji jde.

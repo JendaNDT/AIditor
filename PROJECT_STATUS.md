@@ -1343,7 +1343,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 ## 📁 Stav souborů
 
 ### Dokumentace
-- `Projekt_AIditor_Specifikace_Aplikace_v2.html` / `.pdf` – specifikace, zdroj pravdy pro **rozsah**
+- `Projekt_AIditor_Specifikace_Aplikace_v2.html` / `.pdf` – specifikace, zdroj pravdy pro **rozsah** ⚠️ **jen lokálně, v repozitáři ani v jeho historii není** (obchodní část do veřejného repa nepatří — 30. 07. 2026)
 - `IMPLEMENTACNI_PLAN.md` – zdroj pravdy pro **pořadí a technologie**
 - `SPIKE_0.md` – **uzavřený Spike 0 s naměřenými výsledky.** Vyplněná kritéria úspěchu, vyhodnocený rozhodovací bod, metodické poznámky k testování lupanců
 - `FAZE_2_TIMELINE.md` – **návrh `TimelineModelu`.** Typy, invarianty, operace, undo a zdůvodnění rozhodnutí; kód podle něj je hotový

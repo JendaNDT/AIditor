@@ -5,6 +5,12 @@ TestClips/
 *.xcuserdatad
 xcuserdata/
 
+# Specifikace zůstává jen LOKÁLNĚ — obsahuje obchodní část (ceník, analýza
+# trhu, persony), která do veřejného repozitáře nepatří. Pořád je to zdroj
+# pravdy pro rozsah, jen se needituje přes git.
+Projekt_AIditor_Specifikace_Aplikace_v2.html
+Projekt_AIditor_Specifikace_Aplikace_v2.pdf
+
 # měřicí výstupy
 aiditor_gpu*.txt
 gpu*.txt

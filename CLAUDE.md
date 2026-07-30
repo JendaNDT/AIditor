@@ -8,12 +8,14 @@ Nativní macOS videoeditor pro svatební a rodinné filmy. Swift, SwiftUI (panel
 
 | Soubor | Na co |
 |---|---|
-| `Projekt_AIditor_Specifikace_Aplikace_v2.html` | **rozsah** — co má appka umět |
+| `Projekt_AIditor_Specifikace_Aplikace_v2.html` ⚠️ | **rozsah** — co má appka umět. **JEN LOKÁLNĚ, v repozitáři není** (viz níž) |
 | `IMPLEMENTACNI_PLAN.md` | **pořadí a technologie** — v jakém pořadí to stavět |
 | `PROJECT_STATUS.md` | **stav** — co je hotové, co je příští krok |
 | `SPIKE_0.md` | **uzavřený Spike 0** — naměřené výsledky a co z nich plyne |
 
 Specifikace je starší než plán. **Kde si odporují, platí plán** — obsahuje opravy proti realitě července 2026.
+
+⚠️ **Specifikace je v `.gitignore` a od 30. 07. 2026 není v repozitáři ani v jeho historii.** Obsahuje obchodní část (ceník, analýza trhu, srovnání s konkurencí, persony), a repozitář je od téhož dne veřejný na GitHubu. Soubor leží dál v pracovní složce vedle ostatních — čti ho normálně, jen ho **necommituj**. Kdyby chyběl, ptej se autora; nedomýšlej si rozsah z plánu.
 
 ## Pravidla práce
 
@@ -69,7 +71,7 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
   | 240 fps | 0,125× | 0,1× |
 
 
-- **Persony to nemají stejně.** [Filip](Projekt_AIditor_Specifikace_Aplikace_v2.html) (primární) točí sám a může se zařídit — jemu limit stačí říct dopředu a on natočí 120 fps. [Alena](Projekt_AIditor_Specifikace_Aplikace_v2.html) (sekundární) skládá film z cizích videí od hostů, typicky 30 fps, a zařídit se nemůže. **Pro ni je duplikace snímků s přiznaným varováním legitimní chování, ne nedodělek** — ale přiznané být musí. Nikdy jí netvrď, že výsledek je plynulý, když není.
+- **Persony to nemají stejně** (obě jsou ve specifikaci, tedy jen lokálně). **Filip** (primární) točí sám a může se zařídit — jemu limit stačí říct dopředu a on natočí 120 fps. **Alena** (sekundární) skládá film z cizích videí od hostů, typicky 30 fps, a zařídit se nemůže. **Pro ni je duplikace snímků s přiznaným varováním legitimní chování, ne nedodělek** — ale přiznané být musí. Nikdy jí netvrď, že výsledek je plynulý, když není.
 - **Fotka hraje přes „still movie" mezisoubor (`StillMovieStore`, fáze 12).** Fotka nemá video stopu a do `AVComposition` se vkládat nedá — vyrobí se z ní JEDNOU film o jednom ProRes snímku v rozměru plátna s VPÁLENÝM aspect-fitem (a narovnanou EXIF orientací), a kompozice ho roztáhne `scaleTimeRange`. Vpálený aspect-fit je záměr: mezisoubor se chová jako běžné video, bez přechodů/Ken Burns nevzniká video kompozice a GPU baseline platí i s fotkami. Cache s otiskem cesta|velikost|mtime|plátno, vzorec proxy.
 - **`AVVideoCompositionCoreAnimationTool` se nepoužívá — titulky do exportu vypaluje `frameDecorator` v `CFRRendereru` (rozhodnuto 29. 07. 2026, fáze 11).** Ten nástroj je dokumentovaný pro `AVAssetExportSession`, kterou projekt schválně nepoužívá (ignoruje `frameDuration`); jeho chování na cestě `AVAssetReader`+`AVAssetWriter` dokumentace nepopisuje — pravidlo 6. Dekorátor přimíchá předrenderovaný titulek (CoreImage, NV12) jen do snímků, kde titulek leží; ostatní projdou bajt po bajtu nedotčené (změřeno: odchylka mimo titulek 0,14). Typografii šablon drží `TitleExportRenderer.font(for:)` a `TitleOverlay.font(for:)` — měnit se musí SPOLU.
 - **Barevné presety (F13) jedou přes vlastní `AVVideoCompositing` (`ColorVideoCompositor`), NE `applyingCIFiltersWithHandler` (rozhodnuto 29. 07. 2026, hotové v modulu 2).** Ten inicializátor filtruje jen „first enabled video track" — naše kompozice má od F10 víc drah (A/B rozklad prolínaček), klipy na dráze B by filtr nedostaly; staví si vlastní instrukce (zahodil by opacity/transform rampy i aspect-fit) a `frameDuration` si bere z `nominalFrameRate`, o kterém máme změřeno, že lže. Provedení: `CompositionBuilder.computeSpans` je JEDINÉ místo sémantiky obrazové kompozice — bez presetů z něj jdou standardní instrukce (vestavěný kompozitor), s presety vlastní `ColorCompositionInstruction` (objekt `AVVideoCompositionInstructionProtocol`, NE podtřída standardní instrukce — player item kompozici KOPÍRUJE a kopie podtřídy by přes NSCopying rodiče přišla o přidaná pole). Bez presetu/přechodu/KB se video kompozice dál nestaví (GPU baseline platí); s presety je skok medián ~24 % (změřeno `--color-gpu`). Vzhled presetů drží JEN `ColorPresetFilter` v `ColorCompositor.swift`.

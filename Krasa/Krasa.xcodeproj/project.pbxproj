@@ -60,6 +60,8 @@
 		F18200000000000000000014 /* LibraryPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000014 /* LibraryPane.swift */; };
 		F18200000000000000000015 /* LibraryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000015 /* LibraryCard.swift */; };
 		F18200000000000000000016 /* LibraryChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000016 /* LibraryChecks.swift */; };
+		F18200000000000000000017 /* ExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000017 /* ExportSheet.swift */; };
+		F18200000000000000000018 /* ExportUIChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000018 /* ExportUIChecks.swift */; };
 		F1820000000000000000000E /* AudioTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000E /* AudioTab.swift */; };
 		F1820000000000000000000F /* InfoTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000F /* InfoTab.swift */; };
 /* End PBXBuildFile section */
@@ -114,6 +116,8 @@
 		F18100000000000000000014 /* LibraryPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryPane.swift; sourceTree = "<group>"; };
 		F18100000000000000000015 /* LibraryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryCard.swift; sourceTree = "<group>"; };
 		F18100000000000000000016 /* LibraryChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryChecks.swift; sourceTree = "<group>"; };
+		F18100000000000000000017 /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportSheet.swift; sourceTree = "<group>"; };
+		F18100000000000000000018 /* ExportUIChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportUIChecks.swift; sourceTree = "<group>"; };
 		F1810000000000000000000E /* AudioTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTab.swift; sourceTree = "<group>"; };
 		F1810000000000000000000F /* InfoTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoTab.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -197,6 +201,7 @@
 				F18100000000000000000011 /* ThumbChecks.swift */,
 				F18100000000000000000013 /* OverviewChecks.swift */,
 				F18100000000000000000016 /* LibraryChecks.swift */,
+				F18100000000000000000018 /* ExportUIChecks.swift */,
 			);
 			path = Measure;
 			sourceTree = "<group>";
@@ -217,6 +222,14 @@
 			path = Timeline;
 			sourceTree = "<group>";
 		};
+		F18000000000000000000005 /* Export */ = {
+			isa = PBXGroup;
+			children = (
+				F18100000000000000000017 /* ExportSheet.swift */,
+			);
+			path = Export;
+			sourceTree = "<group>";
+		};
 		F18000000000000000000004 /* Library */ = {
 			isa = PBXGroup;
 			children = (
@@ -232,6 +245,7 @@
 				F18000000000000000000002 /* Shell */,
 				F18000000000000000000003 /* Panels */,
 				F18000000000000000000004 /* Library */,
+				F18000000000000000000005 /* Export */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -371,6 +385,8 @@
 				F18200000000000000000014 /* LibraryPane.swift in Sources */,
 				F18200000000000000000015 /* LibraryCard.swift in Sources */,
 				F18200000000000000000016 /* LibraryChecks.swift in Sources */,
+				F18200000000000000000017 /* ExportSheet.swift in Sources */,
+				F18200000000000000000018 /* ExportUIChecks.swift in Sources */,
 				2F71D6C304AB859E1D3E7F0A /* TimelineController.swift in Sources */,
 				A9E3B57C1F0842D6C7B93E15 /* TimelineDocumentView.swift in Sources */,
 				74CB19E8D3A05F2718BE6C40 /* TimelinePane.swift in Sources */,

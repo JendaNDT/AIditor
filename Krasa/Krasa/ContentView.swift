@@ -37,6 +37,20 @@ final class AppModel: ObservableObject {
     @Published var panelVisible = true
     /// Vybraná záložka panelu (fáze 18, modul 7).
     @Published var panelTab: PanelTab = .speed
+    /// List exportu (fáze 18, modul 10). `nil` = zavřený.
+    @Published var exportSheet: ExportSheetPhase?
+    /// Exportovat jen výřez I—O. Výchozí `true` drží dosavadní chování:
+    /// `timeline.exportRange` je bez in/out bodů celý projekt.
+    @Published var exportUsesRange = true
+    /// Vypálit titulky z T1 do obrazu.
+    @Published var exportBurnsTitles = true
+    /// Uložit vedle filmu i `.srt`.
+    @Published var exportWritesSRT = false
+    /// Kam se exportuje. `nil` = uživatel ještě nevybral.
+    @Published var exportDestination: URL?
+    /// Výsledek posledního exportu — kontrolní řádky ve stavu „hotovo".
+    @Published var exportOutcome: ExportOutcome?
+
     /// Vybraná karta v knihovně médií (fáze 18, modul 9). Stav sezení —
     /// s výběrem KLIPŮ na ose se schválně neslučuje: v knihovně se vybírá
     /// zdroj, na ose kus střihu, a splynutí obojího by znamenalo, že klik
@@ -693,6 +707,194 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - List exportu (fáze 18, modul 10)
+
+    enum ExportSheetPhase { case settings, progress, done }
+
+    /// Kde je export právě teď. Stav se nečte z textu `status` — řetězcové
+    /// porovnávání („začíná to na Měřím hlasitost…") je past, která se rozejde
+    /// při první změně hlášky.
+    enum ExportStage { case composing, loudness, rendering, finishing }
+    @Published var exportStage: ExportStage = .composing
+
+    struct ExportStageState {
+        let title: String
+        let detail: String?
+        let isDone: Bool
+        let isRunning: Bool
+    }
+
+    /// Tři fáze pro list. Pořadí i význam podle zadání návrhu.
+    var exportStages: [ExportStageState] {
+        let stage = exportStage
+        let order: [ExportStage] = [.composing, .loudness, .rendering, .finishing]
+        let current = order.firstIndex(of: stage) ?? 0
+
+        let loudnessDetail: String?
+        if let profile = loudnessProfile {
+            if let readout = lastLoudness, current >= 2 {
+                loudnessDetail = String(format: "%.1f → %.0f LUFS",
+                                        readout.lufs, profile.targetLUFS)
+            } else {
+                loudnessDetail = profile.displayName
+            }
+        } else {
+            loudnessDetail = "bez normalizace"
+        }
+
+        return [
+            ExportStageState(title: "Kompozice a hlasitost", detail: loudnessDetail,
+                             isDone: current >= 2, isRunning: current < 2),
+            ExportStageState(title: "Renderuju obraz a zvuk",
+                             detail: exportBurnsTitles && !timeline.project.titleCues().isEmpty
+                                 ? "HEVC · titulky se vypalují" : "HEVC z originálů",
+                             isDone: current >= 3, isRunning: current == 2),
+            ExportStageState(title: "Kontrola časování a zápis .srt",
+                             detail: exportWritesSRT ? ".srt vedle filmu" : nil,
+                             isDone: exportProgress == nil && exportOutcome != nil,
+                             isRunning: current == 3),
+        ]
+    }
+
+    /// Co se doopravdy zapsalo. Ne „hlášení o úspěchu", ale čísla, která
+    /// se dají porovnat s tím, co list slíbil.
+    struct ExportOutcome {
+        let url: URL
+        let writtenFrames: Int
+        let expectedFrames: Int
+        let elapsedSeconds: Double
+        let fileBytes: Int64
+        /// Řádek o hlasitosti — `nil`, když se nenormalizovalo.
+        let loudnessLine: String?
+        /// Gain narazil na strop −1 dBTP a na cíl nedosáhl. Přiznává se.
+        let loudnessCapped: Bool
+        let burnedTitles: Int
+        let srtURL: URL?
+        let rangeText: String?
+
+        var framesMatch: Bool { writtenFrames == expectedFrames }
+        var framesPerSecond: Double {
+            elapsedSeconds > 0 ? Double(writtenFrames) / elapsedSeconds : 0
+        }
+    }
+
+    /// Exportuje se výřez? **Efektivní** hodnota, ne jen příznak.
+    ///
+    /// ⚠️ Bez tohohle mohl list ukazovat vybranou kartu „Jen výřez I—O",
+    /// která je zároveň ZAKÁZANÁ, protože výřez neexistuje (stane se to,
+    /// jakmile se výřez zruší, když byl list předtím na výřez přepnutý).
+    /// Chytil to snímek listu — čísla přitom celou dobu vycházela, protože
+    /// `exportRange` je bez in/out bodů celý projekt.
+    var exportsRangeEffectively: Bool { exportUsesRange && timeline.hasExportRange }
+
+    /// Rozsah, který list exportuje.
+    var exportSheetRange: Range<Frames> {
+        exportsRangeEffectively
+            ? timeline.exportRange
+            : timeline.project.exportRange(inPoint: nil, outPoint: nil)
+    }
+
+    /// Kolik snímků se zapíše. **Jediný zdroj** čísla v listu — kontrola
+    /// `--export-ui-check` ho porovnává s tím, co renderer opravdu zapsal.
+    var exportSheetFrameCount: Int {
+        max(0, exportSheetRange.upperBound.count - exportSheetRange.lowerBound.count)
+    }
+
+    /// Rychlost posledního exportu (snímků/s) — jediný poctivý základ odhadu.
+    /// Dokud se neexportovalo, odhad se NEUKAZUJE: vymyšlené „~1 min" je
+    /// horší než přiznané „ukáže se po prvním exportu".
+    var exportMeasuredFPS: Double? {
+        guard let outcome = exportOutcome, outcome.framesPerSecond > 0 else { return nil }
+        return outcome.framesPerSecond
+    }
+
+    /// Klipy, u kterých se při exportu budou duplikovat snímky.
+    /// Podíl počítá MODEL (`duplicatedFrameShare`), ne UI — pravidlo plánu.
+    struct DuplicationWarning: Identifiable {
+        let id: ClipID
+        let name: String
+        let share: Double
+        let limit: Double
+        let lowestSpeed: Double
+    }
+
+    var exportDuplicationWarnings: [DuplicationWarning] {
+        let project = timeline.project
+        var out: [DuplicationWarning] = []
+        for track in project.timeline.tracks where track.kind == .video {
+            for clip in track.clips {
+                guard let share = project.duplicatedFrameShare(of: clip), share > 0.005,
+                      let limit = project.pureSlowdownLimit(of: clip),
+                      let lowest = clip.speedRamp?.nodes.map(\.speed).min() else { continue }
+                let name = project.asset(clip.assetID)?
+                    .originalURL.deletingPathExtension().lastPathComponent ?? "klip"
+                out.append(DuplicationWarning(id: clip.id, name: name, share: share,
+                                              limit: limit, lowestSpeed: lowest))
+            }
+        }
+        return out.sorted { $0.share > $1.share }
+    }
+
+    /// Otevře list. Cesta se předvyplní podle projektu, ať uživatel nemusí
+    /// vybírat, když mu vyhovuje.
+    func openExportSheet() {
+        guard exportProgress == nil else {
+            exportSheet = .progress
+            return
+        }
+        exportUsesRange = timeline.hasExportRange
+        if exportDestination == nil {
+            let name = (projectStore.fileURL?.deletingPathExtension().lastPathComponent
+                        ?? "Svatba") + ".mp4"
+            let folder = projectStore.fileURL?.deletingLastPathComponent()
+                ?? FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first
+                ?? FileManager.default.homeDirectoryForCurrentUser
+            exportDestination = folder.appendingPathComponent(name)
+        }
+        exportOutcome = nil
+        exportSheet = .settings
+    }
+
+    func chooseExportDestination() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mpeg4Movie]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = exportDestination?.lastPathComponent ?? "Svatba.mp4"
+        if let folder = exportDestination?.deletingLastPathComponent() {
+            panel.directoryURL = folder
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        exportDestination = url
+    }
+
+    /// Spustí export z listu. Sám přepne stavy listu; export samotný je
+    /// TÁŽ funkce, kterou používají všechny CLI kontroly — list nezakládá
+    /// druhou exportní cestu.
+    func runExportFromSheet() {
+        guard let url = exportDestination, exportProgress == nil else { return }
+        exportSheet = .progress
+        Task {
+            await export(to: url)
+            exportSheet = exportOutcome == nil ? nil : .done
+        }
+    }
+
+    /// Desetinná ČÁRKA a typografické minus. `String(format:)` s tečkou
+    /// a ASCII pomlčkou je v českém UI cizí prvek — a v listu exportu, který
+    /// má být kontrolní, vypadá „−35.4 LUFS" jako výpis z logu (vzorec
+    /// z modulu 8, kde `%g` psalo „0,502667×").
+    static func decimal(_ value: Double, places: Int = 1) -> String {
+        let text = String(format: "%.\(places)f", value)
+            .replacingOccurrences(of: ".", with: ",")
+        return text.hasPrefix("-") ? "−" + text.dropFirst() : text
+    }
+
+    static func signedDecimal(_ value: Double, places: Int = 1) -> String {
+        let text = String(format: "%+.\(places)f", value)
+            .replacingOccurrences(of: ".", with: ",")
+        return text.hasPrefix("-") ? "−" + text.dropFirst() : text
+    }
+
     func exportMovie() {
         guard exportProgress == nil else { return }
         let panel = NSSavePanel()
@@ -709,6 +911,7 @@ final class AppModel: ObservableObject {
     func export(to url: URL) async {
         guard exportProgress == nil else { return }
         exportProgress = 0
+        exportStage = .composing
         defer { exportProgress = nil }
         status = "Exportuju… (HEVC z originálů)"
 
@@ -731,6 +934,7 @@ final class AppModel: ObservableObject {
             var audioGain = 1.0
             var loudnessNote = ""
             if let profile = loudnessProfile {
+                exportStage = .loudness
                 status = "Měřím hlasitost… (\(profile.displayName))"
                 if let scan = try await LoudnessScanner.scan(asset: composition, audioMix: mix),
                    let measured = scan.integratedLUFS {
@@ -752,16 +956,16 @@ final class AppModel: ObservableObject {
                         let capDB = -1.0 - 20.0 * log10(scan.truePeakLinear)
                         if gainDB > capDB {
                             gainDB = capDB
-                            loudnessNote = String(
-                                format: " Hlasitost %.1f LUFS, gain omezen špičkami na %+.1f dB"
-                                    + " (strop −1 dBTP) — na cíl %.0f LUFS nedosáhl.",
-                                measured, gainDB, profile.targetLUFS)
+                            loudnessNote = " Hlasitost \(Self.decimal(measured)) LUFS, gain"
+                                + " omezen špičkami na \(Self.signedDecimal(gainDB)) dB"
+                                + " (strop −1 dBTP) — na cíl \(Self.decimal(profile.targetLUFS, places: 0))"
+                                + " LUFS nedosáhl."
                         }
                     }
                     if loudnessNote.isEmpty {
-                        loudnessNote = String(
-                            format: " Hlasitost %.1f → %.0f LUFS (gain %+.1f dB).",
-                            measured, profile.targetLUFS, gainDB)
+                        loudnessNote = " Hlasitost \(Self.decimal(measured)) → "
+                            + "\(Self.decimal(profile.targetLUFS, places: 0)) LUFS "
+                            + "(gain \(Self.signedDecimal(gainDB)) dB)."
                     }
                     audioGain = LoudnessNormalization.linearGain(decibels: gainDB)
                 }
@@ -771,14 +975,19 @@ final class AppModel: ObservableObject {
             // Titulky (fáze 11): vypálení přes dekorátor snímků — snímky bez
             // titulku projdou nedotčené. Bez titulků je dekorátor nil a celá
             // cesta je ta ověřená z fáze 5.
-            let titleRenderer = TitleExportRenderer(
-                cues: project.titleCues(),
-                canvas: CGSize(width: canvas.width, height: canvas.height))
+            // Vypálení je od modulu 10 VOLBA listu (výchozí zapnutá, tedy
+            // dosavadní chování). Vypnuté = dekorátor nil a jede se ta
+            // ověřená cesta z fáze 5.
+            let cues = project.titleCues()
+            let titleRenderer = exportBurnsTitles
+                ? TitleExportRenderer(cues: cues,
+                                      canvas: CGSize(width: canvas.width, height: canvas.height))
+                : nil
 
             // Export výřezu (fáze 17, modul 3): in/out z osy. Bez nich je
             // rozsah celý projekt a cesta je ta dosavadní.
-            let range = timeline.exportRange
-            let exportsPart = timeline.hasExportRange
+            let range = exportSheetRange
+            let exportsPart = exportsRangeEffectively
             let rangeTime = exportsPart
                 ? CMTimeRange(start: CompositionBuilder.time(of: range.lowerBound,
                                                              frameRate: project.timeline.frameRate),
@@ -786,6 +995,7 @@ final class AppModel: ObservableObject {
                                                            frameRate: project.timeline.frameRate))
                 : nil
 
+            exportStage = .rendering
             let result = try await CFRRenderer.render(
                 asset: composition,
                 videoTrack: video,
@@ -811,6 +1021,37 @@ final class AppModel: ObservableObject {
                 },
                 to: url)
 
+            exportStage = .finishing
+            // Volitelný `.srt` vedle filmu (fáze 18, modul 10) — týž
+            // serializátor jako ruční „Uložit .srt…", jen jiná cesta.
+            var srtURL: URL?
+            if exportWritesSRT, !project.subtitleCues().isEmpty {
+                let sidecar = url.deletingPathExtension().appendingPathExtension("srt")
+                let srt = SRT.serialize(cues: project.subtitleCues(),
+                                       frameRate: project.timeline.frameRate)
+                if (try? srt.write(to: sidecar, atomically: true, encoding: .utf8)) != nil {
+                    srtURL = sidecar
+                }
+            }
+
+            let bytes = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size]
+                         as? Int64) ?? 0
+            exportOutcome = ExportOutcome(
+                url: url,
+                writtenFrames: result.writtenFrameCount,
+                expectedFrames: max(0, range.upperBound.count - range.lowerBound.count),
+                elapsedSeconds: result.elapsedSeconds,
+                fileBytes: bytes ?? 0,
+                loudnessLine: loudnessNote.isEmpty ? nil
+                    : loudnessNote.trimmingCharacters(in: .whitespaces),
+                loudnessCapped: loudnessNote.contains("gain omezen"),
+                burnedTitles: exportBurnsTitles ? cues.count : 0,
+                srtURL: srtURL,
+                rangeText: exportsPart
+                    ? "\(range.lowerBound.timecode(frameRate: project.timeline.frameRate).text)"
+                      + "–\(range.upperBound.timecode(frameRate: project.timeline.frameRate).text)"
+                    : nil)
+
             status = "Export hotový: \(url.lastPathComponent) — "
                 + "\(result.writtenFrameCount) snímků za "
                 + String(format: "%.1f s.", result.elapsedSeconds)
@@ -819,8 +1060,13 @@ final class AppModel: ObservableObject {
                      + "–\(range.upperBound.timecode(frameRate: project.timeline.frameRate).text)."
                    : "")
                 + loudnessNote
-            NSWorkspace.shared.activateFileViewerSelecting([url])
+            // Z listu se Finder neotvírá — list má vlastní „Ukázat ve Finderu"
+            // a vyskakující okno přes hotový list je otravné.
+            if exportSheet == nil {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
         } catch {
+            exportOutcome = nil
             status = "Export selhal: \(error.localizedDescription)"
             try? FileManager.default.removeItem(at: url)
         }
@@ -3812,6 +4058,8 @@ struct ContentView: View {
                     await model.verifyOverview()
                 } else if arguments.contains("--library-check") {
                     await model.verifyLibrary()
+                } else if arguments.contains("--export-ui-check") {
+                    await model.verifyExportUI()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

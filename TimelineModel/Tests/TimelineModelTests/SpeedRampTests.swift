@@ -325,3 +325,70 @@ final class RampPlaybackPlanTests: XCTestCase {
         XCTAssertLessThanOrEqual(abs(leftSrc + rightSrc - whole), 8)
     }
 }
+
+// MARK: - Podíl duplikovaných snímků (fáze 18, modul 10)
+
+final class DuplicatedFrameShareTests: XCTestCase {
+
+    /// Zdroj na úrovni výstupu (30 fps → základna 30 fps): klasický ramp
+    /// 1× → 0,25× → 1× má průměrnou rychlost 0,625, takže se duplikuje
+    /// 37,5 % snímků. Číslo z CLAUDE.md, naměřené na reálných klipech.
+    func testShareOnSourceAtOutputRate() throws {
+        var project = Project.empty()
+        let asset = Asset(originalURL: URL(fileURLWithPath: "/tmp/a.mp4"),
+                          duration: SourceTime(seconds: 20),
+                          measuredFrameRate: 30,
+                          hasVideo: true, hasAudio: false)
+        project.addAsset(asset)
+        var clip = try project.makeClip(assetID: asset.id)
+        try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+        try project.setSpeedRamp(clipID: clip.id,
+                                 ramp: .classicSlowMotion(from: .zero,
+                                                          spanning: SourceTime(seconds: 5),
+                                                          slowSpeed: 0.25))
+        // ⚠️ Klip se musí zkrátit na to, co křivka vydá. Ramp přes 5 s zdroje
+        // dá při průměrné rychlosti 0,625 osm sekund výstupu, tedy 240 snímků;
+        // na delším klipu už rampa neplatí (jede 1×) a průměr se tím rozředí —
+        // první verze testu čekala 37,5 % na 600snímkovém klipu a dostala
+        // 14,9 %, což byl správný výsledek špatně postavené otázky.
+        try project.trimEnd(clipID: clip.id, to: Frames(240))
+        clip = try XCTUnwrap(project.timeline.clip(clip.id))
+
+        let share = try XCTUnwrap(project.duplicatedFrameShare(of: clip))
+        XCTAssertEqual(share, 0.375, accuracy: 0.02)
+    }
+
+    /// Zdroj 120 fps při výstupu 30 fps utáhne 0,25× beze zbytku —
+    /// duplikovat se nesmí nic.
+    func testNoDuplicationWhenSourceHasEnoughFrames() throws {
+        var project = Project.empty()
+        let asset = Asset(originalURL: URL(fileURLWithPath: "/tmp/b.mp4"),
+                          duration: SourceTime(seconds: 20),
+                          measuredFrameRate: 120,
+                          hasVideo: true, hasAudio: false)
+        project.addAsset(asset)
+        var clip = try project.makeClip(assetID: asset.id)
+        try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+        try project.setSpeedRamp(clipID: clip.id,
+                                 ramp: .classicSlowMotion(from: .zero,
+                                                          spanning: SourceTime(seconds: 5),
+                                                          slowSpeed: 0.25))
+        clip = try XCTUnwrap(project.timeline.clip(clip.id))
+
+        XCTAssertEqual(try XCTUnwrap(project.duplicatedFrameShare(of: clip)), 0, accuracy: 0.001)
+    }
+
+    /// Klip bez rampy nemá co hlásit — `nil`, ne nula. Nula by v UI znamenala
+    /// „spočítáno a je to v pořádku", což je jiná informace než „netýká se".
+    func testNilWithoutRamp() throws {
+        var project = Project.empty()
+        let asset = Asset(originalURL: URL(fileURLWithPath: "/tmp/c.mp4"),
+                          duration: SourceTime(seconds: 20),
+                          measuredFrameRate: 60,
+                          hasVideo: true, hasAudio: false)
+        project.addAsset(asset)
+        let clip = try project.makeClip(assetID: asset.id)
+        try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+        XCTAssertNil(project.duplicatedFrameShare(of: clip))
+    }
+}

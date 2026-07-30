@@ -109,6 +109,15 @@ struct AppShell: View {
                 ShellStatusBar(model: model, mode: mode)
             }
         }
+        // List exportu leží NAD celou skořápkou (fáze 18, modul 10).
+        // Overlay, ne `.sheet`: návrh chce vlastní list 660 bodů se ztmavením
+        // okna, a systémový sheet by přinesl vlastní rám i animaci.
+        // Při měření (`chromeHidden`) se nekreslí — R4.
+        .overlay {
+            if chromeVisible, model.exportSheet != nil {
+                ExportSheet(model: model)
+            }
+        }
         .background(KrasaUI.surfaceWindow)
         // ⚠️ Bez tohohle si SwiftUI drží nahoře bezpečnou zónu titulkového
         // pruhu a celá skořápka sjede o 32 bodů dolů — v okně, ve fullscreenu

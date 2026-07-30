@@ -103,6 +103,30 @@ extension Project {
         guard let asset = asset(clip.assetID), asset.measuredFrameRate > 0 else { return nil }
         return Double(timeline.frameRate) / asset.measuredFrameRate
     }
+
+    /// Podíl snímků klipu, které při exportu vyjdou jako DUPLIKÁT předchozího
+    /// (0 = žádný, 0,375 = tři snímky z osmi).
+    ///
+    /// Vzorec je pravidlo projektu: průměr z `max(0, 1 − v(t) · zdrojFps /
+    /// výstupFps)` přes délku klipu, tedy `max(0, 1 − v(t) / limit)`.
+    /// Naměřeno na třech klipech, teorie sedí na desetinu procenta: u zdroje
+    /// na úrovni výstupu dá klasický ramp `1 − průměrná rychlost` = 37,5 %.
+    ///
+    /// `nil` znamená „není co hlásit": klip bez použitelné rampy, fotka nebo
+    /// asset bez platného měření frekvence.
+    ///
+    /// ⚠️ Patří to do MODELU, ne do varovného bloku v exportu. Obě vstupní
+    /// veličiny (profil rychlosti a mez čistého zpomalení) tu už jsou a UI by
+    /// z nich muselo počítat po svém — a druhý výpočet téhož se rozejde
+    /// (poučení z fáze 13).
+    public func duplicatedFrameShare(of clip: Clip, samples: Int = 240) -> Double? {
+        guard let ramp = clip.speedRamp, ramp.isUsable,
+              let limit = pureSlowdownLimit(of: clip), limit > 0 else { return nil }
+        let profile = rampSpeedProfile(of: clip, samples: samples)
+        guard !profile.isEmpty else { return nil }
+        let sum = profile.reduce(0.0) { $0 + Swift.max(0, 1 - $1 / limit) }
+        return sum / Double(profile.count)
+    }
 }
 
 // MARK: - Přidání a smazání uzlu

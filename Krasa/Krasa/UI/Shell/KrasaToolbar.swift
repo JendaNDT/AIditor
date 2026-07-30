@@ -36,7 +36,7 @@ struct KrasaToolbar: View {
             .keyboardShortcut("4", modifiers: .command)
 
             ChromeButton(title: "Exportovat…", style: .primary) {
-                model.exportMovie()
+                model.openExportSheet()
             }
             .disabled(model.clips.isEmpty || model.isMeasuring)
 

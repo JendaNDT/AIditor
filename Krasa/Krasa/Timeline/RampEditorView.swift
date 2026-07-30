@@ -123,12 +123,6 @@ final class RampEditorView: NSView {
         reload()
     }
 
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        applyColors()
-        reload()
-    }
-
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         let backingScale = window?.backingScaleFactor ?? 2

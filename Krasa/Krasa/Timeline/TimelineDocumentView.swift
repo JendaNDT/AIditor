@@ -36,6 +36,12 @@ enum TimelinePalette {
     /// Obal `NSColor(name:dynamicProvider:)` zůstává — vrací pořád tutéž
     /// hodnotu, ale drží čitelné jméno v debuggeru a nechává jedno místo,
     /// kam by se světlá varianta vracela, kdyby se rozhodnutí měnilo.
+    ///
+    /// ⚠️ Reakce na změnu vzhledu (`viewDidChangeEffectiveAppearance`) je od
+    /// modulu 4 ODSTRANĚNÁ ze všech view osy. Okno je natvrdo tmavé, takže se
+    /// nikdy nespustila — a nespouštěná cesta tiše shnije. Obaly
+    /// `performAsCurrentDrawingAppearance` zůstaly: jsou to no-opy, ale drží
+    /// v kódu vidět, že barva vrstvy se vyhodnocuje při zápisu.
     private static func adaptive(_ name: String, dark: CGFloat) -> NSColor {
         NSColor(name: NSColor.Name(name)) { _ in NSColor(white: dark, alpha: 1) }
     }
@@ -75,6 +81,17 @@ enum TimelinePalette {
         case .title: return titleLane
         }
     }
+
+    /// Řádek hlavičky stopy jako karta (fáze 18, modul 4) — `surfaceRow`
+    /// z designových tokenů. Hlavička je OVLÁDÁNÍ, pruh je obsah, takže
+    /// nemusí mít barvu pruhu.
+    static let headerRow = adaptive("timelineHeaderRow",
+        dark: NSColor(calibratedRed: 0x1B / 255.0, green: 0x1D / 255.0,
+                      blue: 0x21 / 255.0, alpha: 1))
+    /// Meta řádek pod jménem stopy — `textTertiary`.
+    static let headerMeta = adaptive("timelineHeaderMeta",
+        dark: NSColor(calibratedRed: 0x6B / 255.0, green: 0x72 / 255.0,
+                      blue: 0x80 / 255.0, alpha: 1))
 
     /// Pozadí pravítka a hlaviček. Mezi pozadím osy a pruhy, ať je poznat,
     /// že je to ovládací lišta a ne obsah.
@@ -957,11 +974,6 @@ final class TimelineDocumentView: NSView {
         // Klipy drží barvy taky jako `CGColor` hodnoty — po změně vzhledu
         // se musí přeložit znovu, jinak zamrznou ve starém režimu.
         refreshClips()
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        applyColors()
     }
 
     // MARK: - Retina

@@ -144,10 +144,13 @@ extension AppModel {
         check("obraz zleva", viewerInsets.left, expected.viewerLeft)
         check("obraz shora", viewerInsets.top, expected.viewerTop)
 
-        // Pravítko a hlavičky si drží svoje rozměry z fáze 2 — návrh je
-        // v M1 nemění a nesmí je rozhodit ani nová skořápka.
+        // Pravítko si drží 26 bodů z fáze 2 — návrh ho nemění a nesmí ho
+        // rozhodit ani nová skořápka. Hlavičky se v modulu 4 ZÁMĚRNĚ rozšířily
+        // z 96 na 104 (meta řádek pod jménem stopy); tahle kontrola na to
+        // spadla a je to správně: hlídá právě to, že se rozměr nezmění
+        // náhodou.
         check("pravítko", TimelineRulerView.height, 26)
-        check("hlavičky stop", TrackHeadersView.width, 96)
+        check("hlavičky stop", TrackHeadersView.width, 104)
         return failures
     }
 
@@ -986,5 +989,87 @@ extension AppModel {
                                          isARepeat: false, keyCode: 53) {
             view.keyDown(with: escape)
         }
+    }
+}
+
+// MARK: - Výšky stop a hlavičky (fáze 18, modul 4)
+
+extension AppModel {
+
+    /// Kontrola fáze 18, modulu 4 (`--layout-check`).
+    ///
+    ///  A) leží stopy tam, kde je má návrh (3 / 142 / 223 / 304, součet 344)?
+    ///  B) trefuje se hit testing na bod — a NEtrefuje v horním odsazení?
+    ///  C) vejdou se stopy do minimálního okna, a když ne, jde se doscrollovat?
+    func verifyTrackLayout() async {
+        let geometry = timeline.geometry
+        let timeline = self.timeline.project.timeline
+
+        var failures = 0
+        func check(_ ok: Bool, _ text: String) {
+            if !ok { failures += 1 }
+            print("\(ok ? "✅" : "❌") \(text)")
+        }
+        func measure(_ name: String, _ value: Double, _ want: Double) {
+            let ok = abs(value - want) <= 0.001
+            if !ok { failures += 1 }
+            print(String(format: "%@ %-26@ %7.1f   čekáno %6.1f",
+                         ok ? "✅" : "❌", name as NSString, value, want))
+        }
+
+        print("=== A) svislé rozvržení podle návrhu ===")
+        print("   stopy: " + timeline.tracks.map(\.name).joined(separator: ", "))
+        measure("V1 shora", geometry.y(ofTrackAt: 0, in: timeline), 3)
+        measure("A1 shora", geometry.y(ofTrackAt: 1, in: timeline), 142)
+        measure("A2 shora", geometry.y(ofTrackAt: 2, in: timeline), 223)
+        measure("T1 shora", geometry.y(ofTrackAt: 3, in: timeline), 304)
+        measure("součet výšky", geometry.totalHeight(of: timeline), 344)
+        measure("výška V1", geometry.height(of: .video), 136)
+        measure("výška zvuku", geometry.height(of: .audio), 78)
+        measure("výška T1", geometry.height(of: .title), 40)
+        measure("mezera", geometry.trackSpacing, 3)
+        measure("horní odsazení", geometry.topInset, 3)
+        measure("šířka hlaviček", TrackHeadersView.width, 104)
+
+        print("")
+        print("=== B) hit testing na bod ===")
+        // Hranice: poslední bod stopy trefuje, první bod mezery ne.
+        check(geometry.trackIndex(atY: 3, in: timeline) == 0, "y=3 je V1 (první bod stopy)")
+        check(geometry.trackIndex(atY: 138.9, in: timeline) == 0, "y=138,9 je ještě V1")
+        check(geometry.trackIndex(atY: 140, in: timeline) == nil, "y=140 je mezera, ne stopa")
+        check(geometry.trackIndex(atY: 142, in: timeline) == 1, "y=142 je A1")
+        check(geometry.trackIndex(atY: 304, in: timeline) == 3, "y=304 je T1")
+        check(geometry.trackIndex(atY: 344, in: timeline) == nil, "y=344 je pod poslední stopou")
+        // ⚠️ Tohle je smysl `topInset`: v odsazení nad V1 nesmí být stopa,
+        // jinak by klik nad prvním klipem trefil klip.
+        check(geometry.trackIndex(atY: 0, in: timeline) == nil,
+              "y=0 (horní odsazení) NENÍ stopa — klik nad V1 netrefí klip")
+        check(geometry.trackIndex(atY: 2.9, in: timeline) == nil, "y=2,9 taky ne")
+
+        print("")
+        print("=== C) vejde se to do okna ===")
+        guard let pane = await shellHostView()?.window.flatMap({ _ in timelinePane }) else {
+            print("❌ osa není v okně"); return
+        }
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        let viewport = pane.scrollView.contentView.bounds.height
+        let document = pane.documentView.bounds.height
+        print(String(format: "   výřez %.0f bodů, dokument %.0f bodů", viewport, document))
+        // Při minimálním okně 1180×760 se 344 bodů stop do výřezu NEVEJDE —
+        // a je to v pořádku, když jde doscrollovat. Kontrola tedy netvrdí, že
+        // se to vejde, ale že se na to dá dostat.
+        let fits = viewport >= document
+        print(fits
+              ? "   stopy se vejdou celé"
+              : "   stopy se do výřezu nevejdou — musí jít doscrollovat")
+        if !fits {
+            check(pane.scrollView.hasVerticalScroller,
+                  "svislý scroller je zapnutý, takže se na spodní stopu dá dostat")
+        }
+        check(document >= 344 - 0.5,
+              String(format: "dokument je aspoň tak vysoký jako stopy (%.0f ≥ 344)", document))
+
+        print("")
+        print(failures == 0 ? "✅ ROZVRŽENÍ STOP SEDÍ" : "❌ neshod: \(failures)")
     }
 }

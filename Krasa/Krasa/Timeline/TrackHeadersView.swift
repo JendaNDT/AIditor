@@ -19,7 +19,9 @@ import TimelineModel
 
 final class TrackHeadersView: NSView {
 
-    static let width: CGFloat = 96
+    /// Šířka podle návrhu (fáze 18, modul 4) — dřív 96. Osm bodů navíc
+    /// nese meta řádek („obraz · 5 klipů") pod jménem stopy.
+    static let width: CGFloat = 104
 
     private let controller: TimelineController
 
@@ -28,6 +30,9 @@ final class TrackHeadersView: NSView {
     private struct AudioControls {
         let mute: NSButton
         let slider: NSSlider
+        /// Hlasitost v decibelech. Lineární 0–1 nikomu nic neřekne;
+        /// „−4,0 dB" je údaj, se kterým se dá pracovat.
+        let readout: NSTextField
     }
     private var audioControls: [TrackID: AudioControls] = [:]
     /// Probíhá tažení posuvníku — nepřepisovat mu hodnotu z modelu,
@@ -57,7 +62,34 @@ final class TrackHeadersView: NSView {
     /// pruhy — jméno „V1" by stálo vedle zvukové stopy.
     override var isFlipped: Bool { true }
 
-    private static let font = NSFont.systemFont(ofSize: 11, weight: .medium)
+    private static let font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+    private static let metaFont = NSFont.systemFont(ofSize: 9)
+
+    /// Co stopa nese. Počet klipů se BERE z projektu, nedomýšlí — u obrazu
+    /// je to nejužitečnější údaj v hlavičce, protože po hromadných operacích
+    /// je hned vidět, jestli se stalo, co mělo.
+    private static func metaText(for track: Track) -> String {
+        switch track.kind {
+        case .video:
+            return "obraz · \(track.clips.count) \(clipWord(track.clips.count))"
+        case .audio:
+            // A1 nese řeč (svázaný zvuk klipů), A2 hudbu — pořadí je
+            // konvence projektu od fáze 2, ne vlastnost modelu, takže se
+            // odvozuje z JMÉNA, ne z indexu.
+            return track.name.hasSuffix("2") ? "hudba" : "řeč"
+        case .title:
+            return "titulky"
+        }
+    }
+
+    /// „1 klip / 2 klipy / 5 klipů" — česky se to bez toho nedá napsat.
+    private static func clipWord(_ count: Int) -> String {
+        switch count {
+        case 1: return "klip"
+        case 2, 3, 4: return "klipy"
+        default: return "klipů"
+        }
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         TimelinePalette.chrome.setFill()
@@ -70,6 +102,10 @@ final class TrackHeadersView: NSView {
             .font: Self.font,
             .foregroundColor: TimelinePalette.text,
         ]
+        let metaAttributes: [NSAttributedString.Key: Any] = [
+            .font: Self.metaFont,
+            .foregroundColor: TimelinePalette.headerMeta,
+        ]
 
         for (index, track) in timeline.tracks.enumerated() {
             let y = geometry.y(ofTrackAt: index, in: timeline) - scrollY
@@ -78,19 +114,26 @@ final class TrackHeadersView: NSView {
 
             guard rect.intersects(bounds) else { continue }
 
-            // Táž barva jako pruh stopy. Když hlavička nesedí s pruhem
-            // svisle, je to na první pohled vidět — což je přesně to,
-            // co se tímhle krokem ověřuje.
-            TimelinePalette.lane(for: track.kind).setFill()
-            rect.fill()
+            // Řádek je KARTA se zaoblením jen vpravo (návrh: radius 0 7 7 0) —
+            // vlevo přiléhá k hraně okna, tam by zaoblení dělalo jen díru.
+            // Barva `surfaceRow`, ne barva pruhu: hlavička je ovládání,
+            // pruh je obsah. Že spolu svisle sedí, se pozná z toho, že
+            // jméno stojí vedle svých klipů — na to nemusí být stejné.
+            TimelinePalette.headerRow.setFill()
+            let card = NSBezierPath(roundedRect: rect, xRadius: 7, yRadius: 7)
+            card.appendRect(NSRect(x: rect.minX, y: rect.minY,
+                                   width: 7, height: rect.height))
+            card.fill()
 
             let label = NSAttributedString(string: track.name, attributes: attributes)
-            let size = label.size()
-            // Zvuková stopa: jméno nahoře, pod ním ovládání mixu.
-            let labelY = track.kind == .audio
-                ? y + 3
-                : y + (height - Double(size.height)) / 2
-            label.draw(at: NSPoint(x: 10, y: labelY))
+            // Jméno vždy nahoře, meta pod ním. Dřív bylo u obrazu na středu
+            // a u zvuku nahoře — se stopou vysokou 136 bodů by jméno V1
+            // plavalo v prázdnu doprostřed a nebylo by u čeho.
+            label.draw(at: NSPoint(x: 9, y: y + 5))
+
+            let meta = NSAttributedString(string: Self.metaText(for: track),
+                                          attributes: metaAttributes)
+            meta.draw(at: NSPoint(x: 9, y: y + 5 + Double(label.size().height) + 1))
         }
 
         // Předěl proti ploše osy.
@@ -110,6 +153,7 @@ final class TrackHeadersView: NSView {
         where !audioTracks.contains(where: { $0.id == trackID }) {
             controls.mute.removeFromSuperview()
             controls.slider.removeFromSuperview()
+            controls.readout.removeFromSuperview()
             audioControls[trackID] = nil
         }
 
@@ -122,6 +166,9 @@ final class TrackHeadersView: NSView {
                 controls.slider.doubleValue = audio.volume
             }
             controls.slider.toolTip = "Hlasitost \(track.name): \(Int(audio.volume * 100)) %"
+            controls.readout.stringValue = audio.isMuted
+                ? "ztlumeno"
+                : Self.decibels(audio.volume)
         }
         layoutControls()
     }
@@ -143,7 +190,13 @@ final class TrackHeadersView: NSView {
         slider.controlSize = .mini
         addSubview(slider)
 
-        return AudioControls(mute: mute, slider: slider)
+        let readout = NSTextField(labelWithString: "")
+        readout.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular)
+        readout.textColor = TimelinePalette.headerMeta
+        readout.alignment = .right
+        addSubview(readout)
+
+        return AudioControls(mute: mute, slider: slider, readout: readout)
     }
 
     private func layoutControls() {
@@ -154,9 +207,11 @@ final class TrackHeadersView: NSView {
             let y = geometry.y(ofTrackAt: index, in: timeline) - scrollY
             let height = geometry.height(of: track.kind)
             let rowBottom = y + height
-            controls.mute.frame = NSRect(x: 6, y: rowBottom - 21, width: 24, height: 16)
-            controls.slider.frame = NSRect(x: 34, y: rowBottom - 21,
-                                           width: Double(bounds.width) - 44, height: 16)
+            controls.mute.frame = NSRect(x: 6, y: rowBottom - 24, width: 22, height: 16)
+            controls.slider.frame = NSRect(x: 32, y: rowBottom - 24,
+                                           width: Double(bounds.width) - 42, height: 16)
+            controls.readout.frame = NSRect(x: 6, y: rowBottom - 42,
+                                           width: Double(bounds.width) - 12, height: 12)
         }
     }
 
@@ -184,6 +239,15 @@ final class TrackHeadersView: NSView {
             isDraggingVolume = false
             controller.volumeDragEnded()
         }
+    }
+
+    /// Lineární hlasitost v decibelech. Nula je `−∞`, ne „0 dB" — to by
+    /// znamenalo plnou hlasitost a plete se to i lidem, kteří to vědí.
+    private static func decibels(_ volume: Double) -> String {
+        guard volume > 0.0001 else { return "−∞ dB" }
+        return String(format: "%+.1f dB", 20 * log10(volume))
+            .replacingOccurrences(of: ".", with: ",")
+            .replacingOccurrences(of: "-", with: "−")
     }
 
     private func trackID(of match: (AudioControls) -> Bool) -> TrackID? {

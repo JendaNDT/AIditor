@@ -47,6 +47,39 @@ final class GeometryTests: XCTestCase {
         XCTAssertEqual(g.totalHeight(of: p.timeline), 186, "bez koncové mezery")
     }
 
+    // MARK: Horní odsazení (fáze 18, modul 4)
+
+    /// Rozvržení podle návrhu: V1 136, A1 78, A2 78, T1 40, mezera 3,
+    /// odsazení 3. Součet **344** a klipy na 3 / 142 / 223 / 304.
+    func testTopInsetShiftsAllTracksAndTotal() {
+        let p = Project.empty()
+        let g = TimelineGeometry(videoTrackHeight: 136, audioTrackHeight: 78,
+                                 titleTrackHeight: 40, trackSpacing: 3, topInset: 3)
+        XCTAssertEqual(g.y(ofTrackAt: 0, in: p.timeline), 3)
+        XCTAssertEqual(g.y(ofTrackAt: 1, in: p.timeline), 142)
+        XCTAssertEqual(g.y(ofTrackAt: 2, in: p.timeline), 223)
+        XCTAssertEqual(g.y(ofTrackAt: 3, in: p.timeline), 304)
+        XCTAssertEqual(g.totalHeight(of: p.timeline), 344)
+    }
+
+    /// V odsazení nad první stopou žádná stopa neleží. Kdyby se počítalo jako
+    /// součást V1, klik nad ní by trefil klip.
+    func testTopInsetIsNotPartOfFirstTrack() {
+        let p = Project.empty()
+        let g = TimelineGeometry(topInset: 3)
+        XCTAssertNil(g.trackIndex(atY: 0, in: p.timeline))
+        XCTAssertNil(g.trackIndex(atY: 2.9, in: p.timeline))
+        XCTAssertEqual(g.trackIndex(atY: 3, in: p.timeline), 0)
+    }
+
+    /// Výchozí hodnota je nula — dosavadní rozvržení se nesmí pohnout.
+    func testDefaultTopInsetIsZero() {
+        let p = Project.empty()
+        XCTAssertEqual(TimelineGeometry().topInset, 0)
+        XCTAssertEqual(TimelineGeometry().y(ofTrackAt: 0, in: p.timeline), 0)
+        XCTAssertEqual(TimelineGeometry().totalHeight(of: p.timeline), 186)
+    }
+
     func testTrackIndexAtY() {
         let p = Project.empty()
         let g = TimelineGeometry()

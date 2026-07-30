@@ -3777,6 +3777,8 @@ struct ContentView: View {
                     await model.verifyTimelineLayers()
                 } else if arguments.contains("--panel-check") {
                     await model.verifyPinnedPanel()
+                } else if arguments.contains("--layout-check") {
+                    await model.verifyTrackLayout()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

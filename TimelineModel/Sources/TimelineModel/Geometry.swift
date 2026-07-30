@@ -33,6 +33,12 @@ public struct TimelineGeometry: Hashable, Sendable {
     public var titleTrackHeight: Double
     /// Mezera mezi stopami.
     public var trackSpacing: Double
+    /// Odsazení PRVNÍ stopy od horní hrany plochy (fáze 18, modul 4).
+    ///
+    /// Výchozí nula, aby se nezměnilo nic, co na geometrii stojí — 453 testů
+    /// balíčku počítá odsazení z dosavadních hodnot a rozvržení podle návrhu
+    /// si aplikace předává konstruktorem.
+    public var topInset: Double
 
     /// Jak široká je citlivá zóna na okraji klipu, v BODECH.
     public var edgeGrabWidth: Double
@@ -44,6 +50,7 @@ public struct TimelineGeometry: Hashable, Sendable {
                 audioTrackHeight: Double = 44,
                 titleTrackHeight: Double = 28,
                 trackSpacing: Double = 2,
+                topInset: Double = 0,
                 edgeGrabWidth: Double = 8,
                 snapTolerance: Double = 10) {
         self.pointsPerFrame = pointsPerFrame
@@ -51,6 +58,7 @@ public struct TimelineGeometry: Hashable, Sendable {
         self.audioTrackHeight = audioTrackHeight
         self.titleTrackHeight = titleTrackHeight
         self.trackSpacing = trackSpacing
+        self.topInset = topInset
         self.edgeGrabWidth = edgeGrabWidth
         self.snapTolerance = snapTolerance
     }
@@ -102,24 +110,27 @@ public struct TimelineGeometry: Hashable, Sendable {
 
     /// Horní hrana stopy na daném indexu.
     public func y(ofTrackAt index: Int, in timeline: Timeline) -> Double {
-        var offset = 0.0
+        var offset = topInset
         for i in 0..<Swift.min(index, timeline.tracks.count) {
             offset += height(of: timeline.tracks[i].kind) + trackSpacing
         }
         return offset
     }
 
-    /// Celková výška všech stop.
+    /// Celková výška všech stop, včetně horního odsazení.
     public func totalHeight(of timeline: Timeline) -> Double {
         guard !timeline.tracks.isEmpty else { return 0 }
-        return timeline.tracks.reduce(0.0) { $0 + height(of: $1.kind) + trackSpacing } - trackSpacing
+        return topInset
+            + timeline.tracks.reduce(0.0) { $0 + height(of: $1.kind) + trackSpacing } - trackSpacing
     }
 
     /// Na které stopě leží svislá souřadnice. `nil` = pod poslední stopou
     /// nebo v mezeře mezi nimi.
     public func trackIndex(atY y: Double, in timeline: Timeline) -> Int? {
-        guard y >= 0 else { return nil }
-        var offset = 0.0
+        // Nad první stopou (v horním odsazení) žádná stopa není — kdyby se
+        // odsazení počítalo jako součást V1, klik nad ní by trefil klip.
+        guard y >= topInset else { return nil }
+        var offset = topInset
         for (i, track) in timeline.tracks.enumerated() {
             let h = height(of: track.kind)
             if y < offset + h { return i }

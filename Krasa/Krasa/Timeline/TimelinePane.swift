@@ -59,10 +59,6 @@ final class TimelinePane: NSView {
             }
         }
 
-        override func viewDidChangeEffectiveAppearance() {
-            super.viewDidChangeEffectiveAppearance()
-            applyColor()
-        }
     }
 
     init(controller: TimelineController) {

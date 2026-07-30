@@ -37,6 +37,23 @@ struct TimelineLayers: Equatable {
     var qualityMarks = true
 }
 
+/// Rozvržení osy podle návrhu (fáze 18, modul 4).
+///
+/// ⚠️ **Výchozí hodnoty v modelu zůstávají 64/44/28 s mezerou 2.** Na nich
+/// stojí 456 testů balíčku, které z nich počítají odsazení — přepsat výchozí
+/// hodnoty by znamenalo přepsat i je, a to je velký diff v modulu, který je
+/// o kreslení. Aplikace si proto své rozvržení předává konstruktorem.
+///
+/// Součet: 3 + 136 + 3 + 78 + 3 + 78 + 3 + 40 = **344 bodů**, klipy na
+/// 3 / 142 / 223 / 304.
+extension TimelineGeometry {
+    static let krasa = TimelineGeometry(videoTrackHeight: 136,
+                                       audioTrackHeight: 78,
+                                       titleTrackHeight: 40,
+                                       trackSpacing: 3,
+                                       topInset: 3)
+}
+
 @MainActor
 final class TimelineController: ObservableObject {
 
@@ -147,7 +164,7 @@ final class TimelineController: ObservableObject {
     /// špičky i dlaždice se dají kdykoli zahodit a spočítat znovu.
     let waveforms = WaveformStore()
 
-    init(project: Project = .empty(), geometry: TimelineGeometry = TimelineGeometry()) {
+    init(project: Project = .empty(), geometry: TimelineGeometry = .krasa) {
         self.project = project
         self.interaction = TimelineInteraction(geometry: geometry)
     }

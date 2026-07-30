@@ -408,6 +408,61 @@ celý klip je dojezd a nájezd zmizel. Vychází to z `setAudioFadesOnSelection`
 nájezd na `délka − dojezd`. Rozdělit zbytek napůl by bylo asi milejší, ale je to změna chování
 hromadné operace, ne úklid.
 
+### ✅ M10 — list exportu (30. 07. 2026) · začátek etapy D
+
+**Postaveno:** `UI/Export/ExportSheet.swift` (nový, list 660 bodů nad ztmaveným oknem),
+stav a volby v `AppModel`, `Measure/ExportUIChecks.swift` (`--export-ui-check`, **20 ověření,
+0 neshod**). Toolbar otevírá list místo save panelu. **Model dostal `duplicatedFrameShare(of:)`
+(+3 testy, celkem 459).**
+
+**⚠️ List nezakládá druhou exportní cestu.** Tlačítko volá tutéž `AppModel.export(to:)`, kterou
+používají všechny CLI kontroly; volby listu (rozsah, vypalování titulků, `.srt`) se do ní propisují.
+Kdyby si list exportoval po svém, „co dostane uživatel" a „co měří `--export-check`" by se rozešlo
+a nikdo by si toho nevšiml.
+
+**Varovný blok o duplikaci počítá z MATERIÁLU** (pojmenované riziko modulu): podíl duplikovaných
+snímků je nová funkce modelu, ne konstanta v UI. Vzorec je pravidlo projektu — průměr
+z `max(0, 1 − v(t)/limit)`. Ověřeno v obou směrech: **30fps zdroj s rampou 0,25× → 37,5 %**
+(číslo z CLAUDE.md, naměřené na reálných klipech), **120fps zdroj tentýž ramp utáhne → varování
+zmizí**.
+
+| ověření | naměřeno |
+|---|---|
+| celý projekt: slíbeno v listu vs. zapsáno | **90 = 90** |
+| výřez I—O: slíbeno vs. zapsáno vs. **v souboru** | **30 = 30 = 30** |
+| stav „hotovo" | kontrolní řádky z výsledku, ne z přání |
+| `--export-check` (regrese) | **4739 snímků**, MediaProbe: VFR 0 z 1, zahozených 0 |
+
+**⚠️ NÁLEZ V MĚŘENÍ: počítat snímky v souboru přes buffery PŘECEŇUJE.**
+`AVAssetReaderTrackOutput` vydá i buffery **bez dat** — naměřeno na obou exportech
+**94 bufferů / 90 vzorků** a **34 / 30**, tedy pokaždé čtyři navíc. První verze kontroly hlásila
+34 proti 30 a vypadalo to na chybu v exportu; délka souboru (1,000 s a 3,000 s) přitom vycházela
+přesně. Počítat se musí `CMSampleBufferGetNumSamples`.
+
+**⚠️ Kontroly si teď dělají snímek okna SAMY** (`NSView.cacheDisplay(in:to:)` do PNG v kontejneru).
+`screencapture` fotil **Finder**, který nad oknem nechaly předchozí kontroly
+(`activateFileViewerSelecting`), a `NSApp.activate(ignoringOtherApps:)` ho nepřebil. Snímek
+z hierarchie se na z-order neptá — a je použitelný pro každý další modul.
+
+**⚠️ Snímek listu chytil tři věci** (popáté v řadě): ① vybraná mohla být **zakázaná** karta „Jen
+výřez I—O" (stane se, jakmile se výřez zruší) — zavedena efektivní volba `exportsRangeEffectively`;
+čísla přitom celou dobu vycházela, protože `exportRange` je bez in/out bodů celý projekt;
+② `ScrollView` si vzal celou nabídnutou výšku a třetina listu zůstala prázdná — obsah je ohraničený,
+takže scroll view zmizel; ③ hláška o hlasitosti měla **tečku a ASCII pomlčku** („−35.4 LUFS")
+místo české čárky a typografického minusu.
+
+**Přiznaná mez:** odhad času se ukazuje **až po prvním exportu**, ze skutečně naměřené rychlosti.
+Vymyšlené „~1 min" v listu, který má být kontrolní, je horší než přiznané „ukáže se po prvním
+exportu".
+
+**Regrese:** `--export-check` 4739 snímků, `--transition-check` číslo po čísle jako ve fázi 10
+(79/0; 0,7/12,9/13,1), `--range-check` 9 ✅.
+
+*Koukanec rukou (v seznamu): tři stavy listu na reálném projektu, varovný blok na 30fps klipu
+s rampou, „Zobrazit klip na ose", export výřezu z listu.*
+
+---
+
 ### ✅ M9 — knihovna médií a přetažení (30. 07. 2026) · ETAPA C HOTOVÁ
 
 **Postaveno:** `UI/Library/LibraryPane.swift` a `LibraryCard.swift` (nové), cíl přetažení
@@ -911,13 +966,14 @@ Podle rozhodnutí z 2.1 jde **všech 13 modulů před svatbou**, v jednom sledu.
 | M5 ✅ | **miniatury na klipech** | B | **R1 — nejvyšší, BRÁNA DRŽÍ** | `--timeline-bench`, `--thumb-check` |
 | M6 ✅ | přehled celé osy | B | střední | `--overview-check` |
 | M9 ✅ | knihovna médií a přetažení | C | střední | `--library-check` |
-| M10 | list exportu | D | střední | `--export-check`, `--export-ui-check` |
+| M10 ✅ | list exportu | D | střední | `--export-check`, `--export-ui-check` |
 | M11 | panel přepisu řeči | D | střední | `--transcript-ui-check` |
 | M12 | prázdný start | D | nízké | `--empty-start-check` |
 | M13 | fullscreen aplikace a náhledu | D | střední | `--fullscreen-ui-check` |
 
-**Pořadí: M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 → M11
-→ M12 → M13 → 🚧 KILL-GATE 1.** (Etapy A, B i C jsou HOTOVÉ; zbývá celá etapa D — obrazovky.)
+**Pořadí: M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 ✅ → M11
+→ M12 → M13 → 🚧 KILL-GATE 1.** (Etapy A, B, C hotové; z etapy D zbývá přepis, prázdný start
+a fullscreen náhledu.)
 
 Proč zrovna takhle, když se jede všechno: **ergonomie napřed, kosmetika vzadu.** Prvních pět modulů
 zavírá potíže #2, #3 a #4 ze zadání a nepřidává funkce — kdyby došel čas nebo se něco zadrhlo, jsou

@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotové moduly 1, 2, 3, 7, 8, 4, 5, 6, 9; ETAPY A, B, C HOTOVÉ)*
+*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotových 10 modulů z 13; etapy A, B, C hotové, D rozjetá)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -9,13 +9,13 @@ Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (v
 
 **⭐ VŠECHNY NAPLÁNOVANÉ FÁZE HOTOVÉ: 0–9 (MVP) i vylepšovací 10–16; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → **hudba s dobami v pravítku, magnetem a dopasováním klipů na dobu** → **analýzy kvality (neostrost, hluchá místa) se značkami na klipech** → **zvukové fade úchyty** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a normalizací na −1 dBTP → export SRT.
 
-Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (453, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 560 automatických testů, 0 selhání.** Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
+Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (459, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 560 automatických testů, 0 selhání.** Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 10 — list exportu** (obrazovka exportu: nastavení → průběh → hotovo; brány `--export-check` a `--export-ui-check`). Plán celé fáze je ve `FAZE_18_UI.md`. **Etapy A, B i C jsou HOTOVÉ — devět modulů ze třinácti; zbývá etapa D, tedy obrazovky (export, přepis, prázdný start, fullscreeny).**
+**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 11 — panel přepisu řeči** (rail na Řeč, panel se seznamem úseků a editací, stav průběhu s přitékajícími úseky; brána `--transcript-ui-check`). Plán celé fáze je ve `FAZE_18_UI.md`. **Hotovo deset modulů ze třinácti; zbývá přepis, prázdný start a fullscreen náhledu.**
 
-**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
+**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 ✅ → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
 ⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
 
@@ -26,6 +26,43 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
+
+✅ **Modul 10 — list exportu (30. 07. 2026). Začátek etapy D.**
+
+  - **List 660 bodů** nad ztmaveným oknem, tři stavy: **nastavení** (rozsah Celý projekt / Jen výřez
+    s počty snímků, obraz s čipem `CFR`, hlasitost Bez / Web −14 / Vysílání −23, titulky vypálit +
+    `.srt`, cesta, varovný blok o duplikaci) → **průběh** (procenta, snímky, rychlost, tři fáze,
+    „můžeš dál stříhat") → **hotovo** (miniatura HOTOVÉHO filmu z `ThumbnailStore` a kontrolní řádky
+    včetně přiznaného stropu −1 dBTP). Toolbar otevírá list místo save panelu.
+  - **⚠️ List nezakládá druhou exportní cestu:** volá tutéž `export(to:)`, kterou používají všechny
+    CLI kontroly, a volby listu se do ní propisují. Jinak by se „co dostane uživatel" a „co měří
+    `--export-check`" rozešlo a nikdo by si toho nevšiml.
+  - **Varovný blok počítá z MATERIÁLU** (pojmenované riziko modulu): model dostal
+    `duplicatedFrameShare(of:)` — průměr z `max(0, 1 − v(t)/limit)`, tedy pravidlo projektu.
+    **+3 testy, celkem 459.** Ověřeno obousměrně: 30fps zdroj s rampou 0,25× → **37,5 %**,
+    120fps zdroj tentýž ramp utáhne → **varování zmizí**.
+  - **Ověřeno `--export-ui-check`, 20 kontrol:** celý projekt slíbeno 90 = zapsáno 90; výřez slíbeno
+    30 = zapsáno 30 = **30 v souboru**; stav „hotovo" kreslí z výsledku; volby (vypnuté vypalování,
+    `.srt`) se propsaly. MediaProbe na exportu z `--export-check`: **VFR 0 z 1, zahozených 0**,
+    tedy čip `CFR` v listu nelže.
+  - **⚠️ NÁLEZ V MĚŘENÍ: počítat snímky v souboru přes buffery PŘECEŇUJE.**
+    `AVAssetReaderTrackOutput` vydá i buffery **bez dat** — 94 bufferů / 90 vzorků a 34 / 30, pokaždé
+    čtyři navíc. První verze kontroly hlásila 34 proti 30 a vypadalo to na chybu v exportu, přestože
+    délka souboru (1,000 s / 3,000 s) vycházela přesně. Počítat se musí `CMSampleBufferGetNumSamples`.
+    Zapsané v CLAUDE.md.
+  - **⚠️ Kontroly si teď dělají snímek okna SAMY** (`NSView.cacheDisplay(in:to:)` do PNG v kontejneru,
+    `ExportUIChecks.writeWindowSnapshot`). `screencapture` fotil **Finder**, který nad oknem nechaly
+    předchozí kontroly, a `NSApp.activate(ignoringOtherApps:)` ho nepřebil.
+  - **⚠️ Snímek listu chytil tři věci (popáté v řadě):** ① vybraná mohla být **zakázaná** karta „Jen
+    výřez" — zavedena efektivní volba, a čísla přitom vycházela, protože `exportRange` je bez in/out
+    celý projekt; ② `ScrollView` si bral celou výšku a třetina listu zůstala prázdná; ③ hláška
+    o hlasitosti měla tečku a ASCII pomlčku místo české čárky a minusu („−35.4" → „−35,4").
+  - **Přiznaná mez:** odhad času se ukazuje až PO prvním exportu, z naměřené rychlosti. Vymyšlené
+    „~1 min" v kontrolním listu je horší než přiznané „ukáže se po prvním exportu".
+  - **Regrese:** `--export-check` 4739 snímků, `--transition-check` číslo po čísle jako ve fázi 10
+    (79/0; 0,7/12,9/13,1), `--range-check` 9 ✅.
+  - *Koukanec rukou (v seznamu): tři stavy listu na reálném projektu, varovný blok na 30fps klipu
+    s rampou, „Zobrazit klip na ose", export výřezu z listu.*
 
 ✅ **Modul 9 — knihovna médií a přetažení na osu (30. 07. 2026). ETAPA C HOTOVÁ.**
 

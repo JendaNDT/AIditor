@@ -107,6 +107,11 @@ enum TimelinePalette {
                       blue: 0x13 / 255.0, alpha: 1))
     /// Popisky timecode a jména stop.
     static let text = adaptive("timelineText", dark: 0.68)
+    /// Návod v prázdném pruhu stopy (fáze 18, modul 12) — `textDisabled`
+    /// z designových tokenů. Tlumenější než popisky: je to nápověda, ne obsah.
+    static let hintText = adaptive("timelineHint",
+        dark: NSColor(calibratedRed: 0x5C / 255.0, green: 0x60 / 255.0,
+                      blue: 0x67 / 255.0, alpha: 1))
     /// Rysky pravítka.
     static let tick = adaptive("timelineTick", dark: 0.42)
     /// Předěly mezi pravítkem, hlavičkami a plochou osy.
@@ -835,9 +840,56 @@ final class TimelineDocumentView: NSView {
             laneLayers.append(lane)
         }
 
+        rebuildHints()
         applyColors()
         applyContentsScale()
         needsLayout = true
+    }
+
+    // MARK: - Návod v prázdných pruzích (fáze 18, modul 12)
+
+    /// Texty v prázdných pruzích stop. Pruh, který se nedá od pozadí odlišit,
+    /// nikomu neřekne, kam materiál patří — zadání proto na prázdném startu
+    /// chce do V1 a A2 návod.
+    ///
+    /// ⚠️ Přestavba jen v `reload`, ne při scrollu, a **na prázdné ose jsou
+    /// to nejvýš dvě vrstvy**: podmínka je „žádný klip na žádné stopě", takže
+    /// jakmile na osu něco přijde, texty se zahodí a kreslicí cesta o nich
+    /// přestane vědět (pravidlo modulu 5: co je vypnuté, se nepočítá).
+    private var hintLayers: [CATextLayer] = []
+    /// Index stopy, ke které text patří — layout mu podle něj dá souřadnici.
+    private var hintTrackIndexes: [Int] = []
+
+    private func rebuildHints() {
+        for layer in hintLayers { layer.removeFromSuperlayer() }
+        hintLayers = []
+        hintTrackIndexes = []
+
+        let tracks = controller.project.timeline.tracks
+        guard tracks.allSatisfy({ $0.clips.isEmpty && $0.titles.isEmpty }) else { return }
+
+        var wanted: [(index: Int, text: String)] = []
+        if let video = tracks.firstIndex(where: { $0.kind == .video }) {
+            wanted.append((video, "Sem přijdou záběry a fotky — přetáhni je z knihovny."))
+        }
+        // Hudba jde na POSLEDNÍ zvukovou stopu (vzorec `importMusic`), takže
+        // návod musí sedět na tutéž — jinak by ukazoval na A1, kam se hudba
+        // nikdy nepoloží.
+        if let music = tracks.lastIndex(where: { $0.kind == .audio }) {
+            wanted.append((music, "Hudba na A2 · Soubor → Přidat hudbu…"))
+        }
+
+        for item in wanted {
+            let layer = CATextLayer()
+            layer.string = item.text
+            layer.fontSize = 11
+            layer.font = NSFont.systemFont(ofSize: 11)
+            layer.foregroundColor = TimelinePalette.hintText.cgColor
+            layer.truncationMode = .end
+            backgroundLayer.addSublayer(layer)
+            hintLayers.append(layer)
+            hintTrackIndexes.append(item.index)
+        }
     }
 
     override func layout() {
@@ -871,6 +923,20 @@ final class TimelineDocumentView: NSView {
                                              y: geometry.y(ofTrackAt: index, in: timeline),
                                              width: bounds.width,
                                              height: geometry.height(of: track.kind))
+        }
+
+        // Návod v prázdných pruzích (M12). Kotví se na ZAČÁTEK osy, ne do
+        // viditelného výřezu: text, který se veze se scrollem, by při
+        // prohlížení prázdné osy vypadal jako součást obsahu.
+        for (position, layer) in hintLayers.enumerated()
+        where position < hintTrackIndexes.count {
+            let index = hintTrackIndexes[position]
+            guard index < timeline.tracks.count else { continue }
+            let height = geometry.height(of: timeline.tracks[index].kind)
+            layer.frame = CGRect(x: 14,
+                                 y: geometry.y(ofTrackAt: index, in: timeline)
+                                     + (height - 16) / 2,
+                                 width: 420, height: 16)
         }
 
         clipsContainer.frame = bounds
@@ -1611,6 +1677,7 @@ final class TimelineDocumentView: NSView {
         let scale = window?.backingScaleFactor ?? 2
         backgroundLayer.contentsScale = scale
         for lane in laneLayers { lane.contentsScale = scale }
+        for hint in hintLayers { hint.contentsScale = scale }
         clipsContainer.contentsScale = scale
         // I fond: vrstva odložená na Retině a připojená na externím displeji
         // (nebo obráceně) by jinak nesla staré měřítko a text by se rozmazal.

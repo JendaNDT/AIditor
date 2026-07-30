@@ -17,7 +17,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var status = "Vyber klip nebo složku s klipy."
+    @Published var status = "Vyber materiál nebo otevři projekt."
     @Published var clips: [ClipTiming] = []
     @Published var selected: ClipTiming?
     @Published var isMeasuring = false
@@ -50,6 +50,25 @@ final class AppModel: ObservableObject {
     @Published var exportDestination: URL?
     /// Výsledek posledního exportu — kontrolní řádky ve stavu „hotovo".
     @Published var exportOutcome: ExportOutcome?
+
+    /// Projekt má nějaký materiál (fáze 18, modul 12).
+    ///
+    /// ⚠️ Vlastní `@Published` na modelu, ne dotaz `timeline.project.assets`
+    /// ze skořápky. `TimelineController` je VNOŘENÝ `ObservableObject` —
+    /// `AppShell` pozoruje jen model, takže by přechod „prázdno → materiál"
+    /// nemusel překreslit vůbec (past projektu, naposled u `selectedSpeech`
+    /// v modulu 11). Plní se z odběru `timeline.$project` v `init`.
+    @Published private(set) var hasMedia = false
+    /// Nabídka obnovy neuložené práce (fáze 18, modul 12). Místo modálního
+    /// dialogu při startu je z toho PRUH, který jde ignorovat.
+    @Published var recoveryOffer: RecoveryOffer?
+
+    /// Prázdný start: okno bez materiálu (zóna přetažení místo přehrávače,
+    /// poslední projekty místo knihovny).
+    ///
+    /// ⚠️ Při měření NIKDY — `chromeHidden` znamená, že přehrávač má dostat
+    /// celé okno a nic nad ním ležet nesmí (pravidlo R4 z modulu 1).
+    var showsEmptyStart: Bool { !hasMedia && !chromeHidden }
 
     /// Vybraná karta v knihovně médií (fáze 18, modul 9). Stav sezení —
     /// s výběrem KLIPŮ na ose se schválně neslučuje: v knihovně se vybírá
@@ -216,7 +235,17 @@ final class AppModel: ObservableObject {
                 .removeDuplicates()
                 .debounce(for: .seconds(5), scheduler: DispatchQueue.main)
                 .sink { [weak self] project in self?.projectStore.autosaveIfDirty(project) },
+            // Prázdný start ↔ plná osa (M12). `removeDuplicates` na příznaku,
+            // ne na projektu: přepínač se mění dvakrát za sezení, projekt
+            // pětkrát za sekundu při tažení.
+            timeline.$project
+                .map { !$0.assets.isEmpty }
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] hasMedia in self?.hasMedia = hasMedia },
         ]
+
+        projectStore.refreshRecentProjects()
 
         // Ukončení aplikace nesmí zahodit posledních pár sekund práce —
         // debounce zálohy by je nestihl.
@@ -248,6 +277,11 @@ final class AppModel: ObservableObject {
     /// ale ochrana už by byla pryč.
     func confirmLosingUnsavedWork() -> Bool {
         guard projectStore.isDirty else { return true }
+        // CLI běhy se neptají — modální dialog by je zasekl a nikdo by ho
+        // neodklikl (týž důvod jako u `shouldTerminate`).
+        if CommandLine.arguments.dropFirst().contains(where: { $0.hasPrefix("--") }) {
+            return true
+        }
         let alert = NSAlert()
         alert.messageText = "Uložit změny v projektu „\(projectStore.displayName)“?"
         alert.informativeText = "Bez uložení se změny ztratí."
@@ -351,24 +385,79 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Obnova neuloženého projektu po pádu — volá se při startu, když není
-    /// co otevírat, ale slot neuloženého projektu má zálohu.
-    func offerUnsavedRecovery() async -> Bool {
+    /// Nabídka obnovy: co se našlo v záloze a jak je stará.
+    struct RecoveryOffer: Equatable {
+        let modifiedAt: Date
+        let clipCount: Int
+    }
+
+    /// Obnova neuloženého projektu po pádu (fáze 18, modul 12).
+    ///
+    /// ⚠️ **Už to NENÍ dialog.** Modální okno při startu nutí rozhodnout dřív,
+    /// než uživatel vidí, o čem rozhoduje, a „Zahodit" je nevratné. Pruh na
+    /// prázdném startu jde ignorovat a záloha zůstane ležet — rozhodnutí se
+    /// dá odložit na potom.
+    ///
+    /// Vrací `true`, když se nabídka objevila; volající pak nespouští sken
+    /// zapamatovaných složek (ten by osu naplnil a nabídku přebil).
+    @discardableResult
+    func presentUnsavedRecovery() -> Bool {
         guard projectStore.fileURL == nil,
               let backup = projectStore.pendingAutosave() else { return false }
-        guard Self.askRestore(
-            message: "Našla se záloha neuloženého projektu",
-            detail: "Aplikace minule neskončila uložením. Záloha je z "
-                + "\(backup.modifiedAt.formatted(date: .abbreviated, time: .shortened)).") else {
-            projectStore.discardAutosave()
-            return false
+        let clips = backup.project.timeline.tracks.reduce(0) { $0 + $1.clips.count }
+        recoveryOffer = RecoveryOffer(modifiedAt: backup.modifiedAt, clipCount: clips)
+        return true
+    }
+
+    /// „Obnovit zálohu" z pruhu. TÁŽ cesta, kterou dosud dělal dialog:
+    /// `resolveAssets` → `loadProject` → baseline na prázdný projekt, aby
+    /// obnovená práce zůstala neuložená a autosave ji dál chránil.
+    func restoreRecoveryOffer() async {
+        guard recoveryOffer != nil, let backup = projectStore.pendingAutosave() else {
+            recoveryOffer = nil
+            return
         }
+        recoveryOffer = nil
         let project = projectStore.resolveAssets(in: backup.project)
         timeline.loadProject(project)
         projectStore.markRestoredUnsaved()   // dál „neuloženo", autosave chrání
         status = "Obnoven neuložený projekt ze zálohy. ⌘S ho uloží."
         await refreshSidebar(for: project)
-        return true
+    }
+
+    /// „Zahodit" z pruhu. Zálohu smaže a dohoní to, co by se bylo stalo bez
+    /// ní: sken zapamatovaných složek. Bez toho by odmítnutí nabídky nechalo
+    /// okno prázdné i tomu, kdo má složky z minula zapamatované.
+    func dismissRecoveryOffer() async {
+        recoveryOffer = nil
+        projectStore.discardAutosave()
+        status = "Záloha zahozena."
+        await restoreAndScan()
+    }
+
+    /// Nový projekt: prázdná osa. Do modulu 12 se z rozdělané práce nedalo
+    /// vyjít jinak než importem — a ten osu přepíše materiálem, ne prázdnem.
+    func newProject() {
+        guard confirmLosingUnsavedWork() else { return }
+        timeline.loadProject(Project.empty())
+        timeline.undo = UndoStack()
+        clips = []
+        selected = nil
+        projectStore.detachFromFile()
+        projectStore.markCurrent(timeline.project)
+        recoveryOffer = nil
+        status = "Nový projekt. Přetáhni sem materiál, nebo ho vyber tlačítkem."
+    }
+
+    /// Klik na řádek v „Poslední projekty".
+    func openRecent(_ recent: RecentProject) {
+        guard let url = projectStore.resolveRecent(recent) else {
+            status = "Projekt „\(recent.name)“ není dostupný — disk asi není připojený."
+            return
+        }
+        guard confirmLosingUnsavedWork() else { return }
+        recoveryOffer = nil
+        Task { await openProject(at: url) }
     }
 
     private static func askRestore(message: String, detail: String) -> Bool {
@@ -611,14 +700,21 @@ final class AppModel: ObservableObject {
         panel.allowsMultipleSelection = true
         panel.message = "Vyber fotky (HEIC, JPEG, PNG) — přidají se na konec obrazové stopy."
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        addPhotos(urls: panel.urls)
+    }
 
+    /// Vlastní přidání fotek. Oddělené od panelu, aby tutéž cestu mohlo
+    /// použít přetažení na okno (modul 12) — druhá kopie téhle smyčky by se
+    /// s touhle rozešla při první změně (poučení z `Clip.copied`).
+    func addPhotos(urls: [URL]) {
+        guard !urls.isEmpty else { return }
         var project = timeline.project
         guard let v1 = project.timeline.tracks.first(where: { $0.kind == .video })?.id else {
             return
         }
         var cursor = project.duration
         var added = 0
-        for url in panel.urls {
+        for url in urls {
             // Bookmark hned — po restartu by sandbox fotku bez něj nepustil.
             let bookmark = try? url.bookmarkData(options: .withSecurityScope,
                                                 includingResourceValuesForKeys: nil,
@@ -3579,6 +3675,11 @@ final class AppModel: ObservableObject {
 
     func attach(_ view: PlayerHostView) { hostView = view }
     func attachTimeline(_ pane: TimelinePane) { timelinePane = pane }
+    /// Terč přetažení na prázdném startu (fáze 18, modul 12). Drží se `weak`
+    /// a jen kvůli `--empty-start-check`, který jím prochází skutečnou cestu
+    /// protokolu `NSDraggingDestination` — vzorec z modulu 9.
+    func attachDropZone(_ view: FileDropView) { dropZoneView = view }
+    private(set) weak var dropZoneView: FileDropView?
 
     // MARK: Akce toolbaru (fáze 18, modul 1)
 
@@ -3625,6 +3726,57 @@ final class AppModel: ObservableObject {
         let urls = importer.restoreRememberedAccess()
         guard !urls.isEmpty else { return }
         await ingest(urls: urls)
+    }
+
+    /// Přetažení souborů nebo složek na okno (fáze 18, modul 12).
+    ///
+    /// Rozdělí, co přišlo, podle přípony a pošle to TÝMIŽ cestami, jaké mají
+    /// položky v menu — složka projde `videoFiles(in:)`, tedy „naimportuje
+    /// totéž co Otevřít složku" (kritérium modulu).
+    ///
+    /// ⚠️ **Na pořadí záleží.** Video zakládá NOVÝ projekt (osa se přepíše),
+    /// fotky a hudba se PŘIDÁVAJÍ do rozdělané práce. Kdyby se fotka položila
+    /// první, `ingest` by ji smetl — proto video, pak fotky, pak hudba.
+    func importDropped(urls raw: [URL]) async {
+        guard !raw.isEmpty else { return }
+        let urls = importer.adopt(dropped: raw)
+
+        var videos: [URL] = []
+        var stills: [URL] = []
+        var music: [URL] = []
+        for url in urls {
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+               isDirectory.boolValue {
+                videos.append(url)      // `ingest` složku rozbalí sám
+                continue
+            }
+            let ext = url.pathExtension.lowercased()
+            if MediaImporter.videoExtensions.contains(ext) { videos.append(url) }
+            else if MediaImporter.stillExtensions.contains(ext) { stills.append(url) }
+            else if MediaImporter.audioExtensions.contains(ext) { music.append(url) }
+        }
+
+        guard !videos.isEmpty || !stills.isEmpty || !music.isEmpty else {
+            status = "Z přetažených souborů neumím nic použít. "
+                + "Beru MOV, MP4 · HEIC, JPEG, PNG · M4A, MP3, WAV."
+            return
+        }
+
+        if !videos.isEmpty {
+            // Týž dotaz jako u `openFiles` — import přepisuje osu.
+            guard confirmLosingUnsavedWork() else { return }
+            recoveryOffer = nil
+            await ingest(urls: videos)
+        }
+        if !stills.isEmpty {
+            recoveryOffer = nil
+            addPhotos(urls: stills)
+        }
+        for url in music {
+            recoveryOffer = nil
+            await importMusic(url: url)
+        }
     }
 
     private func ingest(urls: [URL]) async {
@@ -4137,12 +4289,16 @@ struct ContentView: View {
                     await model.verifyExportUI()
                 } else if arguments.contains("--transcript-ui-check") {
                     await model.verifyTranscriptUI()
+                } else if arguments.contains("--empty-start-check") {
+                    await model.verifyEmptyStart()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {
                 // Projekt z minula — sken se nespouští, timeline je ze souboru.
-            } else if await model.offerUnsavedRecovery() {
-                // Pád s neuloženým projektem — obnoveno ze zálohy.
+            } else if model.presentUnsavedRecovery() {
+                // Pád s neuloženým projektem: prázdný start s PRUHEM nabídky
+                // (modul 12). Sken zapamatovaných složek se nespouští — naplnil
+                // by osu a nabídku přebil; „Zahodit" ho dohoní.
             } else {
                 await model.restoreAndScan()
             }

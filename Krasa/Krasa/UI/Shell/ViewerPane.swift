@@ -61,6 +61,18 @@ struct ViewerPane: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, 24)
             }
+
+            // Prázdný start (modul 12): zóna přetažení PŘES plochu náhledu.
+            //
+            // ⚠️ Překrývá, neodebírá — a je to výjimka z pravidla „chrome se
+            // odebírá" schválně. `PlayerView` musí zůstat na svém místě ve
+            // stromu: kdyby se při každém přechodu prázdno ↔ materiál
+            // přetvářel, vznikl by nový `PlayerHostView` a měřicí běhy
+            // (i `attach`) by držely ten starý. Layout se tím nezkresluje —
+            // zóna je uvnitř pásu s pevnou výškou, ne kolem něj.
+            if model.showsEmptyStart {
+                EmptyStartDropZone(model: model)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()

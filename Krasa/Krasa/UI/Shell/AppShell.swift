@@ -93,6 +93,11 @@ struct AppShell: View {
             if chromeVisible {
                 KrasaToolbar(model: model, mode: mode)
                 hairline
+                // Nabídka obnovy zálohy je PRUH pod toolbarem, ne dialog
+                // (modul 12). Jde ignorovat — a dokud se ignoruje, záloha leží.
+                if let offer = model.recoveryOffer {
+                    RecoveryBar(model: model, offer: offer)
+                }
             }
 
             HStack(spacing: 0) {
@@ -142,7 +147,12 @@ struct AppShell: View {
             topBand
             if chromeVisible {
                 hairline
+                // Prázdná osa nemá co kreslit ani co přiblížit — lišta je
+                // ztlumená (zadání: `opacity .4`), ale zůstává na místě, aby
+                // se okno po importu nepřeskládalo.
                 TimelineLayerBar(model: model)
+                    .opacity(model.showsEmptyStart ? 0.4 : 1)
+                    .disabled(model.showsEmptyStart)
                 hairline
                 timelineRow
             }
@@ -164,8 +174,12 @@ struct AppShell: View {
             if chromeVisible {
                 verticalHairline
                 // Rail rozhoduje, co je vpravo (zadání, sekce 1.2). Na `Řeč`
-                // to jsou Zdroje řeči, jinak knihovna médií.
-                if model.railSection == .speech {
+                // to jsou Zdroje řeči, jinak knihovna médií — a bez materiálu
+                // Poslední projekty (modul 12).
+                if model.showsEmptyStart {
+                    RecentProjectsPane(model: model, store: model.projectStore)
+                        .frame(width: KrasaUI.Metric.libraryWidth)
+                } else if model.railSection == .speech {
                     SpeechSourcesPane(model: model, timeline: model.timeline,
                                       transcription: model.transcription)
                         .frame(width: KrasaUI.Metric.libraryWidth)
@@ -186,7 +200,11 @@ struct AppShell: View {
                              onMake: { model.attachTimeline($0) })
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if model.panelVisible {
+            // Bez materiálu není co inspektovat, takže panel podle zadání
+            // nesvítí — s výjimkou Nastavení, které na projektu nezávisí
+            // (a bez něj by se na prázdném startu nedalo dostat ke správě
+            // proxy a modelu přepisu).
+            if model.panelVisible, !model.showsEmptyStart || model.railSection == .settings {
                 verticalHairline
                 PinnedPanel(model: model)
                     .frame(width: KrasaUI.Metric.pinnedPanelWidth)

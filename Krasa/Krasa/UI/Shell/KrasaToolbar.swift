@@ -18,27 +18,37 @@ struct KrasaToolbar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            ProjectTitleBlock(store: model.projectStore, timeline: model.timeline)
+            ProjectTitleBlock(store: model.projectStore, timeline: model.timeline,
+                              isEmptyStart: model.showsEmptyStart)
 
             verticalDivider
 
-            actions
+            // Bez materiálu nemá smysl nabízet titulek ani zmrazení snímku —
+            // jsou to operace nad klipem, který neexistuje. Místo nich
+            // dvojice, kterou návrh v prázdném stavu ukazuje (obrazovka 2).
+            if model.showsEmptyStart {
+                emptyStartActions
+            } else {
+                actions
+            }
 
             Spacer(minLength: 12)
 
             // Čip běžících analýz (M2). Kreslí se jen když něco běží.
             AnalysisChip(analysis: model.analysis)
 
-            ChromeButton(title: "Rampa ⌘4",
-                         style: model.panelVisible ? .active : .normal) {
-                model.panelVisible.toggle()
-            }
-            .keyboardShortcut("4", modifiers: .command)
+            if !model.showsEmptyStart {
+                ChromeButton(title: "Rampa ⌘4",
+                             style: model.panelVisible ? .active : .normal) {
+                    model.panelVisible.toggle()
+                }
+                .keyboardShortcut("4", modifiers: .command)
 
-            ChromeButton(title: "Exportovat…", style: .primary) {
-                model.openExportSheet()
+                ChromeButton(title: "Exportovat…", style: .primary) {
+                    model.openExportSheet()
+                }
+                .disabled(model.clips.isEmpty || model.isMeasuring)
             }
-            .disabled(model.clips.isEmpty || model.isMeasuring)
 
             if mode == .fullscreenApp {
                 verticalDivider
@@ -52,6 +62,22 @@ struct KrasaToolbar: View {
         .frame(height: mode.toolbarHeight)
         .frame(maxWidth: .infinity)
         .background(KrasaUI.surfaceChrome)
+    }
+
+    /// Prázdný start: otevřít hotový projekt, nebo založit nový výběrem
+    /// materiálu. **Projekt v Kráse vzniká z materiálu** — prázdná osa se
+    /// neukládá, takže „Nový projekt" znamená „vyber, z čeho".
+    private var emptyStartActions: some View {
+        HStack(spacing: 6) {
+            ChromeButton(title: "Otevřít projekt… ⌘O") {
+                model.openProjectViaPanel()
+            }
+            ChromeButton(title: "Nový projekt ⌘N", style: .primary) {
+                Task { await model.openFiles(directories: false) }
+            }
+            .disabled(model.isMeasuring)
+            .help("Projekt vznikne z vybraného materiálu — prázdná osa se neukládá.")
+        }
     }
 
     private var actions: some View {
@@ -83,14 +109,15 @@ struct KrasaToolbar: View {
 private struct ProjectTitleBlock: View {
     @ObservedObject var store: ProjectStore
     @ObservedObject var timeline: TimelineController
+    var isEmptyStart = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(store.displayName)
+            Text(isEmptyStart ? "Krása" : store.displayName)
                 .font(KrasaUI.Font.projectName)
                 .foregroundStyle(KrasaUI.textPrimary)
                 .lineLimit(1)
-            Text(meta)
+            Text(isEmptyStart ? "bez projektu" : meta)
                 .font(KrasaUI.Font.projectMeta)
                 .foregroundStyle(KrasaUI.textTertiary)
                 .lineLimit(1)

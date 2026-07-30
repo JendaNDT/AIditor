@@ -20,12 +20,33 @@ import Foundation
 import TimelineModel
 import UniformTypeIdentifiers
 
+/// Řádek v „Poslední projekty" na prázdném startu (fáze 18, modul 12).
+///
+/// ⚠️ Čísla (počet záběrů, délka) jsou ULOŽENÁ, ne dopočítaná ze souboru.
+/// Projekt na odpojeném disku se otevřít nedá, takže by se u něj počítat
+/// nedaly — a řádek, který u poloviny projektů mlčí, je horší než řádek
+/// s číslem z doby, kdy se projekt naposled ukládal.
+struct RecentProject: Identifiable, Equatable {
+    var id: String { path }
+    let path: String
+    let name: String
+    let modifiedAt: Date
+    let shotCount: Int
+    let durationSeconds: Double
+    /// Bookmark se nerozbalil nebo soubor na cestě není — disk bývá odpojený.
+    let isOffline: Bool
+}
+
 @MainActor
 final class ProjectStore: ObservableObject {
 
     /// Kam je projekt uložený. `nil` = zatím neuložený (obraz skenu).
     @Published private(set) var fileURL: URL?
     @Published private(set) var lastSavedAt: Date?
+    /// Poslední projekty pro prázdný start. Plní `refreshRecentProjects()` —
+    /// ne getter, protože zjišťování offline stavu rozbaluje bookmarky
+    /// a to se nesmí dělat při každém překreslení.
+    @Published private(set) var recentProjects: [RecentProject] = []
     /// Projekt se liší od baseline (poslední uložený/otevřený stav; u
     /// čerstvého skenu sken samotný — jinak by „neuloženo" svítilo pořád).
     @Published private(set) var isDirty = false
@@ -44,6 +65,10 @@ final class ProjectStore: ObservableObject {
     private var heldScopes: [URL] = []
 
     private static let lastProjectKey = "cz.projektkrasa.lastProject"
+    private static let recentProjectsKey = "cz.projektkrasa.recentProjects"
+    /// Kolik projektů si seznam pamatuje. Návrh ukazuje tři řádky, pás jich
+    /// unese pět — víc už je archiv, ne „poslední".
+    private static let recentProjectsLimit = 8
 
     static let fileType = UTType(filenameExtension: "projektkrasa",
                                  conformingTo: .json) ?? .json
@@ -69,6 +94,7 @@ final class ProjectStore: ObservableObject {
         lastSavedAt = Date()
         markCurrent(project)
         rememberLastProject(url)
+        rememberRecent(project: project, at: url, modifiedAt: file.modifiedAt)
     }
 
     func load(from url: URL) throws -> Project {
@@ -78,6 +104,7 @@ final class ProjectStore: ObservableObject {
         fileURL = url
         lastSavedAt = file.modifiedAt
         rememberLastProject(url)
+        rememberRecent(project: file.project, at: url, modifiedAt: file.modifiedAt)
         return file.project
     }
 
@@ -147,6 +174,11 @@ final class ProjectStore: ObservableObject {
         try? data.write(to: url, options: .atomic)
     }
 
+    /// Soubor zálohy aktuálního slotu. **Jen pro `--empty-start-check`**,
+    /// který si obsah slotu odloží a po sobě ho vrátí — kontrola nesmí přepsat
+    /// zálohu skutečné neuložené práce uživatele (běží v témže kontejneru).
+    var autosaveFileURL: URL? { autosaveSlotURL }
+
     /// Záloha aktuálního slotu, pokud existuje a dá se přečíst.
     func pendingAutosave() -> ProjectFile? {
         guard let url = autosaveSlotURL,
@@ -186,6 +218,134 @@ final class ProjectStore: ObservableObject {
             UserDefaults.standard.set(fresh, forKey: Self.lastProjectKey)
         }
         return url
+    }
+
+    // MARK: Poslední projekty (prázdný start, fáze 18, modul 12)
+
+    /// Uložený řádek. Bookmark je tu ze stejného důvodu jako u posledního
+    /// projektu: bez něj by sandbox po restartu na soubor nesměl a každý
+    /// projekt by se hlásil jako offline.
+    private struct StoredRecent: Codable {
+        var path: String
+        var name: String
+        var modifiedAt: Date
+        var shotCount: Int
+        var durationSeconds: Double
+        var bookmark: Data?
+    }
+
+    /// Zapíše (nebo přepíše) řádek po uložení i po otevření projektu.
+    /// Čísla se berou z projektu, který se právě prošel — počítat je později
+    /// by znamenalo otevřít každý soubor v seznamu.
+    private func rememberRecent(project: Project, at url: URL, modifiedAt: Date) {
+        let timeline = project.timeline
+        let shots = timeline.tracks.filter { $0.kind == .video }
+            .reduce(0) { $0 + $1.clips.count }
+        let entry = StoredRecent(
+            path: url.path,
+            name: url.deletingPathExtension().lastPathComponent,
+            modifiedAt: modifiedAt,
+            shotCount: shots,
+            // `duration` je O(klipů) — tady se volá jednou při uložení nebo
+            // otevření, ne v kreslicí cestě (poučení z modulu 6).
+            durationSeconds: Double(project.duration.count) / Double(timeline.frameRate),
+            bookmark: try? url.bookmarkData(options: .withSecurityScope,
+                                            includingResourceValuesForKeys: nil,
+                                            relativeTo: nil))
+        var all = Self.loadStoredRecents().filter { $0.path != url.path }
+        all.insert(entry, at: 0)
+        Self.saveStoredRecents(Array(all.prefix(Self.recentProjectsLimit)))
+        refreshRecentProjects()
+    }
+
+    /// Přepočítá seznam včetně dostupnosti souborů. Volá se při startu,
+    /// po uložení a po otevření — ne při kreslení.
+    func refreshRecentProjects() {
+        recentProjects = Self.loadStoredRecents().map { stored in
+            RecentProject(path: stored.path,
+                          name: stored.name,
+                          modifiedAt: stored.modifiedAt,
+                          shotCount: stored.shotCount,
+                          durationSeconds: stored.durationSeconds,
+                          isOffline: !Self.isReachable(stored))
+        }
+    }
+
+    /// URL projektu ze seznamu, s otevřeným security scope. `nil` = nedostupný
+    /// (odpojený disk, smazaný soubor) — volající to má říct, ne mlčet.
+    func resolveRecent(_ recent: RecentProject) -> URL? {
+        guard let stored = Self.loadStoredRecents().first(where: { $0.path == recent.path })
+        else { return nil }
+        if let data = stored.bookmark {
+            var stale = false
+            if let url = try? URL(resolvingBookmarkData: data,
+                                  options: .withSecurityScope,
+                                  relativeTo: nil,
+                                  bookmarkDataIsStale: &stale),
+               url.startAccessingSecurityScopedResource() {
+                heldScopes.append(url)
+                guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+                return url
+            }
+        }
+        let url = URL(fileURLWithPath: stored.path)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// ⚠️ Přístup se otevírá a HNED zavírá. V sandboxu vrátí `fileExists`
+    /// pro cestu bez oprávnění `false`, takže se bez scope nedá odlišit
+    /// „soubor není" od „nesmíme se podívat" — a všechny projekty by se
+    /// hlásily jako offline. Držet scope kvůli pouhé kontrole existence by
+    /// naopak znamenalo osm nepárovaných přístupů při každém startu.
+    private static func isReachable(_ stored: StoredRecent) -> Bool {
+        if let data = stored.bookmark {
+            var stale = false
+            guard let url = try? URL(resolvingBookmarkData: data,
+                                     options: .withSecurityScope,
+                                     relativeTo: nil,
+                                     bookmarkDataIsStale: &stale) else { return false }
+            if url.startAccessingSecurityScopedResource() {
+                defer { url.stopAccessingSecurityScopedResource() }
+                return FileManager.default.fileExists(atPath: url.path)
+            }
+            return FileManager.default.fileExists(atPath: url.path)
+        }
+        return FileManager.default.fileExists(atPath: stored.path)
+    }
+
+    /// Odložený stav evidence. **Jen pro `--empty-start-check`**: kontrola si
+    /// do seznamu uloží dočasný projekt, aby ověřila offline řádek, a musí
+    /// po sobě uklidit — jinak by uživateli v „Poslední projekty" zůstal
+    /// mrtvý řádek a přepsaný „poslední projekt" ze startu aplikace.
+    struct RecentsSnapshot {
+        let recents: Data?
+        let last: Data?
+    }
+
+    func snapshotRecents() -> RecentsSnapshot {
+        RecentsSnapshot(recents: UserDefaults.standard.data(forKey: Self.recentProjectsKey),
+                        last: UserDefaults.standard.data(forKey: Self.lastProjectKey))
+    }
+
+    func restoreRecents(_ snapshot: RecentsSnapshot) {
+        let defaults = UserDefaults.standard
+        if let recents = snapshot.recents { defaults.set(recents, forKey: Self.recentProjectsKey) }
+        else { defaults.removeObject(forKey: Self.recentProjectsKey) }
+        if let last = snapshot.last { defaults.set(last, forKey: Self.lastProjectKey) }
+        else { defaults.removeObject(forKey: Self.lastProjectKey) }
+        refreshRecentProjects()
+    }
+
+    private static func loadStoredRecents() -> [StoredRecent] {
+        guard let data = UserDefaults.standard.data(forKey: recentProjectsKey),
+              let all = try? JSONDecoder().decode([StoredRecent].self, from: data)
+        else { return [] }
+        return all
+    }
+
+    private static func saveStoredRecents(_ all: [StoredRecent]) {
+        guard let data = try? JSONEncoder().encode(all) else { return }
+        UserDefaults.standard.set(data, forKey: recentProjectsKey)
     }
 
     // MARK: Bookmarky assetů

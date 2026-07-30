@@ -23,6 +23,15 @@ struct ShellStatusBar: View {
             ProxyStatusDot(proxies: model.proxies, timeline: model.timeline)
             WhisperStatusDot(transcription: model.transcription)
 
+            // Na prázdném startu jde hláška doleva — vpravo je základna
+            // projektu a tečky běhů nemají co hlásit.
+            if model.showsEmptyStart {
+                Text(model.status)
+                    .font(KrasaUI.Font.status)
+                    .foregroundStyle(KrasaUI.textSecondary)
+                    .lineLimit(1)
+            }
+
             Spacer(minLength: 12)
 
             Text(trailingText)
@@ -37,8 +46,16 @@ struct ShellStatusBar: View {
         .background(KrasaUI.surfaceChrome)
     }
 
+    /// Na prázdném startu nemá „poslední akce" co hlásit — místo ní je vpravo
+    /// základna projektu a nároky (zadání, obrazovka 2). Vlevo zůstává
+    /// `status`, tedy pobídka „Vyber materiál nebo otevři projekt."
     private var trailingText: String {
-        mode == .fullscreenApp
+        if model.showsEmptyStart {
+            let timeline = model.timeline.project.timeline
+            return "\(timeline.frameRate) fps · "
+                + "\(timeline.canvasSize.width)×\(timeline.canvasSize.height) · macOS 14+"
+        }
+        return mode == .fullscreenApp
             ? model.status + " · menu vyjede u horní hrany"
             : model.status
     }

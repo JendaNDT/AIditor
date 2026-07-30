@@ -31,16 +31,29 @@ final class FakeDraggingInfo: NSObject, NSDraggingInfo {
     private let board: NSPasteboard
     var draggingLocation: NSPoint
 
-    init(assetID: AssetID, at point: NSPoint) {
+    private init(at point: NSPoint, write: (NSPasteboard) -> Void) {
         // Vlastní jmenovaný pasteboard, ať se měření netahá se systémovou
         // schránkou uživatele.
         board = NSPasteboard(name: NSPasteboard.Name("cz.projektkrasa.libraryCheck"))
         board.clearContents()
-        // TÝŽ zápis, jaký na druhé straně dělá `NSItemProvider(object: NSString)`
-        // v `LibraryCard.onDrag`.
-        board.setString(assetID.rawValue, forType: .string)
+        write(board)
         draggingLocation = point
         super.init()
+    }
+
+    /// Karta knihovny (modul 9). TÝŽ zápis, jaký dělá
+    /// `NSItemProvider(object: NSString)` v `LibraryCard.onDrag`.
+    convenience init(assetID: AssetID, at point: NSPoint) {
+        self.init(at: point) { $0.setString(assetID.rawValue, forType: .string) }
+    }
+
+    /// Soubory z Finderu (modul 12). Finder píše na pasteboard `NSURL`
+    /// objekty — proto `writeObjects`, ne řetězec s cestou: cesta jako text
+    /// by prošla registrací `.string` a s `.fileURL` by se minula.
+    convenience init(fileURLs: [URL], at point: NSPoint) {
+        self.init(at: point) { board in
+            board.writeObjects(fileURLs.map { $0 as NSURL })
+        }
     }
 
     var draggingDestinationWindow: NSWindow? { nil }

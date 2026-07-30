@@ -65,6 +65,8 @@
 		F18200000000000000000019 /* TranscriptPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000019 /* TranscriptPanel.swift */; };
 		F1820000000000000000001A /* SpeechSourcesPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000001A /* SpeechSourcesPane.swift */; };
 		F1820000000000000000001B /* TranscriptUIChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000001B /* TranscriptUIChecks.swift */; };
+		F1820000000000000000001C /* EmptyState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000001C /* EmptyState.swift */; };
+		F1820000000000000000001D /* EmptyStartChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000001D /* EmptyStartChecks.swift */; };
 		F1820000000000000000000E /* AudioTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000E /* AudioTab.swift */; };
 		F1820000000000000000000F /* InfoTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000F /* InfoTab.swift */; };
 /* End PBXBuildFile section */
@@ -124,6 +126,8 @@
 		F18100000000000000000019 /* TranscriptPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptPanel.swift; sourceTree = "<group>"; };
 		F1810000000000000000001A /* SpeechSourcesPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechSourcesPane.swift; sourceTree = "<group>"; };
 		F1810000000000000000001B /* TranscriptUIChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptUIChecks.swift; sourceTree = "<group>"; };
+		F1810000000000000000001C /* EmptyState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyState.swift; sourceTree = "<group>"; };
+		F1810000000000000000001D /* EmptyStartChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStartChecks.swift; sourceTree = "<group>"; };
 		F1810000000000000000000E /* AudioTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTab.swift; sourceTree = "<group>"; };
 		F1810000000000000000000F /* InfoTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoTab.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -209,6 +213,7 @@
 				F18100000000000000000016 /* LibraryChecks.swift */,
 				F18100000000000000000018 /* ExportUIChecks.swift */,
 				F1810000000000000000001B /* TranscriptUIChecks.swift */,
+				F1810000000000000000001D /* EmptyStartChecks.swift */,
 			);
 			path = Measure;
 			sourceTree = "<group>";
@@ -276,6 +281,7 @@
 				F18100000000000000000004 /* IconRail.swift */,
 				F18100000000000000000005 /* ViewerPane.swift */,
 				F18100000000000000000006 /* StatusBar.swift */,
+				F1810000000000000000001C /* EmptyState.swift */,
 				F18100000000000000000009 /* AnalysisProgress.swift */,
 				F1810000000000000000000A /* TimelineLayerBar.swift */,
 				F18100000000000000000007 /* LegacySettingsPanel.swift */,
@@ -407,6 +413,8 @@
 				F18200000000000000000019 /* TranscriptPanel.swift in Sources */,
 				F1820000000000000000001A /* SpeechSourcesPane.swift in Sources */,
 				F1820000000000000000001B /* TranscriptUIChecks.swift in Sources */,
+				F1820000000000000000001C /* EmptyState.swift in Sources */,
+				F1820000000000000000001D /* EmptyStartChecks.swift in Sources */,
 				2F71D6C304AB859E1D3E7F0A /* TimelineController.swift in Sources */,
 				A9E3B57C1F0842D6C7B93E15 /* TimelineDocumentView.swift in Sources */,
 				74CB19E8D3A05F2718BE6C40 /* TimelinePane.swift in Sources */,

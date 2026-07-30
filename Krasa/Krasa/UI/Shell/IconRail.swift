@@ -35,8 +35,19 @@ struct IconRail: View {
         .background(KrasaUI.surfaceRail)
     }
 
+    /// Na prázdném startu jsou pracovní sekce kromě Médií ztlumené na 0,35
+    /// (zadání, obrazovka 2) **a vypnuté** — bez klipu není co inspektovat.
+    /// Nastavení ztlumené NENÍ, i když ho návrh takhle kreslí: na projektu
+    /// nezávisí a je to jediná cesta ke správě proxy a modelu přepisu.
+    /// Ztlumené tlačítko, které funguje, je lež stejně jako svítící, které
+    /// nedělá nic (pravidlo z modulu 1).
+    private func isDimmed(_ section: RailSection) -> Bool {
+        model.showsEmptyStart && section != .media && section != .settings
+    }
+
     private func item(_ section: RailSection) -> some View {
         let isActive = model.railSection == section
+        let dimmed = isDimmed(section)
         return Button {
             model.railSection = section
             // Sáhnutí do railu má panel ukázat — jinak by kliknutí na
@@ -63,6 +74,8 @@ struct IconRail: View {
             )
         }
         .buttonStyle(.plain)
-        .help(section.label)
+        .opacity(dimmed ? 0.35 : 1)
+        .disabled(dimmed)
+        .help(dimmed ? "\(section.label) — až bude na ose materiál." : section.label)
     }
 }

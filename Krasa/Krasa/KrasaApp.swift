@@ -44,6 +44,17 @@ struct KrasaApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {
+                // Projekt v Kráse vzniká z materiálu — „nový projekt" je tedy
+                // výběr souborů, ne prázdná osa. Prázdnou osu dělá položka
+                // pod tím a je to cesta, jak z rozdělané práce vyjít ven
+                // (do modulu 12 nešla).
+                Button("Nový projekt…") {
+                    Task { await model.openFiles(directories: false) }
+                }
+                .keyboardShortcut("n")
+                Button("Zavřít projekt (prázdná osa)") { model.newProject() }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                Divider()
                 Button("Otevřít projekt…") { model.openProjectViaPanel() }
                     .keyboardShortcut("o")
                 Divider()

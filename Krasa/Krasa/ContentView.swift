@@ -1149,6 +1149,51 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: Panel přepisu (fáze 18, modul 11)
+
+    /// Editace textu úseku — jen průchod na controller, ať panel nemusí znát
+    /// undo. Prázdný text úsek MAŽE (pravidlo modelu z fáze 11).
+    func setSpeechText(assetID: AssetID, segmentIndex: Int, text: String) {
+        timeline.setSpeechText(assetID: assetID, segmentIndex: segmentIndex, text: text)
+        status = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Úsek přepisu smazán."
+            : "Text úseku upraven — platí pro všechny klipy ze zdroje."
+    }
+
+    /// Rozdělení úseku v místě kurzoru. JEDEN undo krok.
+    func splitSpeechSegment(assetID: AssetID, segmentIndex: Int, atCharacter offset: Int) {
+        var updated = timeline.project
+        guard let didSplit = try? updated.splitTranscriptSegment(
+            assetID: assetID, segmentIndex: segmentIndex, atCharacter: offset) else {
+            status = "Úsek se rozdělit nepodařilo."
+            return
+        }
+        guard didSplit else {
+            status = "Kurzor je na kraji textu — není co rozdělit."
+            return
+        }
+        timeline.undo.record(timeline.project)
+        timeline.project = updated
+        status = "Úsek rozdělen v kurzoru; čas se dělí poměrem znaků."
+    }
+
+    /// „Přepsat znovu" z panelu: pro zdroj, který panel právě ukazuje.
+    func transcribeSelectedSpeech() {
+        let project = timeline.project
+        let assetID = project.speechCueRef(at: timeline.playhead)?.assetID
+            ?? timeline.selectedSpeech?.assetID
+            ?? timeline.selection.first.flatMap { project.timeline.clip($0)?.assetID }
+        guard let assetID,
+              let clip = project.timeline.tracks
+                .filter({ $0.kind == .audio })
+                .flatMap({ $0.clips })
+                .first(where: { $0.assetID == assetID }) else {
+            status = "Vyber zvukový klip, u kterého se má přepis udělat."
+            return
+        }
+        Task { await performTranscription(clipID: clip.id) }
+    }
+
     /// Export titulků do SubRip souboru vedle filmu (fáze 8, modul 3).
     func exportSubtitles() {
         let cues = timeline.project.subtitleCues()
@@ -3256,11 +3301,41 @@ final class AppModel: ObservableObject {
 
     /// CLI ověření přepisu: soubor se známou českou větou (say/nahrávka),
     /// vytiskne úseky s časy — správnost textu se posoudí proti předloze.
+    /// Verdikt o průběžném doručování. Přitékající úseky NEMUSÍ dát stejný
+    /// počet jako výsledek (dekodér úsek přepíše lepší variantou a VAD kusy se
+    /// slévají), ale musí jich přitéct NĚCO — jinak by průběh v panelu byl
+    /// prázdný a modul 11 by na to nepřišel.
+    private func liveSegmentsVerdict(final: Int) -> String {
+        let live = transcription.liveSegments.count
+        if live == 0 {
+            return "❌ průběžně nepřitekl ANI JEDEN úsek — `segmentDiscoveryCallback` nechodí"
+        }
+        return "✅ průběžně přiteklo \(live) úseků (výsledek \(final)) — panel má co ukazovat"
+    }
+
     func verifyTranscription(path: String?) async {
         guard let path else { print("❌ --transcribe-check potřebuje cestu ke zvuku"); return }
         do {
+            // Průběžné doručování (fáze 18, modul 11) — riziko modulu. Sleduje
+            // se ZVLÁŠŤ od výsledku: kdyby callback přestal chodit, výsledek by
+            // dorazil stejně a nikdo by si toho nevšiml.
+            let watcher = Task { @MainActor [weak self] in
+                var lastCount = 0
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    guard let self else { return }
+                    let count = self.transcription.liveSegments.count
+                    guard count != lastCount else { continue }
+                    lastCount = count
+                    let fraction = self.transcription.progressFraction ?? 0
+                    print(String(format: "  … průběžně %d úseků, %.0f %% nahrávky",
+                                 count, fraction * 100))
+                }
+            }
             let segments = try await transcription.transcribe(url: URL(fileURLWithPath: path))
+            watcher.cancel()
             print("úseků: \(segments.count)")
+            print(liveSegmentsVerdict(final: segments.count))
             for segment in segments {
                 print(String(format: "%7.2f–%-7.2f %@", segment.start.seconds,
                              segment.end.seconds, segment.text))
@@ -4060,6 +4135,8 @@ struct ContentView: View {
                     await model.verifyLibrary()
                 } else if arguments.contains("--export-ui-check") {
                     await model.verifyExportUI()
+                } else if arguments.contains("--transcript-ui-check") {
+                    await model.verifyTranscriptUI()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

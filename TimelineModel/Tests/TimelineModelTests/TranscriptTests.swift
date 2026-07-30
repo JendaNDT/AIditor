@@ -197,3 +197,71 @@ final class SRTTests: XCTestCase {
         XCTAssertEqual(SRT.serialize(cues: [], frameRate: 30), "")
     }
 }
+
+// MARK: - Rozdělení úseku a rozsah na ose (fáze 18, modul 11)
+
+final class TranscriptSplitTests: XCTestCase {
+
+    /// Osa: jeden zvukový klip celého assetu s jedním úsekem přepisu.
+    private func projectWithSpeech() throws -> (Project, AssetID) {
+        var project = Project.empty()
+        let asset = Asset(originalURL: URL(fileURLWithPath: "/tmp/rec.wav"),
+                          duration: SourceTime(seconds: 20),
+                          measuredFrameRate: 30,
+                          hasVideo: false, hasAudio: true)
+        project.addAsset(asset)
+        let audioTrack = try XCTUnwrap(project.timeline.tracks.first { $0.kind == .audio })
+        let clip = try project.makeClip(assetID: asset.id)
+        try project.insert(clip, onTrack: audioTrack.id)
+        try project.setTranscript(assetID: asset.id, segments: [
+            TranscriptSegment(start: SourceTime(seconds: 2), end: SourceTime(seconds: 6),
+                              text: "ANO CHCI a slibuji"),
+        ])
+        return (project, asset.id)
+    }
+
+    func testSplitAtCursorGivesTwoSegmentsWithProportionalTimes() throws {
+        var (project, assetID) = try projectWithSpeech()
+        // Kurzor za „ANO CHCI" (8 znaků z 18) → řez v 44,4 % délky úseku.
+        XCTAssertTrue(try project.splitTranscriptSegment(assetID: assetID, segmentIndex: 0,
+                                                         atCharacter: 8))
+        let segments = try XCTUnwrap(project.asset(assetID)?.transcript)
+        XCTAssertEqual(segments.count, 2)
+        XCTAssertEqual(segments[0].text, "ANO CHCI")
+        XCTAssertEqual(segments[1].text, "a slibuji")
+        // Časy: první končí tam, kde druhý začíná, a řez je uvnitř.
+        XCTAssertEqual(segments[0].end.seconds, segments[1].start.seconds, accuracy: 0.0001)
+        XCTAssertEqual(segments[0].start.seconds, 2, accuracy: 0.0001)
+        XCTAssertEqual(segments[1].end.seconds, 6, accuracy: 0.0001)
+        XCTAssertEqual(segments[0].end.seconds, 2 + 4 * (8.0 / 18.0), accuracy: 0.01)
+    }
+
+    /// Kurzor na kraji nedělá nic — prázdná půlka není úsek.
+    func testSplitAtEdgesDoesNothing() throws {
+        var (project, assetID) = try projectWithSpeech()
+        XCTAssertFalse(try project.splitTranscriptSegment(assetID: assetID, segmentIndex: 0,
+                                                          atCharacter: 0))
+        XCTAssertFalse(try project.splitTranscriptSegment(assetID: assetID, segmentIndex: 0,
+                                                          atCharacter: 18))
+        XCTAssertEqual(project.asset(assetID)?.transcript?.count, 1)
+    }
+
+    /// Rozsah úseku na ose: klip začíná v nule, takže 2–6 s zdroje je
+    /// 60–180 snímků osy.
+    func testSpeechCueRangeMapsToTimeline() throws {
+        let (project, assetID) = try projectWithSpeech()
+        let ranges = project.speechCueRanges(assetID: assetID, segmentIndex: 0)
+        XCTAssertEqual(ranges.count, 1)
+        XCTAssertEqual(ranges.first?.lowerBound.count, 60)
+        XCTAssertEqual(ranges.first?.upperBound.count, 180)
+    }
+
+    /// Týž zdroj položený dvakrát → úsek je vidět na obou klipech.
+    func testSpeechCueRangeOnTwoClips() throws {
+        var (project, assetID) = try projectWithSpeech()
+        let audioTrack = try XCTUnwrap(project.timeline.tracks.first { $0.kind == .audio })
+        let second = try project.makeClip(assetID: assetID, at: Frames(900))
+        try project.insert(second, onTrack: audioTrack.id)
+        XCTAssertEqual(project.speechCueRanges(assetID: assetID, segmentIndex: 0).count, 2)
+    }
+}

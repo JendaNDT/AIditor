@@ -168,6 +168,76 @@ extension Project {
         try setTranscript(assetID: assetID, segments: segments)
     }
 
+    /// Rozdělí úsek přepisu v místě kurzoru v textu (fáze 18, modul 11).
+    ///
+    /// Čas řezu se odvozuje POMĚREM ZNAKŮ: kurzor v polovině textu dělí i čas
+    /// v polovině. Je to heuristika, a je to vidět — ale lepší data nemáme:
+    /// naše cesta WhisperKitu vrací časy na úsek, ne na slovo, a vymýšlet
+    /// „přesný" čas z ničeho by bylo horší než přiznaný odhad. Uživatel obě
+    /// půlky pak může doupravit.
+    ///
+    /// Kurzor na začátku nebo na konci textu nedělá nic (prázdná půlka by se
+    /// v `setTranscript` stejně zahodila a druhá by se jen posunula v čase).
+    @discardableResult
+    public mutating func splitTranscriptSegment(assetID: AssetID, segmentIndex: Int,
+                                                atCharacter offset: Int) throws -> Bool {
+        guard let asset = asset(assetID) else { throw TimelineError.assetNotFound(assetID) }
+        guard var segments = asset.transcript,
+              segments.indices.contains(segmentIndex) else {
+            throw TimelineError.invalidTranscriptSegment
+        }
+        let segment = segments[segmentIndex]
+        let text = segment.text
+        guard offset > 0, offset < text.count else { return false }
+
+        let cut = text.index(text.startIndex, offsetBy: offset)
+        let first = String(text[text.startIndex..<cut]).trimmingCharacters(in: .whitespaces)
+        let second = String(text[cut...]).trimmingCharacters(in: .whitespaces)
+        guard !first.isEmpty, !second.isEmpty else { return false }
+
+        let span = segment.end.seconds - segment.start.seconds
+        let ratio = Double(offset) / Double(text.count)
+        let cutTime = SourceTime(seconds: segment.start.seconds + span * ratio)
+        // Řez musí být uvnitř úseku, jinak by vznikl úsek nulové délky
+        // a `setTranscript` by ho odmítl.
+        guard cutTime > segment.start, cutTime < segment.end else { return false }
+
+        segments[segmentIndex] = TranscriptSegment(start: segment.start, end: cutTime,
+                                                  text: first)
+        segments.insert(TranscriptSegment(start: cutTime, end: segment.end, text: second),
+                        at: segmentIndex + 1)
+        try setTranscript(assetID: assetID, segments: segments)
+        return true
+    }
+
+    /// Kde na OSE leží úsek přepisu. Úsek může být vidět na víc klipech (týž
+    /// zdroj položený dvakrát), proto pole. Používá to zvýraznění vybraného
+    /// úseku na ose (fáze 18, modul 11).
+    ///
+    /// Průchod je týž jako v `subtitleCues` a `speechCueRef` — zvukové stopy,
+    /// ořez na okno klipu, mapování inverzí `sourceOffset`.
+    public func speechCueRanges(assetID: AssetID, segmentIndex: Int) -> [Range<Frames>] {
+        guard let asset = asset(assetID), let transcript = asset.transcript,
+              transcript.indices.contains(segmentIndex) else { return [] }
+        let segment = transcript[segmentIndex]
+
+        var ranges: [Range<Frames>] = []
+        for track in timeline.tracks where track.kind == .audio {
+            for clip in track.clips where clip.assetID == assetID {
+                let windowStart = clip.sourceStart
+                let windowEnd = clip.sourceStart + sourceConsumption(of: clip)
+                guard segment.end > windowStart, segment.start < windowEnd else { continue }
+                let startFrame = clip.timelineStart
+                    + frameOffset(forSource: max(segment.start, windowStart), in: clip)
+                let endFrame = clip.timelineStart
+                    + frameOffset(forSource: min(segment.end, windowEnd), in: clip)
+                guard endFrame > startFrame else { continue }
+                ranges.append(startFrame..<endFrame)
+            }
+        }
+        return ranges.sorted { $0.lowerBound < $1.lowerBound }
+    }
+
     /// Nejmenší snímek klipu, jehož zdrojová pozice je aspoň `target` —
     /// inverze `sourceOffset` binárním půlením (je monotónní; s rampou
     /// po úsecích, analyticky by se invertovala blbě).

@@ -24,6 +24,37 @@ final class TranscriptionService: ObservableObject {
     /// Průběh pro UI; `nil` = nic neběží.
     @Published private(set) var statusText: String?
 
+    // MARK: - Průběžné úseky (fáze 18, modul 11)
+
+    /// Úsek, jak přitéká z WhisperKitu ještě za běhu přepisu.
+    ///
+    /// ⚠️ Nese jen TEXT a POZICI, ne časy k uložení. Časy `start`/`end`
+    /// v průběžném callbacku jsou při VAD chunkingu **relativní ke kusu**,
+    /// ne k nahrávce (batchovaná cesta ve `WhisperKit.transcribe` posouvá
+    /// jen pole `seek`, viz níž) — a přepočítávat je po svém by znamenalo
+    /// dublovat logiku knihovny. Autoritativní úseky s absolutními časy
+    /// přijdou z návratové hodnoty `transcribe`, jako dosud. Průběžný seznam
+    /// je NÁHLED, ne data.
+    struct LiveSegment: Identifiable, Sendable {
+        let id: Int
+        let text: String
+        /// Kde v nahrávce úsek začíná, v sekundách. Z pole `seek`, které
+        /// batchovaná cesta posouvá o offset kusu, takže JE absolutní.
+        let position: Double
+    }
+
+    @Published private(set) var liveSegments: [LiveSegment] = []
+    /// Zlomek nahrávky, který je za námi; `nil` = nevíme (ještě nepřitekl
+    /// žádný úsek). Vymyšlené procento by v panelu, který má být poctivý,
+    /// bylo horší než přiznané „nevím".
+    @Published private(set) var progressFraction: Double?
+    /// Délka přepisované nahrávky v sekundách.
+    @Published private(set) var totalSeconds: Double?
+
+    /// Fáze přepisu pro tři kolečka v panelu.
+    enum Stage { case model, reading, transcribing, projecting }
+    @Published private(set) var stage: Stage = .model
+
     /// Načtený model se drží po celý běh — načtení trvá desítky sekund
     /// a uživatel typicky přepisuje víc klipů po sobě.
     private var loadedWhisper: WhisperKit?
@@ -153,7 +184,15 @@ final class TranscriptionService: ObservableObject {
     /// Přepíše zvuk souboru na úseky ve zdrojovém čase. Prázdné pole =
     /// v nahrávce se nenašla žádná řeč.
     func transcribe(url: URL) async throws -> [TranscriptSegment] {
-        defer { statusText = nil }
+        defer {
+            statusText = nil
+            progressFraction = nil
+            loadedWhisper?.segmentDiscoveryCallback = nil
+        }
+        liveSegments = []
+        progressFraction = nil
+        totalSeconds = nil
+        stage = .model
 
         let whisper: WhisperKit
         if let loadedWhisper {
@@ -170,12 +209,43 @@ final class TranscriptionService: ObservableObject {
         }
 
         statusText = "Načítám zvuk…"
+        stage = .reading
         guard let samples = try await MonoAudioReader.samples(url: url, sampleRate: 16_000),
               !samples.isEmpty else {
             return []
         }
+        let audioSeconds = Double(samples.count) / 16_000
+        totalSeconds = audioSeconds
 
         statusText = "Přepisuju řeč… (běží lokálně)"
+        stage = .transcribing
+
+        // ⚠️ DVĚ PASTI průběžného doručování, obě vyčtené ze zdrojáků
+        // WhisperKitu (`WhisperKit.transcribe(audioArray:…)`, řádky ~740–790):
+        //
+        // ① Parametr `segmentCallback:` se při VAD chunkingu NEPOUŽIJE —
+        //    batchovaná cesta si staví vlastní closure nad INSTANČNÍ
+        //    vlastností `segmentDiscoveryCallback`. Kdo předá jen parametr,
+        //    nedostane nic a bude to hledat u sebe.
+        // ② V té closure se posouvá jen `seek` (o offset kusu ve vzorcích),
+        //    ne `start`/`end`. Absolutní pozice se tedy dá vzít JEN ze `seek`.
+        whisper.segmentDiscoveryCallback = { [weak self] segments in
+            let arrived = segments.compactMap { segment -> LiveSegment? in
+                let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { return nil }
+                return LiveSegment(id: segment.seek &+ segment.id,
+                                   text: text,
+                                   position: Double(segment.seek) / 16_000)
+            }
+            guard !arrived.isEmpty else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.liveSegments.append(contentsOf: arrived)
+                if let last = arrived.map(\.position).max(), audioSeconds > 0 {
+                    self.progressFraction = min(1, last / audioSeconds)
+                }
+            }
+        }
         // Čeština natvrdo — detekce jazyka na svatbě s hudbou v pozadí
         // umí uletět a přepnout doprostřed nahrávky. Slovenština je F12.
         // VAD chunking: dlouhá nahrávka se dělí podle pauz v řeči, ne po
@@ -187,6 +257,7 @@ final class TranscriptionService: ObservableObject {
         let results = try await whisper.transcribe(audioArray: samples,
                                                    decodeOptions: options)
 
+        stage = .projecting
         var segments: [TranscriptSegment] = []
         for result in results {
             for segment in result.segments {

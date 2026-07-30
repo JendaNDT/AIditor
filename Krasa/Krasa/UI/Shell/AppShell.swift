@@ -163,8 +163,16 @@ struct AppShell: View {
             ViewerPane(model: model)
             if chromeVisible {
                 verticalHairline
-                LibraryPane(model: model)
-                    .frame(width: KrasaUI.Metric.libraryWidth)
+                // Rail rozhoduje, co je vpravo (zadání, sekce 1.2). Na `Řeč`
+                // to jsou Zdroje řeči, jinak knihovna médií.
+                if model.railSection == .speech {
+                    SpeechSourcesPane(model: model, timeline: model.timeline,
+                                      transcription: model.transcription)
+                        .frame(width: KrasaUI.Metric.libraryWidth)
+                } else {
+                    LibraryPane(model: model)
+                        .frame(width: KrasaUI.Metric.libraryWidth)
+                }
             }
         }
         .frame(height: chromeVisible ? mode.topBandHeight : nil)

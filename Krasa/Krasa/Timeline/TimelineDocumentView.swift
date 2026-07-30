@@ -702,6 +702,10 @@ final class TimelineDocumentView: NSView {
     private let snapGuideLayer = CALayer()
     /// Rámeček výběru (fáze 17, modul 2).
     private let bandLayer = CALayer()
+    /// Zvýrazněný rozsah vybraného úseku řeči na zvukové stopě (F18/M11).
+    /// Jde do overlaye tažení, protože leží NAD klipy a nic v něm nechytá
+    /// myš — je to ukazatel, ne objekt.
+    private var speechRangeLayers: [CALayer] = []
 
     init(controller: TimelineController) {
         self.controller = controller
@@ -954,6 +958,58 @@ final class TimelineDocumentView: NSView {
 
         refreshTitles(visible: visible)
         refreshTransitions(visible: visible)
+        refreshSpeechRange()
+    }
+
+    /// Měřicí okno pro `--transcript-ui-check`: kolik zvýraznění úseku řeči
+    /// je opravdu nakreslených.
+    var speechRangeCount: Int { speechRangeLayers.filter { !$0.isHidden }.count }
+
+    /// Rozsah vybraného úseku řeči (fáze 18, modul 11). Kreslí se na VŠECH
+    /// klipech toho zdroje — úsek patří souboru, ne klipu, takže když je zdroj
+    /// na ose dvakrát, je vidět dvakrát. Kdyby se kreslil jen jeden, vypadalo
+    /// by to, že editace platí jen tam.
+    private func refreshSpeechRange() {
+        let ranges: [Range<Frames>] = controller.selectedSpeech.map {
+            controller.project.speechCueRanges(assetID: $0.assetID,
+                                               segmentIndex: $0.segmentIndex)
+        } ?? []
+
+        while speechRangeLayers.count < ranges.count {
+            let layer = CALayer()
+            layer.borderWidth = 1
+            layer.actions = ["position": NSNull(), "bounds": NSNull(),
+                             "frame": NSNull(), "hidden": NSNull()]
+            dragOverlay.addSublayer(layer)
+            speechRangeLayers.append(layer)
+        }
+
+        let timeline = controller.project.timeline
+        let geometry = controller.geometry
+        // Zvýraznění patří ZVUKOVÝM stopám (řeč žije ve zvuku) — kreslí se
+        // přes všechny, protože úsek se může promítat na víc než jednu.
+        let audioIndexes = timeline.tracks.enumerated()
+            .filter { $0.element.kind == .audio }.map(\.offset)
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            for (index, layer) in speechRangeLayers.enumerated() {
+                guard index < ranges.count, let trackIndex = audioIndexes.first else {
+                    if !layer.isHidden { layer.isHidden = true }
+                    continue
+                }
+                let range = ranges[index]
+                layer.isHidden = false
+                layer.backgroundColor = TimelinePalette.clipSelectedStroke
+                    .withAlphaComponent(0.14).cgColor
+                layer.borderColor = TimelinePalette.clipSelectedStroke.cgColor
+                let x = geometry.x(for: range.lowerBound)
+                layer.frame = CGRect(
+                    x: x,
+                    y: geometry.y(ofTrackAt: trackIndex, in: timeline),
+                    width: max(2, geometry.x(for: range.upperBound) - x),
+                    height: geometry.height(of: .audio))
+            }
+        }
     }
 
     // MARK: - Pruh T1 (fáze 11, modul 2)

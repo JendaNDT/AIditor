@@ -177,6 +177,11 @@ final class TimelinePane: NSView {
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.documentView.refreshClips() },
+            // Vybraný úsek řeči (F18/M11) — zvýrazněný rozsah na zvukové stopě.
+            controller.$selectedSpeech
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.documentView.refreshClips() },
             controller.$playhead
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)

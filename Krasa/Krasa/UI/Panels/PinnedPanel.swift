@@ -74,6 +74,7 @@ struct PinnedPanel: View {
 
     private var headerTitle: String {
         if model.railSection == .settings { return "Nastavení" }
+        if model.railSection == .speech { return "Přepis řeči" }
         if timeline.selectedTitle != nil { return "Titulek" }
         if timeline.selectedSpeech != nil { return "Úsek řeči" }
         guard let clip = selectedClip,
@@ -84,7 +85,8 @@ struct PinnedPanel: View {
     /// „zdroj 120 fps · 0:22" — čte se z assetu a z délky klipu, nic se
     /// nedomýšlí. U fotky frekvence zdroje nemá smysl, takže tam není.
     private var headerMeta: String? {
-        guard model.railSection != .settings, let clip = selectedClip,
+        guard model.railSection != .settings, model.railSection != .speech,
+              let clip = selectedClip,
               let asset = timeline.project.asset(clip.assetID) else { return nil }
         let rate = timeline.project.timeline.frameRate
         let length = Timecode(clip.duration, frameRate: rate).shortText
@@ -98,6 +100,11 @@ struct PinnedPanel: View {
     private var content: some View {
         if model.railSection == .settings {
             ScrollView { LegacySettingsPanel(model: model) }
+        } else if model.railSection == .speech {
+            // Přepis řeči má vlastní panel se dvěma stavy (F18/M11) —
+            // není to inspektor klipu, takže nejde do záložek.
+            TranscriptPanel(model: model, timeline: timeline,
+                            transcription: model.transcription)
         } else if let titleID = timeline.selectedTitle,
                   let title = timeline.project.timeline.titleClip(titleID) {
             scrolled {

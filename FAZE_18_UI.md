@@ -346,6 +346,55 @@ kvůli korekci výšky), `--timeline-bench` 0 vypadlých tiků, `--shell-check` 
 menu nastavit rampu, kterou panel odmítne nabídnout. Není to nové — `toggleClassicRamp` se tak chová
 od F14 — ale teď je to vedle sebe vidět. Sjednotit to je věc rozhodnutí, ne úklidu, a M7 do něj nesahá.
 
+### ✅ M8 — záložky Barva, Zvuk a Info (29. 07. 2026) · ETAPA C HOTOVÁ
+
+**Postaveno:** `UI/Panels/ColorTab.swift`, `AudioTab.swift`, `InfoTab.swift`. Panel má všechny čtyři
+záložky ze zadání.
+
+**Barva:** náhled před/po **ze skutečného snímku klipu** (ne gradient) a vzorky u všech pěti presetů
+renderované **týmž `ColorPresetFilter`em jako export**. Namíchaný barevný čtvereček by se s presetem
+rozešel, jakmile by někdo sáhl do filtru — a nikdo by nepoznal, které z těch dvou lže. Zdrojový
+snímek se drží dekódovaný, takže tažení posuvníku síly je jen render CoreImage, ne nové čtení souboru.
+
+**Zvuk:** fade posuvníky s hodnotou **ve snímcích i v sekundách** — dosud se fade daly nastavit
+**jen tažením úchytu na klipu** (F16) a kdo chtěl přesnou délku, neměl kde ji napsat. Délky se čtou
+přes `effectiveAudioFades`, ne z `clip.audioFades`: trim smí klip zkrátit pod součet fade a model to
+schválně nezařezává, takže panel musí ukazovat totéž, co je slyšet. Dál mute a hlasitost stopy
+(s poznámkou, že posuvník **jen ztišuje** — rozsah `AVAudioMix.volume` je dokumentovaně 0–1)
+a hlasitost dodávky z posledního exportu.
+
+**Info:** zdroj, naměřené časování a verdikt VFR, mez čistého zpomalení, čas natočení **s přiznaným
+zdrojem** (datum souboru oranžově a s vysvětlením), proxy s poznámkou, že export jde vždy z originálů.
+
+**Ověřeno `--panel-check`, část D** (kritérium modulu):
+- ✅ preset na **5 klipech = jeden krok ⌘Z** (regrese na F17/M2);
+- ✅ fade z panelu se rozdá třem **různě dlouhým** klipům se zaříznutím per klip:
+  **90 → 30/30, 40 → 10/30, 16 → 0/16**. Na tom se pozná, že se zařezává podle každého klipu,
+  ne jednou hodnotou pro všechny.
+
+**Screenshot chytil dvě věci, které měření nevidělo:** ① mez čistého zpomalení se v Info vypisovala
+jako **„0,502667×"** — `%g` je pro UI špatný formát, `speedLabel` teď dává nejvýš tři desetinná místa
+bez koncových nul; ② koukanec nešlo nasměrovat na konkrétní záložku, takže se fotila ta, na které
+cyklus náhodou byl — `--shell-demo barva` teď na záložce zaparkuje.
+
+**⚠️ `--timeline-bench` na tomhle stroji NEPROŠEL — a není to M8.** Hlásí 2–5 vypadlých tiků při
+nejdelší mezeře 33,3 ms (jeden přeskočený tik), ale **práce na tik je jen 0,59 ms** proti rozpočtu
+16,67 ms, takže hlavní vlákno zaneprázdněné nebylo. A/B na tomtéž stavu stroje:
+
+| stav | vypadlé tiky (3 běhy) | medián práce |
+|---|---|---|
+| bez M8 (`git stash`) | 3 / 4 / 2 | 0,59 ms |
+| s M8 | 3 / 3 / 2 | 0,59 ms |
+
+Load average 1,9–2,1 — stroj má zátěž po desítkách buildů a spuštění appky v téhle session.
+**Kritérium fáze 2 se tedy musí přeměřit na klidném stroji**; do té doby ho neprohlašuju za splněné
+ani za rozbité. Je to zapsané jako otevřená položka, ne odmávnuté.
+
+**Přiznané chování k rozhodnutí:** šestnáctisnímkový klip dostal při žádaných 30+30 fade **0/16** —
+celý klip je dojezd a nájezd zmizel. Vychází to z `setAudioFadesOnSelection` (F17), který srazí
+nájezd na `délka − dojezd`. Rozdělit zbytek napůl by bylo asi milejší, ale je to změna chování
+hromadné operace, ne úklid.
+
 ---
 
 ## 5. Roadmapa

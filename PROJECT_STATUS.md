@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (FÁZE 18 ROZJETÁ — hotové moduly 1, 2, 3 a 7)*
+*Naposled aktualizováno: 29. 07. 2026 (FÁZE 18 — hotové etapy A a C: moduly 1, 2, 3, 7, 8)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,9 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (453, 29
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 8 — záložky Barva, Zvuk a Info.** Plán celé fáze je ve `FAZE_18_UI.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 4 — výšky stop 136/78/40 a hlavičky 104 (začátek etapy B).** Plán celé fáze je ve `FAZE_18_UI.md`.
 
-**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
+**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
 ⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
 
@@ -26,6 +26,35 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
+
+✅ **Modul 8 — záložky Barva, Zvuk a Info (29. 07. 2026). ETAPA C HOTOVÁ.**
+
+  - **Barva:** náhled před/po **ze skutečného snímku klipu** a vzorky pěti presetů renderované
+    **týmž `ColorPresetFilter`em jako export** — namíchaný čtvereček by se s presetem rozešel
+    a nikdo by nepoznal, které z těch dvou lže. Zdrojový snímek se drží dekódovaný, takže posuvník
+    síly je jen render CoreImage, ne čtení souboru.
+  - **Zvuk:** fade posuvníky **ve snímcích i v sekundách** — dosud šly fade nastavit JEN tažením
+    úchytu na klipu (F16) a přesnou délku nebylo kde napsat. Délky se čtou přes
+    `effectiveAudioFades` (trim smí klip zkrátit pod součet fade a model to schválně nezařezává).
+    Dál mute a hlasitost stopy s poznámkou, že posuvník **jen ztišuje**, a hlasitost dodávky
+    z posledního exportu.
+  - **Info:** zdroj, naměřené časování a verdikt VFR, mez čistého zpomalení, čas natočení
+    **s přiznaným zdrojem** (datum souboru oranžově), proxy s poznámkou, že export jde z originálů.
+  - **Ověřeno `--panel-check`, část D:** preset na **5 klipech = jeden krok ⌘Z** (regrese F17/M2);
+    fade se rozdá třem různě dlouhým klipům se zaříznutím per klip — **90 → 30/30, 40 → 10/30,
+    16 → 0/16**.
+  - **Screenshot chytil dvě věci, které měření nevidělo:** mez čistého zpomalení se vypisovala jako
+    „0,502667×" (`%g` je pro UI špatný formát) a koukanec nešlo nasměrovat na konkrétní záložku —
+    `--shell-demo barva` teď na ní zaparkuje.
+  - **⚠️ `--timeline-bench` na tomhle stroji NEPROŠEL (2–5 vypadlých tiků) — ale není to M8.**
+    Práce na tik je 0,59 ms proti rozpočtu 16,67, takže hlavní vlákno zaneprázdněné nebylo. A/B na
+    tomtéž stavu stroje: **bez M8 3/4/2, s M8 3/3/2**, týž medián. Load average 1,9–2,1 po desítkách
+    buildů v session. **Kritérium fáze 2 se musí přeměřit na klidném stroji** — do té doby ho
+    neprohlašuju za splněné ani za rozbité. **OTEVŘENÁ POLOŽKA.**
+  - **Přiznané chování k rozhodnutí:** šestnáctisnímkový klip dostal při žádaných 30+30 fade **0/16**
+    (celý klip je dojezd, nájezd zmizel) — vychází to z `setAudioFadesOnSelection` z F17.
+  - *Koukanec rukou (v seznamu): náhled před/po na reálném záběru, fade posuvníky, Info na klipu
+    z telefonu hosta.*
 
 ✅ **Modul 7 — připnutý panel 452 se záložkami (29. 07. 2026).**
 

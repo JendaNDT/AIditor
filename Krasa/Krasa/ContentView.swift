@@ -3770,7 +3770,7 @@ struct ContentView: View {
                 } else if arguments.contains("--shell-gpu") {
                     await model.runShellGPUComparison(only: Array(explicit))
                 } else if arguments.contains("--shell-demo") {
-                    await model.runShellDemo()
+                    await model.runShellDemo(tab: explicit.first)
                 } else if arguments.contains("--status-check") {
                     await model.verifyAnalysisStatus()
                 } else if arguments.contains("--layers-check") {

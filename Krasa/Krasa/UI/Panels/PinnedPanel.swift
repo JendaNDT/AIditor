@@ -17,10 +17,9 @@
 import SwiftUI
 import TimelineModel
 
-/// Která záložka panelu je vybraná. `Zvuk` a `Info` doplní modul 8 —
-/// do té doby se NEUKAZUJÍ. Prázdná záložka je horší než chybějící.
+/// Která záložka panelu je vybraná. Všechny čtyři od modulu 8.
 enum PanelTab: String, CaseIterable, Identifiable {
-    case speed, color
+    case speed, color, audio, info
 
     var id: String { rawValue }
 
@@ -28,6 +27,8 @@ enum PanelTab: String, CaseIterable, Identifiable {
         switch self {
         case .speed: return "Rychlost"
         case .color: return "Barva"
+        case .audio: return "Zvuk"
+        case .info: return "Info"
         }
     }
 }
@@ -111,9 +112,9 @@ struct PinnedPanel: View {
             // Fotka: rampa je na ní zakázaná (freeze frame se dělá fotkou),
             // takže místo záložky Rychlost jde Ken Burns.
             scrolled {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     PhotoInspector(timeline: timeline, clipID: clip.id)
-                    ColorGradePanel(timeline: timeline, clipID: clip.id)
+                    ColorTab(timeline: timeline, clipID: clip.id)
                 }
             }
         } else if let clip = selectedClip {
@@ -159,7 +160,11 @@ struct PinnedPanel: View {
         case .speed:
             SpeedTab(timeline: timeline, model: model, clipID: clipID)
         case .color:
-            ColorGradePanel(timeline: timeline, clipID: clipID)
+            ColorTab(timeline: timeline, clipID: clipID)
+        case .audio:
+            AudioTab(timeline: timeline, model: model, clipID: clipID)
+        case .info:
+            InfoTab(timeline: timeline, model: model, clipID: clipID)
         }
     }
 

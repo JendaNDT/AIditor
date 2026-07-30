@@ -550,7 +550,7 @@ extension AppModel {
 
     /// Postaví osu s klipy, presetem a rampou, aby bylo vidět chrome
     /// i čipy nad obrazem. Nic neměří — je to pro oko a screenshot.
-    func runShellDemo() async {
+    func runShellDemo(tab requested: String? = nil) async {
         // Všechny video assety, ne jeden — osa pak vypadá jako v návrhu
         // (různá jména klipů) a analýzy mají co počítat, takže je čip
         // v toolbaru vidět dost dlouho na to, aby šel vyfotit.
@@ -597,7 +597,26 @@ extension AppModel {
             host.window?.makeKeyAndOrderFront(nil)
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
-        try? await Task.sleep(nanoseconds: 30_000_000_000)
+
+        // `--shell-demo barva` zaparkuje na jedné záložce; bez argumentu se
+        // prochází všechny. Parkování je tam kvůli screenshotům: čekat, až
+        // cyklus dojede na tu správnou, znamená hádat, jak dlouho trval sken
+        // klipů — a to se pokaždé liší.
+        if let requested,
+           let tab = PanelTab.allCases.first(where: {
+               $0.rawValue == requested.lowercased()
+                   || $0.label.lowercased() == requested.lowercased()
+           }) {
+            panelTab = tab
+            print("panel: \(tab.label) (zaparkováno)")
+            try? await Task.sleep(nanoseconds: 36_000_000_000)
+        } else {
+            for tab in PanelTab.allCases {
+                panelTab = tab
+                print("panel: \(tab.label)")
+                try? await Task.sleep(nanoseconds: 9_000_000_000)
+            }
+        }
     }
 
     // MARK: - Pomocníci
@@ -797,7 +816,100 @@ extension AppModel {
                      widthWithout - widthWithPanel, KrasaUI.Metric.pinnedPanelWidth + 1))
 
         print("")
+        print("=== D) záložky Barva a Zvuk na VÝBĚRU (modul 8) ===")
+        failures += await verifyPanelBulkTabs()
+
+        print("")
         print(failures == 0 ? "✅ PANEL SEDÍ" : "❌ neshod: \(failures)")
+    }
+
+    /// Kritérium modulu 8: preset na pěti klipech je jeden krok ⌘Z (regrese
+    /// na F17/M2) a fade z panelu se rozdá všem vybraným zvukovým klipům
+    /// **s vlastním zaříznutím** — krátký klip dostane, co unese.
+    private func verifyPanelBulkTabs() async -> Int {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return 1
+        }
+
+        var project = Project.empty()
+        project.addAsset(source)
+        let videoTrack = project.timeline.tracks[0].id
+        guard let audioTrack = project.timeline.tracks.first(where: { $0.kind == .audio })?.id else {
+            print("❌ projekt nemá zvukovou stopu"); return 1
+        }
+
+        var videoIDs: [ClipID] = []
+        var audioIDs: [ClipID] = []
+        do {
+            for index in 0..<5 {
+                let clip = Clip(assetID: source.id, timelineStart: Frames(index * 60),
+                                duration: Frames(60),
+                                sourceStart: project.timeline.sourceTime(Frames(index * 90)))
+                try project.insert(clip, onTrack: videoTrack)
+                videoIDs.append(clip.id)
+            }
+            // Zvukové klipy RŮZNĚ DLOUHÉ — jinak by se zaříznutí nedalo poznat.
+            var start = 0
+            for length in [90, 40, 16] {
+                let clip = Clip(assetID: source.id, timelineStart: Frames(start),
+                                duration: Frames(length),
+                                sourceStart: project.timeline.sourceTime(.zero))
+                try project.insert(clip, onTrack: audioTrack)
+                audioIDs.append(clip.id)
+                start += length + 10
+            }
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return 1
+        }
+        timeline.project = project
+
+        var failures = 0
+        func check(_ ok: Bool, _ text: String) {
+            if !ok { failures += 1 }
+            print("\(ok ? "✅" : "❌") \(text)")
+        }
+
+        // Barva na pěti klipech = jeden undo krok.
+        timeline.selectClips(Set(videoIDs))
+        timeline.setColorGradeOnSelection(ColorGrade(preset: .warmFilm, intensity: 0.62))
+        let graded = videoIDs.filter { timeline.project.timeline.clip($0)?.colorGrade != nil }.count
+        check(graded == 5, "preset dopadl na \(graded) z 5 klipů")
+        timeline.undoStep()
+        let afterUndo = videoIDs.filter { timeline.project.timeline.clip($0)?.colorGrade != nil }.count
+        check(afterUndo == 0, "⌘Z vrátil všech 5 naráz (zbylo \(afterUndo))")
+
+        // Fade na třech různě dlouhých zvukových klipech.
+        timeline.selectClips(Set(audioIDs))
+        timeline.setAudioFadesOnSelection(AudioFades(fadeIn: Frames(30), fadeOut: Frames(30)))
+        var capped = 0
+        for id in audioIDs {
+            guard let clip = timeline.project.timeline.clip(id),
+                  let fades = timeline.project.effectiveAudioFades(of: clip) else { continue }
+            let total = fades.fadeIn + fades.fadeOut
+            print(String(format: "   klip %d snímků → nájezd %d, dojezd %d",
+                         clip.duration.count, fades.fadeIn.count, fades.fadeOut.count))
+            if total <= clip.duration { capped += 1 }
+        }
+        check(capped == audioIDs.count,
+              "každý klip dostal, co unese (\(capped) z \(audioIDs.count) v mezích své délky)")
+
+        // Šestnáctisnímkový klip NESMÍ dostat 30+30 — na tom se pozná, že se
+        // zařezává per klip, ne jednou hodnotou pro všechny.
+        if let shortest = audioIDs.last,
+           let clip = timeline.project.timeline.clip(shortest),
+           let fades = timeline.project.effectiveAudioFades(of: clip) {
+            check(fades.fadeIn.count < 30 || fades.fadeOut.count < 30,
+                  "nejkratší klip má fade zaříznutý pod žádaných 30 snímků")
+        }
+
+        timeline.undoStep()
+        let stillFaded = audioIDs.filter {
+            timeline.project.timeline.clip($0)?.audioFades != nil
+        }.count
+        check(stillFaded == 0, "⌘Z vrátil fade na všech klipech naráz")
+        return failures
     }
 
     // MARK: Pomocníci

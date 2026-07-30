@@ -250,10 +250,14 @@ struct SpeedTab: View {
     }
 
     /// „0,25×" česky — desetinná čárka, ne tečka.
+    ///
+    /// Nejvýš tři desetinná místa a bez koncových nul: `%g` dělalo z meze
+    /// čistého zpomalení „0,502667×", což je číslo, které nikdo nečte
+    /// (chyceno screenshotem záložky Info).
     static func speedLabel(_ speed: Double) -> String {
-        let text = speed == speed.rounded()
-            ? String(format: "%.0f", speed)
-            : String(format: "%g", speed)
+        var text = String(format: "%.3f", speed)
+        while text.hasSuffix("0") { text.removeLast() }
+        if text.hasSuffix(".") { text.removeLast() }
         return text.replacingOccurrences(of: ".", with: ",") + "×"
     }
 

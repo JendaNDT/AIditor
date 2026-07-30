@@ -52,6 +52,9 @@
 		F1820000000000000000000A /* TimelineLayerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000A /* TimelineLayerBar.swift */; };
 		F1820000000000000000000B /* PinnedPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000B /* PinnedPanel.swift */; };
 		F1820000000000000000000C /* SpeedTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000C /* SpeedTab.swift */; };
+		F1820000000000000000000D /* ColorTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000D /* ColorTab.swift */; };
+		F1820000000000000000000E /* AudioTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000E /* AudioTab.swift */; };
+		F1820000000000000000000F /* InfoTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000F /* InfoTab.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -96,6 +99,9 @@
 		F1810000000000000000000A /* TimelineLayerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineLayerBar.swift; sourceTree = "<group>"; };
 		F1810000000000000000000B /* PinnedPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedPanel.swift; sourceTree = "<group>"; };
 		F1810000000000000000000C /* SpeedTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeedTab.swift; sourceTree = "<group>"; };
+		F1810000000000000000000D /* ColorTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorTab.swift; sourceTree = "<group>"; };
+		F1810000000000000000000E /* AudioTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTab.swift; sourceTree = "<group>"; };
+		F1810000000000000000000F /* InfoTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoTab.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -222,6 +228,9 @@
 			children = (
 				F1810000000000000000000B /* PinnedPanel.swift */,
 				F1810000000000000000000C /* SpeedTab.swift */,
+				F1810000000000000000000D /* ColorTab.swift */,
+				F1810000000000000000000E /* AudioTab.swift */,
+				F1810000000000000000000F /* InfoTab.swift */,
 			);
 			path = Panels;
 			sourceTree = "<group>";
@@ -345,6 +354,9 @@
 				F1820000000000000000000A /* TimelineLayerBar.swift in Sources */,
 				F1820000000000000000000B /* PinnedPanel.swift in Sources */,
 				F1820000000000000000000C /* SpeedTab.swift in Sources */,
+				F1820000000000000000000D /* ColorTab.swift in Sources */,
+				F1820000000000000000000E /* AudioTab.swift in Sources */,
+				F1820000000000000000000F /* InfoTab.swift in Sources */,
 				F18200000000000000000007 /* LegacySettingsPanel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -408,6 +408,64 @@ celý klip je dojezd a nájezd zmizel. Vychází to z `setAudioFadesOnSelection`
 nájezd na `délka − dojezd`. Rozdělit zbytek napůl by bylo asi milejší, ale je to změna chování
 hromadné operace, ne úklid.
 
+### ✅ M9 — knihovna médií a přetažení (30. 07. 2026) · ETAPA C HOTOVÁ
+
+**Postaveno:** `UI/Library/LibraryPane.swift` a `LibraryCard.swift` (nové), cíl přetažení
+v `Timeline/TimelineDocumentView.swift`, zapojení v `AppShell`. Kontrola
+`Measure/LibraryChecks.swift` (`--library-check`, **23 ověření, 0 neshod**).
+**Zavírá potíž #6 ze zadání** — dosud šel materiál vidět jen jako klipy na ose.
+
+**Pravidlo 6 odškrtnuté před psaním kódu:** `registerForDraggedTypes(_:)`, override metod
+`NSDraggingDestination` (`draggingEntered/Updated/Exited/Ended`, `performDragOperation`)
+i SwiftUI `.onDrag { NSItemProvider(object: NSString) }` **existují a přeloží se** s deployment
+targetem macOS 14 (typecheck proti `MacOSX26.5.sdk`). ⚠️ `namesOfPromisedFilesDropped` vyžaduje
+`override` — je na `NSObject`, ne jen v protokolu.
+
+**Karta 94 bodů** (náhled 62 + popis 32, pevná výška — past pojmenovaná v zadání): náhled
+z `ThumbnailStore` s hranou **104** (vlastní kapsa mezipaměti, takže si knihovna a osa navzájem
+nezahazují dlaždice; poster je DRUHÁ dlaždice ≈ 3,5 s, protože první snímek souboru bývá rozjezd
+kamery), badge délky vpravo nahoře, `120p` a `VFR` vlevo dole, ryska měkké ostrosti vpravo dole,
+datum ze souboru **oranžově**. Dvojklik ukáže materiál na ose (vybere první klip a přesune hlavu).
+
+**Přetažení:** `AssetID.rawValue` na pasteboardu → osa si asset najde v projektu. Video se zvukem
+se pokládá jako **svázaná dvojice** (jako při importu), fotka a hudba na své druhy stop, jinam se
+drop odmítne. Náhled vložení používá **tytéž duchy** jako tažení klipu — jedno místo, kde se maže.
+
+**⚠️ O odmítnutí rozhoduje ZKUŠEBNÍ BĚH operace na kopii projektu, ne vlastní tabulka pravidel**
+(vzorec z F14: „o zapnutí položky menu rozhoduje zkušební běh"). Vložení je **jeden undo krok**
+i u dvojice a odmítnutý drop nezmění v projektu nic.
+
+| ověření | naměřeno |
+|---|---|
+| filtry Vše / Video / Fotky / Hudba | 7 / 5 / 1 / 1, nepřekrývají se a pokrývají všechno |
+| drop na V1 | klip přistál na snímku **120** = přesně tam, kde byl náhled |
+| svázaná dvojice | společný `LinkID`, **⌘Z vzal obojí jedním krokem** |
+| odmítnutí (hudba na V1, video na A2, obsazené místo) | operace `[]`, náhled **červený**, projekt beze změny |
+| fotka na V1 | projde (je to obrazový klip) |
+
+**⚠️ Kontrola odhalila skutečnou chybu v kódu dropu.** První verze měla podmínku „projekt po
+vložení musí být **bez** porušených invariantů". `validate()` ale hlídá i věci, které s dropem
+nesouvisí — a když do projektu přišel asset bez naměřené frekvence, **zamknul se tím celý drop**,
+bez vysvětlení proč. Porovnává se teď **počet** porušení před a po. (Ten neplatný asset si vyrobila
+sama kontrola; chyba, kterou tím našla, byla naše.)
+
+**⚠️ Screenshot chytil tři věci** (počtvrté v řadě): ① **badge se nekreslily vůbec** —
+`Image.resizable().aspectRatio(.fill)` nahlásí větší velikost, než jaká mu byla nabídnutá, takže se
+`ZStack` rozvrhl podle obrázku a `clipped()` odřízl i popisky; přesunuté do `overlay` ZA rámcem;
+② naměřená frekvence („59,68 fps") vytlačovala z karty čas natočení — v kartě je teď `60p` a přesné
+číslo v tooltipu, protože o nekonstantním časování mluví badge `VFR`; ③ slow-mo klip ukazoval `VFR`
+**místo** `120p`, přestože důležitější je to druhé — teď se kreslí obojí.
+
+**Regrese:** `--shell-check` dostal novou hlídanou hodnotu **obraz zprava 347** (knihovna 330 +
+předěl + odsazení) a prošel v okně i na celé obrazovce; plocha obrazu zůstala **1208×680**, protože
+náhled je omezený VÝŠKOU horního pásu, ne šířkou. `--timeline-bench` 0 vypadlých tiků,
+`--overview-check`, `--select-check` (15) a `--range-check` (9) beze změny.
+
+*Koukanec rukou (v seznamu): přetažení karty na V1, A2 a na obsazené místo, filtry, dvojklik na
+kartu, patička s proxy.*
+
+---
+
 ### ✅ M6 — přehled celé osy (30. 07. 2026) · etapa B hotová
 
 **Postaveno:** `Timeline/TimelineOverviewView.swift` (nový) — pás 46 bodů pod stopami: popisek
@@ -852,14 +910,14 @@ Podle rozhodnutí z 2.1 jde **všech 13 modulů před svatbou**, v jednom sledu.
 | M4 ✅ | výšky stop, hlavičky 104 | B | nízké | `--layout-check` |
 | M5 ✅ | **miniatury na klipech** | B | **R1 — nejvyšší, BRÁNA DRŽÍ** | `--timeline-bench`, `--thumb-check` |
 | M6 ✅ | přehled celé osy | B | střední | `--overview-check` |
-| M9 | knihovna médií a přetažení | C | střední | `--library-check` |
+| M9 ✅ | knihovna médií a přetažení | C | střední | `--library-check` |
 | M10 | list exportu | D | střední | `--export-check`, `--export-ui-check` |
 | M11 | panel přepisu řeči | D | střední | `--transcript-ui-check` |
 | M12 | prázdný start | D | nízké | `--empty-start-check` |
 | M13 | fullscreen aplikace a náhledu | D | střední | `--fullscreen-ui-check` |
 
-**Pořadí: M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 → M10 → M11 → M12
-→ M13 → 🚧 KILL-GATE 1.** (Etapy A, B i C hotové — zbývá M9 z etapy C a celá etapa D.)
+**Pořadí: M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 → M11
+→ M12 → M13 → 🚧 KILL-GATE 1.** (Etapy A, B i C jsou HOTOVÉ; zbývá celá etapa D — obrazovky.)
 
 Proč zrovna takhle, když se jede všechno: **ergonomie napřed, kosmetika vzadu.** Prvních pět modulů
 zavírá potíže #2, #3 a #4 ze zadání a nepřidává funkce — kdyby došel čas nebo se něco zadrhlo, jsou

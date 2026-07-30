@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotové moduly 1, 2, 3, 7, 8, 4, 5, 6; etapy A, B, C)*
+*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotové moduly 1, 2, 3, 7, 8, 4, 5, 6, 9; ETAPY A, B, C HOTOVÉ)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,9 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (453, 29
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 9 — knihovna médií a přetažení** (pás 330 px vpravo v horním pásu: karty s náhledy z `ThumbnailStore`, filtry, přetažení do osy; brána `--library-check`). Plán celé fáze je ve `FAZE_18_UI.md`. **Etapy A, B i C jsou hotové až na M9; nejrizikovější modul plánu (M5, miniatury) bránu R1 uhájil.**
+**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 10 — list exportu** (obrazovka exportu: nastavení → průběh → hotovo; brány `--export-check` a `--export-ui-check`). Plán celé fáze je ve `FAZE_18_UI.md`. **Etapy A, B i C jsou HOTOVÉ — devět modulů ze třinácti; zbývá etapa D, tedy obrazovky (export, přepis, prázdný start, fullscreeny).**
 
-**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
+**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
 ⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
 
@@ -26,6 +26,50 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
+
+✅ **Modul 9 — knihovna médií a přetažení na osu (30. 07. 2026). ETAPA C HOTOVÁ.**
+
+  - **Pás 330 bodů vpravo v horním pásu:** hlavička („Knihovna · 5 · chronologicky" + ＋), filtry
+    Vše / Video / Fotky / Hudba s počty, mřížka dvou sloupců s kartami, patička s tlačítkem
+    „Uspořádat na V1 chronologicky" a stavem proxy. **Zavírá potíž #6 ze zadání** — dosud šel
+    materiál vidět jen jako klipy na ose, kdo chtěl vědět, co má, koukal do Finderu.
+  - **Karta 94 bodů** (náhled 62 + popis 32, pevná výška — past pojmenovaná v zadání): náhled
+    z `ThumbnailStore` s hranou **104** (vlastní kapsa mezipaměti, takže si knihovna a osa navzájem
+    nezahazují dlaždice), poster je DRUHÁ dlaždice (≈ 3,5 s — první snímek souboru bývá rozjezd
+    kamery), badge délky, `120p` a `VFR`, ryska měkké ostrosti, datum ze souboru **oranžově**.
+    Dvojklik ukáže materiál na ose. Ryska kvality se kreslí jen u materiálu NA OSE: klasifikace
+    ostrosti je v modelu vázaná na klip a druhá tabulka prahů by se rozešla (poučení z F13).
+  - **Pravidlo 6 odškrtnuté před psaním kódu:** `registerForDraggedTypes`, override metod
+    `NSDraggingDestination` i SwiftUI `.onDrag { NSItemProvider(object: NSString) }` existují
+    a přeloží se na macOS 14 (typecheck proti SDK). ⚠️ `namesOfPromisedFilesDropped` chce
+    `override` — je na `NSObject`, ne jen v protokolu.
+  - **Přetažení:** `AssetID` na pasteboardu, náhled vložení přes TYTÉŽ duchy jako tažení klipu,
+    video se zvukem jako **svázaná dvojice** (jako při importu), fotka a hudba na své druhy stop.
+    **O odmítnutí rozhoduje zkušební běh operace na kopii projektu**, ne vlastní tabulka pravidel
+    (vzorec z F14). Vložení je **jeden undo krok** i u dvojice; odmítnutý drop nezmění nic.
+  - **Ověřeno `--library-check`, 23 kontrol** — a jde SKUTEČNOU cestou protokolu (vlastní
+    pasteboard, `draggingEntered` → `draggingUpdated` → `performDragOperation`), ne zkratkou do
+    vnitřní funkce: filtry 7 / 5 / 1 / 1 bez překryvu; drop na V1 přistál na snímku **120**, tedy
+    přesně tam, kde byl náhled; dvojice má společný `LinkID` a **⌘Z ji vzal jedním krokem**; hudba
+    na V1, video na A2 i obsazené místo se odmítly s **červeným** náhledem a bez jakékoli změny
+    projektu; fotka na V1 prošla.
+  - **⚠️ Kontrola odhalila skutečnou chybu v kódu dropu:** podmínka „projekt po vložení musí být
+    BEZ porušených invariantů" udělala z jedné cizí vady (asset bez naměřené frekvence) **zámek na
+    celé vkládání**, bez vysvětlení proč. Porovnává se teď POČET porušení před a po. Neplatný asset
+    si vyrobila sama kontrola — chyba, kterou tím našla, byla naše.
+  - **⚠️ Screenshot chytil tři věci, počtvrté v řadě:** ① **badge se nekreslily vůbec** —
+    `Image.resizable().aspectRatio(.fill)` nahlásí větší velikost, než jakou dostal, takže se `ZStack`
+    rozvrhl podle obrázku a `clipped()` odřízl i popisky; přesunuté do `overlay` za rámcem;
+    ② naměřená frekvence („59,68 fps") vytlačovala z karty čas natočení — v kartě je `60p`, přesné
+    číslo v tooltipu, o nekonstantním časování mluví badge `VFR`; ③ slow-mo klip ukazoval `VFR`
+    místo `120p`, přestože důležitější je to druhé — teď obojí.
+  - **Regrese:** `--shell-check` dostal novou hlídanou hodnotu **obraz zprava 347** (knihovna 330 +
+    předěl + odsazení) a prošel v okně i na celé obrazovce. Plocha obrazu zůstala **1208×680**,
+    protože náhled je omezený VÝŠKOU horního pásu, ne šířkou — knihovna mu tedy nic neubrala.
+    `--timeline-bench` 0 vypadlých tiků (medián 1,86 ms), `--overview-check`, `--select-check` (15)
+    a `--range-check` (9) beze změny.
+  - *Koukanec rukou (v seznamu): přetažení karty na V1, A2 a na obsazené místo, filtry, dvojklik na
+    kartu, patička s proxy.*
 
 ✅ **Modul 6 — přehled celé osy (30. 07. 2026). ETAPA B HOTOVÁ.**
 

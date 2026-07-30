@@ -6,8 +6,8 @@ TestClips/
 xcuserdata/
 
 # měřicí výstupy
-krasa_gpu*.txt
+aiditor_gpu*.txt
 gpu*.txt
-Krasa*.txt
+AIditor*.txt
 fullscreen*.txt
 build_log.txt

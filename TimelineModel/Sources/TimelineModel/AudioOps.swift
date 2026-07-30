@@ -1,6 +1,6 @@
 //
 //  AudioOps.swift
-//  Projekt Krása — TimelineModel
+//  Projekt AIditor — TimelineModel
 //
 //  Fáze 7, modul 2: hlasitost a mute zvukové stopy. Mix je vlastnost
 //  STOPY, ne klipu — Alena míchá „řeč proti hudbě" (A1 proti A2),

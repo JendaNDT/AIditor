@@ -1,6 +1,6 @@
 # TimelineModel
 
-Logika časové osy pro Projekt Krása. **Čistý Swift, žádné AVFoundation, žádné UI.**
+Logika časové osy pro Projekt AIditor. **Čistý Swift, žádné AVFoundation, žádné UI.**
 
 ```
 swift test

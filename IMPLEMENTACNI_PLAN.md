@@ -1,4 +1,4 @@
-# Projekt Krása – Implementační plán
+# Projekt AIditor – Implementační plán
 *Verze 1.0 · 25. 7. 2026 · režim 30+ h týdně*
 
 ---
@@ -315,7 +315,7 @@ Nepoužívej `SwiftWhisper` — je zamrzlý na whisper.cpp z jara 2023 a nemá M
 
 **+ Migrace kompozice na `AVVideoComposition.Configuration` — NEHOTOVÁ, a je to správně.**
 ⚠️ **Oprava zápisu 30. 07. 2026:** dřívější verze tohohle odstavce tvrdila, že migrace „hotová" je.
-Není — ověřeno grepem, v `Krasa/` není ani jedno `#available(macOS 26.0, *)` a `CompositionBuilder`
+Není — ověřeno grepem, v `AIditor/` není ani jedno `#available(macOS 26.0, *)` a `CompositionBuilder`
 staví výhradně na `AVMutableVideoComposition`. A tak to má zatím zůstat: deployment target je 14.0,
 kde `Configuration` NEEXISTUJE, takže migrace znamená přidat druhou větev, ne vyměnit první
 (pravidlo v `CLAUDE.md`). Je to úkol před vydáním; dokud se appka nešíří, nemá kdo z něj mít užitek.
@@ -438,7 +438,7 @@ Při tom se ověří i kritérium fáze 4 (plynulost na 200GB reálném materiá
 **Stav k 30. 07. 2026:** ✅ **fáze 17 hotová** (ergonomie střihu — osa sleduje hlavu, JKL,
 multi-výběr, schránka, chronologie, export výřezu). ✅ **Hotová je i fáze 18 — ale JINÁ, než
 měla tahle vlna v plánu:** 29. 07. 2026 zařadil autor před svatbu přestavbu UI podle
-`design_handoff_krasa_ui/` a ta dostala číslo 18 (plán v `FAZE_18_UI.md`, třináct modulů,
+`design_handoff_aiditor_ui/` a ta dostala číslo 18 (plán v `FAZE_18_UI.md`, třináct modulů,
 hotovo 30. 07. 2026).
 
 ⚠️ **Proto se zbytek vlny PŘEČÍSLOVAL o jedna nahoru** (V2 z 18 na 19, ducking na 20,
@@ -486,7 +486,7 @@ předpokládal: vypíná se i během live scrollu, ne jen při scrubování a ta
 ### ✅ FÁZE 18 — Přestavba UI podle design handoffu → v1.2 · HOTOVÁ 30. 07. 2026
 
 **Do plánu přibyla 29. 07. 2026 na pokyn autora**, mimo původní třetí vlnu — a s výslovným zrušením
-pravidla „do kill-gate se nepřidávají funkce". Zadáním je `design_handoff_krasa_ui/` (šest hi-fi obrazovek,
+pravidla „do kill-gate se nepřidávají funkce". Zadáním je `design_handoff_aiditor_ui/` (šest hi-fi obrazovek,
 rozměry v bodech na dodržení), plán a roadmapa všech třinácti modulů ve **`FAZE_18_UI.md`**.
 
 Třináct modulů ve čtyřech etapách: **A** rám okna, stavový řádek, lišta osy · **B** výšky stop, miniatury
@@ -636,7 +636,7 @@ Odložit naopak klidně můžeš: cenu, App Store vs DMG, slovenštinu, LUTs, n�
 
 Není to selhání, je to jiný produkt.
 
-**„Krása Ramp"** — jedna mini-appka. Nahodíš klip, nakreslíš křivku, exportuješ. Fáze 0–1, 3, 5 bez timeline. Zhruba 6 týdnů místo 6 měsíců. Prodejné za 490 Kč. Dokončitelné.
+**„AIditor Ramp"** — jedna mini-appka. Nahodíš klip, nakreslíš křivku, exportuješ. Fáze 0–1, 3, 5 bez timeline. Zhruba 6 týdnů místo 6 měsíců. Prodejné za 490 Kč. Dokončitelné.
 
 **„Svatební asistent"** — checklist, záběrový plán, kalkulace dat a baterek jako PWA v Reactu, který umíš. Pár dnů. Ověří niku bez řádky Swiftu.
 
@@ -659,7 +659,7 @@ Poctivě, ať víš, kde stojíš na měkkém:
 
 Věci, na které se narazilo a nechaly se být. Ne chyby k opravě dnes, ale ať se na ně nezapomene.
 
-- **`open Krasa.app --args --benchmark` se zasekne.** Appka nastartuje, ale měření nedoběhne a report nevznikne — po 15 minutách pořád běžela. Spuštění binárky přímo (`Krasa.app/Contents/MacOS/Krasa --benchmark …`) funguje spolehlivě a navíc je vidět stdout. Příčina nezjištěná. Netlačí to, protože přímé spuštění stačí — ale kdyby se měření mělo pouštět pravidelně nebo z CI, bude to potřeba vyřešit.
+- **`open AIditor.app --args --benchmark` se zasekne.** Appka nastartuje, ale měření nedoběhne a report nevznikne — po 15 minutách pořád běžela. Spuštění binárky přímo (`AIditor.app/Contents/MacOS/AIditor --benchmark …`) funguje spolehlivě a navíc je vidět stdout. Příčina nezjištěná. Netlačí to, protože přímé spuštění stačí — ale kdyby se měření mělo pouštět pravidelně nebo z CI, bude to potřeba vyřešit.
 
 ---
 

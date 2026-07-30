@@ -1,6 +1,6 @@
 //
 //  EditList.swift
-//  Projekt Krása / ProbeKit
+//  Projekt AIditor / ProbeKit
 //
 //  Edit list stopy. Sdílené — sonda ho hlásí, nástroj na zploštění se podle
 //  něj musí zařídit, protože každý testovací klip zahazuje prvních 44 ms zvuku.

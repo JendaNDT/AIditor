@@ -1,6 +1,6 @@
 //
 //  Queries.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Tažení potřebuje vědět, KAM SMÍ, ne se dozvědět po překročení, že nesmělo.
 //  Bez těchhle funkcí si meze dopočítá AppKit view samo — a od té chvíle jsou

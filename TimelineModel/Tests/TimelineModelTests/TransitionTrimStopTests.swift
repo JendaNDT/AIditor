@@ -1,6 +1,6 @@
 //
 //  TransitionTrimStopTests.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Fáze 16, modul 3: zarážka trimu o rameno přechodu.
 //

@@ -1,6 +1,6 @@
 //
 //  TitleTests.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Fáze 11, modul 1: stopa T1 a titulkové klipy.
 //

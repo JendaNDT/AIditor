@@ -1,6 +1,6 @@
 //
 //  Model.swift
-//  Projekt Krása / MediaProbe
+//  Projekt AIditor / MediaProbe
 //
 //  Tvar výsledku sondy. Měřicí jádro (TimingStats, klasifikace vzorků,
 //  edit list) žije v ProbeKit, ať ho může použít i nástroj na zploštění.

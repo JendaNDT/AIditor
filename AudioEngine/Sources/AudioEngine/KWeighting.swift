@@ -1,6 +1,6 @@
 //
 //  KWeighting.swift
-//  Projekt Krása — AudioEngine (fáze 7)
+//  Projekt AIditor — AudioEngine (fáze 7)
 //
 //  K-váhovací filtr podle ITU-R BS.1770-4: shelf modelující hlavu
 //  posluchače + RLB horní propust. Standard uvádí koeficienty jen pro

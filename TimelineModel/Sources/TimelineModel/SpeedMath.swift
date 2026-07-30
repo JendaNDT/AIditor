@@ -1,6 +1,6 @@
 //
 //  SpeedMath.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Most mezi rychlostní křivkou modelu (uzly kotvené ve ZDROJOVÉM čase,
 //  aby zpomalení po trimu zůstalo na události) a `SpeedRampEngine`

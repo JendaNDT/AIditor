@@ -1,6 +1,6 @@
 //
 //  SpeedRampTests.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Rampová větev `sourceConsumption` / `sourceOffset` a všeho, co na nich
 //  stojí. Referenční hodnota z `SpeedRampEngine`: klasický ramp

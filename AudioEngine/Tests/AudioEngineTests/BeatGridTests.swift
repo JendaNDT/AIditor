@@ -1,6 +1,6 @@
 //
 //  BeatGridTests.swift
-//  Projekt Krása — AudioEngine (fáze 14, modul 1)
+//  Projekt AIditor — AudioEngine (fáze 14, modul 1)
 //
 //  Syntetické klikové stopy se ZNÁMÝM tempem — detektor musí tempo
 //  i fázi najít v toleranci. Fáze se porovnává MODULO perioda: mřížka

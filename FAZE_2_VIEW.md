@@ -434,7 +434,7 @@ dokud předchozí neběží.**
 
 | # | krok | hotovo když |
 |---|---|---|
-| 1 | `TimelineModel` jako lokální balíček v `Krasa.xcodeproj` | projekt se přeloží a `import TimelineModel` projde |
+| 1 | `TimelineModel` jako lokální balíček v `AIditor.xcodeproj` | projekt se přeloží a `import TimelineModel` projde |
 | 2 | `TimelineDocumentView` v `NSScrollView`, `isFlipped`, pruhy stop | vidíš tři prázdné pruhy V1/A1/A2 a jde jimi scrollovat |
 | 3 | pravítko + hlavičky stop, synchronizace přes `boundsDidChange` | scrolluješ osou a timecode i jména jedou s ní |
 | 4 | `TimelineLayout` + `LayerDiff` v modelu, **s testy** | `swift test` prochází, ve view zatím nic |

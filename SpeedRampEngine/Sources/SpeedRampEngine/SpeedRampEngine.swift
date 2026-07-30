@@ -1,6 +1,6 @@
 //
 //  SpeedRampEngine.swift
-//  Projekt Krása
+//  Projekt AIditor
 //
 //  Čistá matematika rychlostní křivky. Žádné AVFoundation, žádné UI.
 //  Uzly jsou definované na VÝSTUPNÍ (timeline) ose:

@@ -1,6 +1,6 @@
 //
 //  ColorGradeTests.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Fáze 13, modul 1: barevné presety na klipu.
 //

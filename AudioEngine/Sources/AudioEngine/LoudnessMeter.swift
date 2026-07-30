@@ -1,6 +1,6 @@
 //
 //  LoudnessMeter.swift
-//  Projekt Krása — AudioEngine (fáze 7)
+//  Projekt AIditor — AudioEngine (fáze 7)
 //
 //  Integrovaná hlasitost podle ITU-R BS.1770-4 (na ní stojí EBU R128):
 //  K-váhování → bloky 400 ms s krokem 100 ms → dvojité gatování

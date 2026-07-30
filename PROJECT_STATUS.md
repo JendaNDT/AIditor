@@ -1,16 +1,37 @@
-# Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 HOTOVÁ — všech 13 modulů; dál koukance rukou a KILL-GATE 1)*
+# Projekt AIditor – Project Status
+*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 HOTOVÁ — všech 13 modulů; přejmenováno na AIditor; dál koukance rukou a KILL-GATE 1)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
 Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (vlastní DSP), WhisperKit.
+
+## ✏️ PŘEJMENOVÁNÍ: Krása → AIditor (30. 07. 2026, na pokyn autora)
+
+Aplikace se jmenuje **AIditor**. Přejmenování prošlo napříč repozitářem: složka a Xcode
+projekt (`AIditor/AIditor.xcodeproj`, cíl i schéma `AIditor`, produkt `AIditor.app`),
+Swift identifikátory (`AIditorApp`, `AIditorUI`, `AIditorToolbar`, `aiditorHex`,
+`TimelineGeometry.aiditor`), názvy pracovních adresářů kontrol a souborů měření
+(`AIditorExportCheck`, `AIditorBenchmark.txt` …), texty v UI, všechna dokumentace,
+specifikace, tracker i design handoff (`design_handoff_aiditor_ui/`). Celkem 146 souborů.
+
+⚠️ **Trvalé identifikátory ZŮSTALY schválně nezměněné** — bundle ID
+`cz.projektkrasa.Krasa`, klíče `UserDefaults` `cz.projektkrasa.*` a přípona projektových
+souborů `.projektkrasa`. Kontejner sandboxu je klíčovaný bundle ID; jeho změna by
+znamenala nový kontejner, tedy **znovustažení modelu WhisperKitu (~1,5 GB)** a ztrátu
+proxy, miniatur, autosave a bookmarků na složky. Podrobné zdůvodnění v `CLAUDE.md`.
+Odkaz na `Projekt_Krasa_navrh_implementace.docx` (dokument mimo repozitář) taky zůstal.
+
+**Ověřeno:** `xcodebuild` BUILD SUCCEEDED, **570 testů / 0 selhání** (TimelineModel 463,
+SpeedRampEngine 53, AudioEngine 54), `swift build` MediaProbe prošel, `--shell-check`
+sedí na zadání v okně i na celé obrazovce. Bundle appky nese `CFBundleName = AIditor`
+a `CFBundleIdentifier = cz.projektkrasa.Krasa` — přesně jak má.
 
 ## 📍 STAV (30. 07. 2026)
 
 **⭐ VŠECHNY NAPLÁNOVANÉ FÁZE HOTOVÉ: 0–9 (MVP), vylepšovací 10–16, ergonomie 17 i přestavba UI 18; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → **hudba s dobami v pravítku, magnetem a dopasováním klipů na dobu** → **analýzy kvality (neostrost, hluchá místa) se značkami na klipech** → **zvukové fade úchyty** → **multi-výběr, schránka, JKL a osa sledující hlavu** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a normalizací na −1 dBTP → export SRT.
 A od 30. 07. 2026 v tom všem **nové UI podle design handoffu**: ikonový rail místo vývojářského sidebaru, knihovna médií s přetažením na osu, miniatury a křivky na klipech, přehled celé osy, panel se záložkami, list exportu, panel přepisu řeči, prázdný start a fullscreen náhled.
 
-Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (463, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 570 automatických testů, 0 selhání** (přeměřeno 30. 07. 2026 `swift test` ve všech třech balíčcích). Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou) — **fáze 17 ani 18 formát nezměnily.**
+Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (463, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `AIditor`. **Celkem 570 automatických testů, 0 selhání** (přeměřeno 30. 07. 2026 `swift test` ve všech třech balíčcích). Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou) — **fáze 17 ani 18 formát nezměnily.**
 
 **Kontroly z příkazové řádky** (každá tiskne změřená čísla, ne „OK"): měření `--benchmark`, `--fullscreen`, `--timeline-bench`, `--shell-gpu`, `--transition-gpu`, `--color-gpu`; dodávka `--export-check`, `--mix-check`, `--normalize-check`, `--srt-check`, `--roundtrip-project`, `--autosave-check`; funkce `--transition-check`, `--title-check`, `--photo-check`, `--freeze-check`, `--color-check`, `--music-check`, `--sharp-check`, `--empty-check`, `--fade-check`, `--sync-check`, `--transcribe-check`, `--jkl-check`, `--select-check`, `--range-check`; UI fáze 18 `--shell-check`, `--status-check`, `--layers-check`, `--layout-check`, `--thumb-check`, `--overview-check`, `--panel-check`, `--library-check`, `--export-ui-check`, `--transcript-ui-check`, `--empty-start-check`, `--fullscreen-ui-check`.
 
@@ -20,14 +41,14 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (463, 29
 
 **Pořadí odsud:** fáze 18 ✅ (M1–M13, všechny brány prošly) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
-⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026) — a fáze doběhla celá (30. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` šla před svatbu včetně knihovny médií, přehledu osy a fullscreen režimů. **Cena zůstává na stole: třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce.** Drží ho jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která byla podmínkou odevzdání každého modulu — žádný se neodložil, všechny brány prošly. Co ta sada z principu neuvidí, je ergonomie: **na to jsou koukance rukou a pak svatba.**
+⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026) — a fáze doběhla celá (30. 07. 2026).** Přestavba UI podle `design_handoff_aiditor_ui/` šla před svatbu včetně knihovny médií, přehledu osy a fullscreen režimů. **Cena zůstává na stole: třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce.** Drží ho jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která byla podmínkou odevzdání každého modulu — žádný se neodložil, všechny brány prošly. Co ta sada z principu neuvidí, je ergonomie: **na to jsou koukance rukou a pak svatba.**
 
 ⚠️ **Číslo „18" nese v projektu jen JEDNU věc: přestavbu UI.** Třetí vlna plánu měla původně jako fázi 18 druhou obrazovou stopu (V2); po zařazení UI dostala V2 číslo 19 a zbytek vlny se posunul (`IMPLEMENTACNI_PLAN.md`, sekce „Třetí vlna"). Důvod je prostý: „fáze 18" je od 29. 07. 2026 vypálená ve 45 zdrojových souborech, kdežto nepostavená fáze se přečíslovat dá.
 
 ## ✅ FÁZE 18 — přestavba UI podle design handoffu (HOTOVÁ 30. 07. 2026)
 
 Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zadání:
-`design_handoff_krasa_ui/` (šest obrazovek, hi-fi, rozměry v bodech na dodržení).
+`design_handoff_aiditor_ui/` (šest obrazovek, hi-fi, rozměry v bodech na dodržení).
 
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
@@ -397,7 +418,7 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
   - **Model dostal `topInset`** — výchozí **nula**, aby se nepohnulo nic, co na geometrii stojí;
     výchozí výšky zůstaly 64/44/28 s mezerou 2 (stojí na nich testy balíčku) a aplikace si své
-    rozvržení předává konstruktorem přes `TimelineGeometry.krasa`. **+3 testy, celkem 456.**
+    rozvržení předává konstruktorem přes `TimelineGeometry.aiditor`. **+3 testy, celkem 456.**
   - **Hlavičky 104 px** (dřív 96): jméno semibold **nahoře** (se stopou vysokou 136 bodů by V1 na
     středu plavalo v prázdnu), pod ním meta `obraz · 5 klipů` / `řeč` / `hudba` / `titulky`, u zvuku
     navíc **hlasitost v dB**. Řádek je karta se zaoblením jen vpravo.
@@ -544,7 +565,7 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
 ✅ **Modul 1 — nový rám okna (29. 07. 2026).**
 
-  - **`UI/Shell/`:** `AppShell` (toolbar 46 → rail 60 + obsah → stavový řádek 26), `KrasaToolbar`,
+  - **`UI/Shell/`:** `AppShell` (toolbar 46 → rail 60 + obsah → stavový řádek 26), `AIditorToolbar`,
     `IconRail` (6 sekcí, SF Symbols), `ViewerPane` (čipy na obraze, měřidlo hlasitosti, pilulka
     transportu s kruhem 44 a čipem rychlosti), `ShellStatusBar`, `DesignTokens`, `LegacySettingsPanel`.
     `ContentView.swift` zhubl z 4483 na 4247 řádků; `HSplitView { sidebar | player }` je pryč.
@@ -1017,7 +1038,7 @@ Rozvrh fáze: **1)** `LoudnessMeter` (hotový, níže), **2)** per-track hlasito
 ✅ **Modul 1 — projektový soubor `.projektkrasa`: uložit, otevřít, obnovit po startu.**
 
   - **`ProjectFile` v TimelineModelu (+4 testy, celkem 232):** verze formátu, metadata a projekt v jeho VLASTNÍ Codable podobě — celé ticky a zdrojově kotvené uzly. Kde se spec 6.2 rozchází s pozdějšími rozhodnutími (sekundy s čárkou, výstupně kotvené uzly), platí rozhodnutí. Zápis je deterministický (`sortedKeys`) — stejný projekt = stejné bajty. Verze se čte a schvaluje PŘED obsahem: soubor z novější aplikace se odmítne srozumitelně, ne dekódovací chybou.
-  - **`ProjectStore` v appce:** uložit/otevřít přes panely (⌘S, ⇧⌘S, ⌘O v menu — model se kvůli tomu přestěhoval z `ContentView` do `KrasaApp`), zapamatování posledního projektu bookmarkem a obnova při startu. **Security-scoped bookmark per asset se ukládá do souboru** — bez něj by sandbox po restartu nepustil projekt k vlastním klipům. `resolveAssets` při otevření opraví přesunuté cesty, označí nedostupné assety offline (jejich klipy ZŮSTÁVAJÍ — smazat cizí práci kvůli přejmenované složce je horší chyba než díra v náhledu) a zahodí proxy, jejichž soubor zmizel.
+  - **`ProjectStore` v appce:** uložit/otevřít přes panely (⌘S, ⇧⌘S, ⌘O v menu — model se kvůli tomu přestěhoval z `ContentView` do `AIditorApp`), zapamatování posledního projektu bookmarkem a obnova při startu. **Security-scoped bookmark per asset se ukládá do souboru** — bez něj by sandbox po restartu nepustil projekt k vlastním klipům. `resolveAssets` při otevření opraví přesunuté cesty, označí nedostupné assety offline (jejich klipy ZŮSTÁVAJÍ — smazat cizí práci kvůli přejmenované složce je horší chyba než díra v náhledu) a zahodí proxy, jejichž soubor zmizel.
   - **Jeden soubor, ne balíček ze spec 6.1** — proxy jsou centrální cache s vlastním umístěním (fáze 4; spec 6.3 to sama doporučuje) a autosavy patří do Application Support, aby přežily přesun souboru. Zdůvodněná odchylka, ne opomenutí.
   - Import klipů = **nový neuložený projekt** (sken dál přepisuje celou osu — přírůstkový import je samostatná kapitola). Sidebar ukazuje jméno projektu a čas uložení. **`usesProxies` tím konečně přežívá restart** — dluh z fáze 4 splacen.
   - **Ověřeno:** CLI `--roundtrip-project` (uložit → načíst → porovnat: 5 assetů, 10 klipů, rampa přežila do posledního ticku) a **obnova napříč procesy** screenshotem — po restartu se projekt otevřel sám, bookmarky assetů se vyřešily, sidebar se přeměřil, osa i přehrávač naložené.
@@ -1061,7 +1082,7 @@ Rozvrh fáze: **1)** `LoudnessMeter` (hotový, níže), **2)** per-track hlasito
 
   ✅ **Koukanec potvrzen rukou (28. 07. 2026): proxy fungují a scrubování je znatelně svižnější.** Naměřených 6,2 ms proti 41–95 ms je tedy i subjektivně cítit — přesně efekt, kvůli kterému proxy jsou.
 
-✅ **Modul 2 — správa úložiště (28. 07. 2026): externí disk a mazání cache.** Volba složky přes `NSOpenPanel` se security-scoped bookmarkem (entitlements read-write + app-scope bookmarky už v projektu byly); ve zvolené složce se dělá podsložka „Krása Proxy", ať se hashované soubory nesypou do kořene disku. Odpojený externí disk = tichý návrat k výchozí složce, klipy jedou z originálů. Mazání cache NEJDŘÍV odšije proxy z projektu — kompozice nesmí ani chvíli ukazovat na mazané soubory. Sidebar ukazuje umístění a velikost cache. Po restartu se hotové proxy najdou otiskem samy — ověřeno okem: „výchozí složka aplikace · 1,66 GB" hned po startu.
+✅ **Modul 2 — správa úložiště (28. 07. 2026): externí disk a mazání cache.** Volba složky přes `NSOpenPanel` se security-scoped bookmarkem (entitlements read-write + app-scope bookmarky už v projektu byly); ve zvolené složce se dělá podsložka „AIditor Proxy", ať se hashované soubory nesypou do kořene disku. Odpojený externí disk = tichý návrat k výchozí složce, klipy jedou z originálů. Mazání cache NEJDŘÍV odšije proxy z projektu — kompozice nesmí ani chvíli ukazovat na mazané soubory. Sidebar ukazuje umístění a velikost cache. Po restartu se hotové proxy najdou otiskem samy — ověřeno okem: „výchozí složka aplikace · 1,66 GB" hned po startu.
 
   ⚠️ Poznámka k restartu: `usesProxies` je per projekt a projekt se zatím při každém startu staví znovu ze skenu — přepínač se tedy vrací na vypnuto. Srovná se to s projektovým souborem ve fázi 5, není to vada proxy.
 
@@ -1100,7 +1121,7 @@ Rozvrh fáze: **1)** `LoudnessMeter` (hotový, níže), **2)** per-track hlasito
 
 ✅ **Kroky 2 a 3 potvrzené.** Krok 2 rukou 27. 07. 2026 (21:08); krok 3 v rámci ručního průchodu 28. 07. 2026 — checklist zahrnoval scrubování v pravítku a scroll přes celou osu, rozjetý timecode nebo ujíždějící hlavičky by nešly přehlédnout.
 
-✅ **Krok 1 — `TimelineModel` napojený na `Krasa.xcodeproj`** (commit `3f5f9cb`). Lokální balíček stejným vzorcem jako `ProbeKit` a `SpeedRampEngine`. Přibyl `TimelineController` — vlastník stavu podle `FAZE_2_VIEW.md` 2.1, kde má **geometrie jediné úložiště** (`interaction.geometry`) a controller ji vystavuje jen průchodem.
+✅ **Krok 1 — `TimelineModel` napojený na `AIditor.xcodeproj`** (commit `3f5f9cb`). Lokální balíček stejným vzorcem jako `ProbeKit` a `SpeedRampEngine`. Přibyl `TimelineController` — vlastník stavu podle `FAZE_2_VIEW.md` 2.1, kde má **geometrie jediné úložiště** (`interaction.geometry`) a controller ji vystavuje jen průchodem.
 
   Ověřeno, ne odhadnuto: `xcodebuild` bez chyb i varování, Xcode hlásí `Explicit dependency on target 'TimelineModel'`, v binárce je **5039 symbolů modulu** `TimelineModel` a 143 testů balíčku dál procházelo. *(Samotné „BUILD SUCCEEDED" nedokazuje nic — projekt se přeložil i předtím, než o balíčku věděl.)*
 
@@ -1161,7 +1182,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **`MediaProbe` — sonda na vlastnosti klipů.** Rozlišení, orientace, kodeky, fps, edit list a hlavně **skutečné délky vzorků přes `AVSampleCursor`** (fallback `AVAssetReader`). Rozlišuje zaokrouhlení / zahozený snímek / proměnlivé časování. Naměřené hodnoty v `MediaProbe/RESULTS.md`. První kód, který sáhl na AVFoundation. **Od 28. 07. 2026 má pojistku:** bez `--results` zapisuje `RESULTS.md` jen při měření složky `TestClips` — běh na jiné složce (jako exportní check ve fázi 5) už kanonický záznam tiše nepřepíše, výsledek zůstane v konzoli.
 - **`Flatten` — zploštění VFR na pevnou snímkovou mřížku.** Krok 3 spiku. Cílová frekvence z měřeného modu, čtení přes `AVComposition` (edit list), zero-order hold převzorkování, ProRes 422 Proxy v plném rozlišení, zvuk LPCM. **Ověřeno na třech klipech: všechny `CFR` s kolísáním 0,00 %, synchron tlesknutí 0,00 ms, kódování 257–426 fps.**
 - **`Ramp` — plynulá rychlostní křivka segmentací.** Krok 4 spiku, jádro produktu. `scaleTimeRange` pozpátku, časy kumulativně v celých tickách, segmentace podle meze skoku rychlosti (výchozí 1,5 %), korekce výšky `.timeDomain`. **Ověřeno na třech klipech: `CFR` 30 fps, kolísání 0,00 %, délky sedí do jednoho snímku, žádné lupance ani při 545 segmentech.**
-- **Aplikace `Krasa` — fáze 1 hotová, měření přeměřeno 27. 07. 2026.** Xcode projekt (deployment target 14.0, sandbox, bundle `cz.projektkrasa.Krasa`), `MediaImporter` se security-scoped bookmarky, `VFRDetector` nad `ProbeKit`, `PlaybackController` se seekem podle QA1820 a `PlaybackBenchmark`.
+- **Aplikace `AIditor` — fáze 1 hotová, měření přeměřeno 27. 07. 2026.** Xcode projekt (deployment target 14.0, sandbox, bundle `cz.projektkrasa.Krasa`), `MediaImporter` se security-scoped bookmarky, `VFRDetector` nad `ProbeKit`, `PlaybackController` se seekem podle QA1820 a `PlaybackBenchmark`.
 
   Naměřeno na pěti klipech, obraz v okně 1280×720 px (16,4 % displeje), MacBook Air M4, vestavěný displej 2940×1912 px / 60 Hz, napájení ze sítě:
 
@@ -1187,7 +1208,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 - **`ProbeKit` — sdílené měřicí a renderovací jádro.** Klasifikace délek vzorků, verdikt CFR/VFR, edit list, `CFRRenderer`. Používají ho všechny tři nástroje, takže měří a renderují stejným kódem.
 - Produktová a technická specifikace v2.0 (HTML + PDF)
 - **Implementační plán** — 12 fází, 3 kill-gates, modulová mapa, session protokol (`IMPLEMENTACNI_PLAN.md`)
-- **Interaktivní tracker** — odškrtávací postup s progress barem (`krasa-tracker.html`)
+- **Interaktivní tracker** — odškrtávací postup s progress barem (`aiditor-tracker.html`)
 - Rešerše tří rizikových oblastí: Whisper na macOS, face clustering, timeline UI a compositor
 - Vyřešeno pozicování, distribuce, datový model `.projektkrasa` *(cena 1 490 Kč zrušena — 28. 07. 2026 rozhodnuto, že appka bude zatím free)*
 
@@ -1322,14 +1343,14 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
 ## 📁 Stav souborů
 
 ### Dokumentace
-- `Projekt_Krasa_Specifikace_Aplikace_v2.html` / `.pdf` – specifikace, zdroj pravdy pro **rozsah**
+- `Projekt_AIditor_Specifikace_Aplikace_v2.html` / `.pdf` – specifikace, zdroj pravdy pro **rozsah**
 - `IMPLEMENTACNI_PLAN.md` – zdroj pravdy pro **pořadí a technologie**
 - `SPIKE_0.md` – **uzavřený Spike 0 s naměřenými výsledky.** Vyplněná kritéria úspěchu, vyhodnocený rozhodovací bod, metodické poznámky k testování lupanců
 - `FAZE_2_TIMELINE.md` – **návrh `TimelineModelu`.** Typy, invarianty, operace, undo a zdůvodnění rozhodnutí; kód podle něj je hotový
 - `FAZE_2_VIEW.md` – **návrh `TimelineView`.** Vlastnictví stavu, vrstvení `CALayer`, recyklace, cesta události, vlnové průběhy, výkonový rozpočet, deset kroků stavby a tabulka ověřených API; kód podle něj **zatím nezačatý**
 - `CLAUDE.md` – kontext a technická rozhodnutí pro Claude Code
 - `PROJECT_STATUS.md` – tenhle soubor
-- `krasa-tracker.html` – interaktivní tracker postupu *(udržuje autor ručně)*
+- `aiditor-tracker.html` – interaktivní tracker postupu *(udržuje autor ručně)*
 
 ### Kód
 - `SpeedRampEngine/` – **matematika rychlostní křivky.** Čistý Swift, žádné závislosti
@@ -1350,7 +1371,7 @@ Měřilo se **na baterii se zapnutým úsporným režimem**, tedy za horších p
   - `Sources/TimelineModel/Layout.swift` – rozvržení viditelných klipů (`Placement`) a recyklační diff vrstev
   - `Tests/TimelineModelTests/` – **232 testů**
   - `README.md` – API, dvě časové soustavy, co se snadno rozbije
-- `Krasa/Krasa/Timeline/` – **timeline v appce**
+- `AIditor/AIditor/Timeline/` – **timeline v appce**
   - `TimelineController.swift` – vlastník stavu: projekt, undo, interakce (a v ní **jediná kopie geometrie**), playhead, výběr
   - `TimelineDocumentView.swift` – plocha osy: `isFlipped`, pruhy stop, barvy přežívající přepnutí do tmavého režimu, Retina
   - `TimelinePane.swift` – rozvržení, `NSScrollView`, synchronizace pravítka a hlaviček se scrollem, most do SwiftUI

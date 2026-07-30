@@ -1,6 +1,6 @@
 //
 //  Operations.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Volné pozice: mezery jsou legální a samy se nezavírají. Ripple je zvláštní
 //  operace, o kterou si uživatel řekne.

@@ -1,6 +1,6 @@
 //
 //  ScalingVideoComposition.swift
-//  Projekt Krása / ProbeKit
+//  Projekt AIditor / ProbeKit
 //
 //  Fáze 9, modul 1: škálovací video kompozice DVAKRÁT, za jedním
 //  rozhraním — přesně podle plánu (sekce fáze 9).

@@ -1,6 +1,6 @@
 //
 //  Stills.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Fotky na ose a Ken Burns (fáze 12).
 //

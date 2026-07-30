@@ -1,6 +1,6 @@
 //
 //  SpeechProbe.swift
-//  Projekt Krása / Flatten
+//  Projekt AIditor / Flatten
 //
 //  Rozpoznání řeči od ruchu podle charakteru amplitudové obálky.
 //

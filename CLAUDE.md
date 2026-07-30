@@ -1,4 +1,4 @@
-# Projekt Krása — kontext pro Claude Code
+# Projekt AIditor — kontext pro Claude Code
 
 Nativní macOS videoeditor pro svatební a rodinné filmy. Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, Metal, Vision, WhisperKit.
 
@@ -8,7 +8,7 @@ Nativní macOS videoeditor pro svatební a rodinné filmy. Swift, SwiftUI (panel
 
 | Soubor | Na co |
 |---|---|
-| `Projekt_Krasa_Specifikace_Aplikace_v2.html` | **rozsah** — co má appka umět |
+| `Projekt_AIditor_Specifikace_Aplikace_v2.html` | **rozsah** — co má appka umět |
 | `IMPLEMENTACNI_PLAN.md` | **pořadí a technologie** — v jakém pořadí to stavět |
 | `PROJECT_STATUS.md` | **stav** — co je hotové, co je příští krok |
 | `SPIKE_0.md` | **uzavřený Spike 0** — naměřené výsledky a co z nich plyne |
@@ -69,7 +69,7 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
   | 240 fps | 0,125× | 0,1× |
 
 
-- **Persony to nemají stejně.** [Filip](Projekt_Krasa_Specifikace_Aplikace_v2.html) (primární) točí sám a může se zařídit — jemu limit stačí říct dopředu a on natočí 120 fps. [Alena](Projekt_Krasa_Specifikace_Aplikace_v2.html) (sekundární) skládá film z cizích videí od hostů, typicky 30 fps, a zařídit se nemůže. **Pro ni je duplikace snímků s přiznaným varováním legitimní chování, ne nedodělek** — ale přiznané být musí. Nikdy jí netvrď, že výsledek je plynulý, když není.
+- **Persony to nemají stejně.** [Filip](Projekt_AIditor_Specifikace_Aplikace_v2.html) (primární) točí sám a může se zařídit — jemu limit stačí říct dopředu a on natočí 120 fps. [Alena](Projekt_AIditor_Specifikace_Aplikace_v2.html) (sekundární) skládá film z cizích videí od hostů, typicky 30 fps, a zařídit se nemůže. **Pro ni je duplikace snímků s přiznaným varováním legitimní chování, ne nedodělek** — ale přiznané být musí. Nikdy jí netvrď, že výsledek je plynulý, když není.
 - **Fotka hraje přes „still movie" mezisoubor (`StillMovieStore`, fáze 12).** Fotka nemá video stopu a do `AVComposition` se vkládat nedá — vyrobí se z ní JEDNOU film o jednom ProRes snímku v rozměru plátna s VPÁLENÝM aspect-fitem (a narovnanou EXIF orientací), a kompozice ho roztáhne `scaleTimeRange`. Vpálený aspect-fit je záměr: mezisoubor se chová jako běžné video, bez přechodů/Ken Burns nevzniká video kompozice a GPU baseline platí i s fotkami. Cache s otiskem cesta|velikost|mtime|plátno, vzorec proxy.
 - **`AVVideoCompositionCoreAnimationTool` se nepoužívá — titulky do exportu vypaluje `frameDecorator` v `CFRRendereru` (rozhodnuto 29. 07. 2026, fáze 11).** Ten nástroj je dokumentovaný pro `AVAssetExportSession`, kterou projekt schválně nepoužívá (ignoruje `frameDuration`); jeho chování na cestě `AVAssetReader`+`AVAssetWriter` dokumentace nepopisuje — pravidlo 6. Dekorátor přimíchá předrenderovaný titulek (CoreImage, NV12) jen do snímků, kde titulek leží; ostatní projdou bajt po bajtu nedotčené (změřeno: odchylka mimo titulek 0,14). Typografii šablon drží `TitleExportRenderer.font(for:)` a `TitleOverlay.font(for:)` — měnit se musí SPOLU.
 - **Barevné presety (F13) jedou přes vlastní `AVVideoCompositing` (`ColorVideoCompositor`), NE `applyingCIFiltersWithHandler` (rozhodnuto 29. 07. 2026, hotové v modulu 2).** Ten inicializátor filtruje jen „first enabled video track" — naše kompozice má od F10 víc drah (A/B rozklad prolínaček), klipy na dráze B by filtr nedostaly; staví si vlastní instrukce (zahodil by opacity/transform rampy i aspect-fit) a `frameDuration` si bere z `nominalFrameRate`, o kterém máme změřeno, že lže. Provedení: `CompositionBuilder.computeSpans` je JEDINÉ místo sémantiky obrazové kompozice — bez presetů z něj jdou standardní instrukce (vestavěný kompozitor), s presety vlastní `ColorCompositionInstruction` (objekt `AVVideoCompositionInstructionProtocol`, NE podtřída standardní instrukce — player item kompozici KOPÍRUJE a kopie podtřídy by přes NSCopying rodiče přišla o přidaná pole). Bez presetu/přechodu/KB se video kompozice dál nestaví (GPU baseline platí); s presety je skok medián ~24 % (změřeno `--color-gpu`). Vzhled presetů drží JEN `ColorPresetFilter` v `ColorCompositor.swift`.
@@ -120,6 +120,10 @@ Specifikace je starší než plán. **Kde si odporují, platí plán** — obsah
 - **`AVAudioMix.volume` má dokumentovaný rozsah jen 0,0–1,0** — zesilovat přes něj se NESMÍ (nedokumentované chování). Normalizační gain se násobí přímo do vzorků (float32, `vDSP_vsmul` v `CFRRendereru`), se stropem **−1 dBTP** (true peak, od F16 — `TruePeakMeter` v AudioEngine, 4× převzorkování; špička vzorků mezivzorkové špičky neviděla a na reálném klipu lhala o 1,2 dB), který se při zásahu poctivě hlásí.
 - **Dekodéry AAC se neshodnou na rozjezdu:** afconvert vs. čtení přes `AVComposition` se liší přesně o 528 vzorků (11,00 ms). Interní cesty appky (sync, přehrávač, export, měření) čtou VŠECHNY přes kompozici, takže jsou vzájemně konzistentní — další důvod pravidla „zvuk jen přes AVComposition".
 - Minimální macOS 14.0 pro běh, novější API runtime gatovaná.
+- **⚠️ Aplikace se od 30. 07. 2026 jmenuje `AIditor` (dřív „Krása"), ale TRVALÉ IDENTIFIKÁTORY se přejmenovat NESMÍ.** Zůstávají schválně a beze změny:
+  `PRODUCT_BUNDLE_IDENTIFIER = cz.projektkrasa.Krasa`, klíče `UserDefaults` ve tvaru `cz.projektkrasa.*` (bookmarky, poslední projekt, citlivost, umístění modelu Whisperu) a přípona projektových souborů `.projektkrasa` včetně `UTType`.
+  Důvod: kontejner sandboxu je klíčovaný bundle ID. Jeho změna znamená NOVÝ kontejner — model WhisperKitu (~1,5 GB) se stáhne znovu, zmizí proxy, miniatury, autosave i security-scoped bookmarky na složky, a existující projektové soubory přestanou jít otevřít dvojklikem. **Je to kosmetická změna za cenu dat; nedělá se.** Kdo to bude chtít „dodělat", musí k tomu mít od autora výslovný pokyn a počítat s tou cenou.
+  Jméno souboru `Projekt_Krasa_navrh_implementace.docx` v plánu a statusu je odkaz na dokument MIMO repozitář — taky se nepřejmenovává.
 
 ## Naměřeno na reálných klipech (`MediaProbe`, 25. 07. 2026)
 
@@ -258,7 +262,7 @@ navíc:
 - **Přestavba UI (F18) se modelu skoro nedotkla — a to je záměr.** Tři
   přírůstky, +10 testů, formát souboru beze změny: `TimelineGeometry.topInset`
   (M4; výchozí NULA, aby se nepohnulo nic, co na geometrii stojí — aplikace si
-  své rozvržení předává konstruktorem `TimelineGeometry.krasa`),
+  své rozvržení předává konstruktorem `TimelineGeometry.aiditor`),
   `duplicatedFrameShare(of:)` (M10; průměr z `max(0, 1 − v(t)/limit)`, tedy
   pravidlo projektu o duplikaci snímků — varovný blok v listu exportu z něj
   počítá z MATERIÁLU, ne z konstanty v UI) a `splitTranscriptSegment

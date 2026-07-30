@@ -1,6 +1,6 @@
 //
 //  BeatDetector.swift
-//  Projekt Krása — AudioEngine (fáze 14)
+//  Projekt AIditor — AudioEngine (fáze 14)
 //
 //  Detekce dob hudebního podkladu, plán F14 modul 1:
 //

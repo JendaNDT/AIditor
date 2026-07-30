@@ -1,6 +1,6 @@
 //
 //  AudioFadeTests.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Fáze 16, modul 1: zvukové fade na hranách klipu.
 //

@@ -1,6 +1,6 @@
 //
 //  VideoResampler.swift
-//  Projekt Krása / ProbeKit
+//  Projekt AIditor / ProbeKit
 //
 //  Zero-order hold: pro každý výstupní slot se vezme poslední zdrojový
 //  snímek, jehož prezentační čas ≤ času slotu.

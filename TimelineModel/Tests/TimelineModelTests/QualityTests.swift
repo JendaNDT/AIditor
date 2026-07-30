@@ -1,6 +1,6 @@
 //
 //  QualityTests.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Fáze 15, modul 1: metrika ostrosti a promítnutí problémových úseků.
 //

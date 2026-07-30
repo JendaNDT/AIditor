@@ -1,6 +1,6 @@
 //
 //  LoudnessProfile.swift
-//  Projekt Krása — AudioEngine (fáze 7)
+//  Projekt AIditor — AudioEngine (fáze 7)
 //
 //  Dva profily normalizace podle rozhodnutí ve specifikaci (sekce 7.1,
 //  revidovaná): výchozí je Web −14 LUFS (YouTube nad tento práh jen

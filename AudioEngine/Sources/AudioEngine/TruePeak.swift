@@ -1,6 +1,6 @@
 //
 //  TruePeak.swift
-//  Projekt Krása — AudioEngine (fáze 16)
+//  Projekt AIditor — AudioEngine (fáze 16)
 //
 //  True peak (dBTP): špička zvuku měřená na 4× převzorkovaném signálu
 //  podle principu ITU-R BS.1770-4, Annex 2. Špička VZORKŮ mezivzorkové

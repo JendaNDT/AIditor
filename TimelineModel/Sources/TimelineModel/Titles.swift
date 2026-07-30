@@ -1,6 +1,6 @@
 //
 //  Titles.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Grafické titulky na stopě T1 (fáze 11): jména, datum a místo, kapitoly,
 //  závěrečné poděkování.

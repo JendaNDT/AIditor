@@ -1,6 +1,6 @@
 //
 //  StillTests.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Fáze 12, modul 1: fotky na ose a Ken Burns.
 //

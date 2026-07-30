@@ -1,6 +1,6 @@
 //
 //  TranscriptTests.swift
-//  Projekt Krása — TimelineModel
+//  Projekt AIditor — TimelineModel
 //
 //  Fáze 8, modul 1: přepis kotvený ve zdroji, promítnutí na osu, SRT.
 //

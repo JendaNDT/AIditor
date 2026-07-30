@@ -1,5 +1,5 @@
 # Spike 0 – „Funguje speed ramp vůbec?"
-*Projekt Krása · **uzavřeno 26. 07. 2026** · zadáno 25. 07. 2026*
+*Projekt AIditor · **uzavřeno 26. 07. 2026** · zadáno 25. 07. 2026*
 
 ## Otázka, na kterou spike odpovídá
 
@@ -234,7 +234,7 @@ Zapiš si čísla. Bez nich to není spike, ale hraní.
 
 ### Ke kritériu 5: ✅ zodpovězeno ve fázi 1
 
-**`AVPlayer` náhled 4K utáhne.** Změřeno 26. 07. 2026 v aplikaci `Krasa`, jakmile existoval přehrávač:
+**`AVPlayer` náhled 4K utáhne.** Změřeno 26. 07. 2026 v aplikaci `AIditor`, jakmile existoval přehrávač:
 
 | soubor | ustálený stav | medián seeku |
 |---|---|---|

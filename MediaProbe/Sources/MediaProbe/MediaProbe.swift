@@ -1,6 +1,6 @@
 //
 //  MediaProbe.swift
-//  Projekt Krása / MediaProbe
+//  Projekt AIditor / MediaProbe
 //
 //  Sonda na testovací klipy. Nic nerenderuje, nic nedekóduje, nic nezapisuje
 //  do zdrojových souborů — jen čte metadata a délky vzorků.

@@ -1,6 +1,6 @@
 //
 //  LoudnessMeterTests.swift
-//  Projekt Krása — AudioEngine (fáze 7)
+//  Projekt AIditor — AudioEngine (fáze 7)
 //
 //  Kotvy jsou z ITU-R BS.1770-4, ne vymyšlené:
 //  – tabulka koeficientů K-váhování pro 48 kHz (příloha 1),

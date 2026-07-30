@@ -1,6 +1,6 @@
 //
 //  SpeedRampEngineTests.swift
-//  Projekt Krása
+//  Projekt AIditor
 //
 //  Testy odpovídají numerickému ověření provedenému před portem do Swiftu.
 //  Když některý spadne, matematika je rozbitá — ne test.

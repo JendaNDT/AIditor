@@ -1,6 +1,6 @@
 //
 //  Chronology.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Chronologie materiálu a rozsah exportu (fáze 17, modul 3).
 //

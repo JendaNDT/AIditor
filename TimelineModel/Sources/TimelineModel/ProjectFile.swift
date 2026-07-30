@@ -1,6 +1,6 @@
 //
 //  ProjectFile.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Obálka souboru `.projektkrasa` (fáze 5). Obsah je JSON: verze formátu,
 //  metadata a projekt v jeho VLASTNÍ Codable podobě — celé ticky a snímky,

@@ -1,6 +1,6 @@
 //
 //  Inspect.swift
-//  Projekt Krása / MediaProbe
+//  Projekt AIditor / MediaProbe
 //
 //  Načtení vlastností stop. Všechno jde přes async `load(_:)` — synchronní
 //  přístupové vlastnosti (naturalSize, nominalFrameRate, formatDescriptions…)

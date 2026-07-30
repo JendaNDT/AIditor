@@ -1,6 +1,6 @@
 //
 //  ColorGrade.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Barevné presety (fáze 13). Model nese JEN volbu: který preset a jak
 //  silně. Co preset znamená opticky (které CIFiltry s jakými parametry),

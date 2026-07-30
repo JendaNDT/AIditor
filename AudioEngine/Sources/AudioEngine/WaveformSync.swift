@@ -1,6 +1,6 @@
 //
 //  WaveformSync.swift
-//  Projekt Krása — AudioEngine (fáze 7)
+//  Projekt AIditor — AudioEngine (fáze 7)
 //
 //  Synchronizace dvou nahrávek téže události (zvuk kamery × klopový
 //  rekordér) křížovou korelací — spec 7.2. Dvoustupňově:

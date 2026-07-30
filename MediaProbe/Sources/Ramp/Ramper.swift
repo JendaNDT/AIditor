@@ -1,6 +1,6 @@
 //
 //  Ramper.swift
-//  Projekt Krása / Ramp
+//  Projekt AIditor / Ramp
 //
 //  Plynulá rychlostní křivka segmentací na mikro-úseky.
 //

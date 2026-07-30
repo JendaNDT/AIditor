@@ -1,6 +1,6 @@
 //
 //  Transitions.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Přechody na střihu (fáze 10). Přechod patří STŘIHU mezi dvěma sousedy,
 //  ne klipu — proto je přivázaný k dvojici (levý, pravý) a žije jen dokud

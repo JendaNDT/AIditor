@@ -1,6 +1,6 @@
 //
 //  Transcript.swift
-//  Projekt Krása — TimelineModel
+//  Projekt AIditor — TimelineModel
 //
 //  Fáze 8, modul 1: datový model titulků. Přepis patří ASSETU a je
 //  kotvený ve ZDROJOVÉM čase — stejné rozhodnutí jako uzly rychlostních

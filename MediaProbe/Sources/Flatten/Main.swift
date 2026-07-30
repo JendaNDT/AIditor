@@ -1,6 +1,6 @@
 //
 //  Main.swift
-//  Projekt Krása / Flatten
+//  Projekt AIditor / Flatten
 //
 //      swift run Flatten <soubor.mp4> [--out cesta.mov]
 //      swift run Flatten --all [složka]

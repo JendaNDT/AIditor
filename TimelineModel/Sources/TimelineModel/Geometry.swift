@@ -1,6 +1,6 @@
 //
 //  Geometry.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Veškerá matematika časové osy: kde na obrazovce leží snímek, které klipy
 //  jsou vidět, na co se má tažení přichytit, co je pod myší.

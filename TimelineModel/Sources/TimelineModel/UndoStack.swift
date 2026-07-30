@@ -1,6 +1,6 @@
 //
 //  UndoStack.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Snapshot stack, ne command pattern. `Project` je hodnotový typ, takže
 //  snapshot je prostě jeho kopie a nemá vlastní kód, který by mohl mít chybu.

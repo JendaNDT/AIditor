@@ -1,6 +1,6 @@
 //
 //  Time.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Dvě časové soustavy a jediná hranice mezi nimi.
 //

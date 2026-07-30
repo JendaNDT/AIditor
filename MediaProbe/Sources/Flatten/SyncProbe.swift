@@ -1,6 +1,6 @@
 //
 //  SyncProbe.swift
-//  Projekt Krása / Flatten
+//  Projekt AIditor / Flatten
 //
 //  Hledání ostrých transientů ve zvuku. Dvě použití:
 //

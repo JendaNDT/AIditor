@@ -1,6 +1,6 @@
 //
 //  FFT.swift
-//  Projekt Krása — AudioEngine (fáze 7)
+//  Projekt AIditor — AudioEngine (fáze 7)
 //
 //  Iterativní radix-2 FFT (Cooley–Tukey) v čistém Swiftu. Žádný
 //  Accelerate — balíček se testuje i na Linuxu a korelace obálek

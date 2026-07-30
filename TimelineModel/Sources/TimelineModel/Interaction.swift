@@ -1,6 +1,6 @@
 //
 //  Interaction.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Co se stane při tažení. Stavový automat mezi `mouseDown`, `mouseDragged`
 //  a `mouseUp` — ale bez AppKitu, takže se dá otestovat.

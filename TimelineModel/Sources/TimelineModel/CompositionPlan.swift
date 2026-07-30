@@ -1,6 +1,6 @@
 //
 //  CompositionPlan.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Fáze 10, modul 2: plán A/B rozkladu stopy pro kompozici s přechody.
 //

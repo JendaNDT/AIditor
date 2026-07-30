@@ -1,6 +1,6 @@
 //
 //  Clipboard.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Schránka osy (fáze 17, modul 2): kopírovat, vyjmout, vložit na hlavu.
 //

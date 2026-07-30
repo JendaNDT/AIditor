@@ -1,6 +1,6 @@
 //
 //  Validation.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Invarianty (29), které musí platit po KAŽDÉ operaci. Testy je kontrolují
 //  po každém volání, takže chytí i chyby, na které test přímo necílil.

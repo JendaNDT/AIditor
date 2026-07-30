@@ -1,6 +1,6 @@
 //
 //  Main.swift
-//  Projekt Krása / Ramp
+//  Projekt AIditor / Ramp
 //
 //      swift run Ramp <soubor.mov> [--fps 30] [--slow 0.25] [--segments 8,4,2,1]
 //

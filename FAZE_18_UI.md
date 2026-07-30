@@ -1,6 +1,6 @@
-# FÁZE 18 — přestavba UI podle `design_handoff_krasa_ui`
+# FÁZE 18 — přestavba UI podle `design_handoff_aiditor_ui`
 
-*Sestaveno 29. 07. 2026. Zdroj zadání: `design_handoff_krasa_ui/README.md` + šest prototypů v `designs/`.*
+*Sestaveno 29. 07. 2026. Zdroj zadání: `design_handoff_aiditor_ui/README.md` + šest prototypů v `designs/`.*
 
 > ## ✅ HOTOVO 30. 07. 2026 — všech třináct modulů, každý za svou branou
 >
@@ -165,7 +165,7 @@ po každém modulu etapy A a B**.
 
 ### ✅ M1 — nový rám okna (29. 07. 2026)
 
-**Postaveno:** `UI/Shell/` — `AppShell` (toolbar → rail + obsah → stavový řádek), `KrasaToolbar`,
+**Postaveno:** `UI/Shell/` — `AppShell` (toolbar → rail + obsah → stavový řádek), `AIditorToolbar`,
 `IconRail`, `ViewerPane` (čipy, měřidlo, pilulka transportu), `ShellStatusBar`, `DesignTokens`,
 `LegacySettingsPanel`. `ContentView` zhubl z 4483 na 4247 řádků a drží už jen `AppModel` a rozcestník
 měřicích běhů.
@@ -222,7 +222,7 @@ prokázala jako vadná, a **vypisuje se**, aby to šlo přepočítat.
 až to, co se projeví trháním. **Vlastní otázka R2 — kolik GPU stojí trvale skládaný náhled — se
 tímhle změřit nedá**; na to je `powermetrics` a ten potřebuje `sudo`. Kontrola proto tiskne značky
 `FÁZE n/4 START/KONEC` s časy, aby šel log rozříznout. **Otevřená položka pro autora:** pustit
-`sudo powermetrics --samplers gpu_power -i 1000 > ~/krasa_shell_gpu.txt` vedle `--shell-gpu`
+`sudo powermetrics --samplers gpu_power -i 1000 > ~/aiditor_shell_gpu.txt` vedle `--shell-gpu`
 a doplnit číslo sem. Do té doby platí: overlaye **neprokazatelně nestojí plynulost**, o rezidenci
 nevíme nic. Ústupová cesta (mizení overlajů po ~2 s nečinnosti) je popsaná v 2.3 a zůstává
 připravená — `overlaysSuppressed` je už zapojené.
@@ -733,7 +733,7 @@ klipu, popisky presetu a rampy, přepínač Miniatury na dlouhé ose, fotka v p�
 
 **Model dostal `topInset`** (fáze 18, modul 4): výchozí **nula**, aby se nepohnulo nic, co na
 geometrii stojí. Výchozí výšky **zůstaly 64/44/28 s mezerou 2** — na nich stojí testy balíčku
-a aplikace si své rozvržení předává konstruktorem přes `TimelineGeometry.krasa`.
+a aplikace si své rozvržení předává konstruktorem přes `TimelineGeometry.aiditor`.
 **+3 testy, celkem 456, 0 selhání.**
 
 **Hlavičky 104 px** (dřív 96): jméno stopy semibold **nahoře** (ne na středu — se stopou vysokou

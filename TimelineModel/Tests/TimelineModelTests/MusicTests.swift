@@ -1,6 +1,6 @@
 //
 //  MusicTests.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Fáze 14, modul 2: mřížka dob na assetu, promítnutí na osu, magnet.
 //

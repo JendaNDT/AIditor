@@ -1,6 +1,6 @@
 //
 //  TransitionGeometry.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Fáze 10, modul 3: matematika UI přechodů. Kde na obrazovce leží
 //  lichoběžník přechodu, co je pod myší, který střih je poblíž kliknutí

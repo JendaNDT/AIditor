@@ -1,6 +1,6 @@
 //
 //  RampEditor.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Logika editoru rychlostní křivky (fáze 3, modul 3). Do view patří jen
 //  kreslení a předávání událostí — všechno, co má porovnatelnou návratovou

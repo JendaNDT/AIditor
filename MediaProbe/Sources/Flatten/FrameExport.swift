@@ -1,6 +1,6 @@
 //
 //  FrameExport.swift
-//  Projekt Krása / Flatten
+//  Projekt AIditor / Flatten
 //
 //  Vytažení několika snímků do PNG. `MediaProbe` čte metadata, ne pixely —
 //  soubor může mít dokonalé časování a přitom být rozsypaná duha.

@@ -1,6 +1,6 @@
 //
 //  Layout.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Rozvržení viditelných klipů a rozhodnutí o recyklaci vrstev.
 //  Krok 4 z `FAZE_2_VIEW.md`, sekce 2.4.

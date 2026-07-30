@@ -1,6 +1,6 @@
 //
 //  Model.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Datové typy dokumentu. Všechno hodnotové a Sendable; projekt vlastní
 //  main actor, protože operace řídí UI.

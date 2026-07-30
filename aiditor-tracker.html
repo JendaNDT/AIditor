@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Projekt AIditor — Tracker</title>
+<style>
+:root{
+  --bg:#0e1116; --bg2:#151a22; --bg3:#1c232e; --line:#28313d;
+  --tx:#e6ebf2; --tx2:#93a1b4; --tx3:#5e6b7d;
+  --ok:#3fb950; --warn:#d29922; --dan:#f0596b; --acc:#5a9ff5; --acc2:#a371f7;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--tx);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  padding:32px 20px 80px; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px;margin:0 auto}
+
+header{margin-bottom:26px}
+h1{font-size:29px;font-weight:650;letter-spacing:-.4px}
+.sub{color:var(--tx2);font-size:14px;margin-top:5px}
+
+.banner{background:linear-gradient(135deg,rgba(63,185,80,.12),rgba(90,159,245,.06));
+  border:1px solid rgba(63,185,80,.35);border-radius:14px;padding:18px 21px;margin:22px 0 8px}
+.banner-t{font-size:12px;font-weight:700;color:var(--ok);letter-spacing:.9px;margin-bottom:8px}
+.banner-q{font-size:16px;font-weight:600;margin-bottom:9px;line-height:1.5}
+.banner p{font-size:13.5px;color:var(--tx2)}
+.banner b{color:var(--tx)}
+
+.bar-wrap{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:14px 0 28px}
+.bar-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.bar-lbl{font-size:13px;color:var(--tx2);text-transform:uppercase;letter-spacing:.9px;font-weight:600}
+.bar-num{font-size:26px;font-weight:680;font-variant-numeric:tabular-nums}
+.bar{height:9px;background:var(--bg3);border-radius:99px;overflow:hidden}
+.bar>i{display:block;height:100%;width:0;border-radius:99px;
+  background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .45s cubic-bezier(.4,0,.2,1)}
+.milestones{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.ms{font-size:11.5px;padding:4px 10px;border-radius:99px;background:var(--bg3);color:var(--tx3);
+  border:1px solid var(--line);font-weight:600;letter-spacing:.3px}
+.ms.done{background:rgba(63,185,80,.12);color:var(--ok);border-color:rgba(63,185,80,.35)}
+
+.tabs{display:flex;gap:4px;margin-bottom:22px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tab{background:none;border:none;color:var(--tx3);font:inherit;font-size:14px;font-weight:600;
+  padding:10px 15px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:.15s}
+.tab:hover{color:var(--tx2)}
+.tab.on{color:var(--tx);border-bottom-color:var(--acc)}
+.pane{display:none}.pane.on{display:block}
+
+.ph{background:var(--bg2);border:1px solid var(--line);border-radius:13px;margin-bottom:11px;overflow:hidden;transition:.2s}
+.ph.open{border-color:#39445270}
+.ph.finished{border-color:rgba(63,185,80,.3)}
+.ph-h{display:flex;align-items:center;gap:13px;padding:15px 18px;cursor:pointer;user-select:none}
+.ph-h:hover{background:#ffffff05}
+.chev{color:var(--tx3);font-size:11px;transition:transform .2s;width:10px;flex:none}
+.ph.open .chev{transform:rotate(90deg)}
+.tag{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;background:var(--bg3);
+  color:var(--tx2);letter-spacing:.6px;flex:none;font-variant-numeric:tabular-nums}
+.ph.finished .tag{background:rgba(63,185,80,.15);color:var(--ok)}
+.ph-t{font-weight:600;flex:1;min-width:0}
+.ph-meta{font-size:12.5px;color:var(--tx3);flex:none;font-variant-numeric:tabular-nums}
+.mini{width:52px;height:5px;background:var(--bg3);border-radius:99px;overflow:hidden;flex:none}
+.mini>i{display:block;height:100%;width:0;background:var(--ok);transition:width .35s}
+.ph-b{padding:2px 18px 16px 41px;display:none}
+.ph.open .ph-b{display:block}
+.note{font-size:13.5px;color:var(--tx2);margin:6px 0 13px;padding:11px 13px;background:#ffffff06;
+  border-left:2px solid var(--acc);border-radius:0 7px 7px 0}
+.note.green{border-left-color:var(--ok)}
+.note.red{border-left-color:var(--dan)}
+.note b{color:var(--tx);font-weight:600}
+.dm{font-size:12.5px;color:var(--tx3);margin-top:12px;padding-top:11px;border-top:1px solid var(--line)}
+.dm b{color:var(--tx2)}
+
+.t{display:flex;gap:10px;align-items:flex-start;padding:6px 0;cursor:pointer}
+.t:hover .cb{border-color:var(--tx3)}
+.cb{width:17px;height:17px;border:1.5px solid #3a4553;border-radius:5px;flex:none;margin-top:2px;
+  display:grid;place-items:center;transition:.15s}
+.cb::after{content:'';width:8px;height:4.5px;border-left:2px solid #fff;border-bottom:2px solid #fff;
+  transform:rotate(-45deg) scale(0);transition:transform .15s;margin-top:-2px}
+.t.on .cb{background:var(--ok);border-color:var(--ok)}
+.t.on .cb::after{transform:rotate(-45deg) scale(1)}
+.t span{font-size:14px;transition:.15s}
+.t.on span{color:var(--tx3);text-decoration:line-through}
+
+.gate{background:linear-gradient(135deg,rgba(240,89,107,.07),rgba(210,153,34,.05));
+  border:1px solid rgba(240,89,107,.3);border-radius:13px;padding:17px 20px;margin-bottom:11px}
+.gate-t{font-weight:680;color:var(--dan);font-size:13px;letter-spacing:.7px;margin-bottom:7px}
+.gate-q{font-size:16px;font-weight:600;margin-bottom:11px;line-height:1.45}
+.gate ul{list-style:none;font-size:13.5px;color:var(--tx2)}
+.gate li{padding:3px 0 3px 17px;position:relative}
+.gate li::before{content:'→';position:absolute;left:0;color:var(--tx3)}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin-bottom:8px}
+th{text-align:left;padding:9px 11px;color:var(--tx3);font-size:11px;text-transform:uppercase;
+  letter-spacing:.8px;border-bottom:1px solid var(--line);font-weight:700}
+td{padding:10px 11px;border-bottom:1px solid #1f2731;vertical-align:top}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#ffffff04}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.good{color:var(--ok);font-weight:600}
+code{background:var(--bg3);padding:1.5px 6px;border-radius:5px;font-size:12.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#9fc9ff}
+
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:13px;padding:19px 21px;margin-bottom:13px}
+.card h3{font-size:15px;font-weight:650;margin-bottom:11px;display:flex;align-items:center;gap:9px}
+.dot{width:7px;height:7px;border-radius:99px;flex:none}
+.card p{font-size:13.5px;color:var(--tx2);margin-bottom:9px}
+.card p:last-child{margin-bottom:0}
+.card strong{color:var(--tx);font-weight:600}
+.st{color:var(--warn);letter-spacing:1px;white-space:nowrap;font-size:12px}
+.st.x5{color:var(--dan)}
+.st.x1,.st.x2{color:var(--ok)}
+
+.tools{display:flex;gap:9px;margin-top:26px;flex-wrap:wrap}
+.btn{background:var(--bg3);border:1px solid var(--line);color:var(--tx2);font:inherit;font-size:13px;
+  font-weight:600;padding:9px 16px;border-radius:9px;cursor:pointer;transition:.15s}
+.btn:hover{background:#242d3a;color:var(--tx);border-color:#3a4553}
+.out{margin-top:13px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:13px;
+  font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--tx2);white-space:pre-wrap;display:none}
+.out.on{display:block}
+footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);color:var(--tx3);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Projekt AIditor</h1>
+  <div class="sub">Implementační tracker · nativní macOS videoeditor · režim 30+ h týdně</div>
+</header>
+
+<div class="banner">
+  <div class="banner-t">SPIKE 0 UZAVŘEN · 26. 7. 2026</div>
+  <div class="banner-q">Dá se v AVFoundation udělat plynulá rychlostní křivka tak, aby zvuk seděl, nelupal a export nespadl?</div>
+  <p><b>Ano.</b> Synchron 0,00 ms · žádné lupance ani při 545 segmentech · 17 exportů bez pádu · kódování 4–7× rychleji než reálný čas. Hlavní technické riziko projektu je zavřené, rozsah MVP je reálný.</p>
+</div>
+
+<div class="bar-wrap">
+  <div class="bar-top">
+    <span class="bar-lbl">Postup k v1.0</span>
+    <span class="bar-num" id="pct">0 %</span>
+  </div>
+  <div class="bar"><i id="fill"></i></div>
+  <div class="milestones" id="miles"></div>
+</div>
+
+<div class="tabs">
+  <button class="tab on" data-p="p1">Fáze</button>
+  <button class="tab" data-p="p5">Naměřeno</button>
+  <button class="tab" data-p="p2">Moduly</button>
+  <button class="tab" data-p="p3">Korekce specifikace</button>
+  <button class="tab" data-p="p4">Nejisté</button>
+</div>
+
+<div class="pane on" id="p1"></div>
+
+<div class="pane" id="p5">
+  <div class="card">
+    <h3><span class="dot" style="background:var(--ok)"></span>Co Spike 0 naměřil</h3>
+    <p>Všechno na reálných klipech ze Samsungu, na MacBooku Air M4. Čísla, ne dojmy.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="dot" style="background:var(--acc)"></span>Rychlostní křivka</h3>
+    <table><tbody>
+      <tr><td>Ramp 1,0 → 0,25 → 1,0 spotřebuje zdroj v poměru</td><td class="num good">0,625</td></tr>
+      <tr><td>Předpověď délky výstupu vs. naměřeno</td><td class="num good">18,17 / 18,167 s</td></tr>
+      <tr><td>Synchron zvuku před a po zploštění</td><td class="num good">0,00 ms</td></tr>
+      <tr><td>Lupance na hranicích segmentů</td><td class="num good">žádné, ani při 545</td></tr>
+      <tr><td>Kolísání ve všech 12 výstupech</td><td class="num good">0,00 %</td></tr>
+    </tbody></table>
+  </div>
+
+  <div class="card">
+    <h3><span class="dot" style="background:var(--warn)"></span>Testovací materiál — pět klipů ze Samsungu</h3>
+    <table><thead><tr><th>Klip</th><th>Kolísání</th><th>Zahozeno</th><th>Verdikt</th></tr></thead><tbody>
+      <tr><td>202947 · 4K/60 · 44,9 s</td><td class="num">0,1 %</td><td class="num">1</td><td>CFR↓1</td></tr>
+      <tr><td>203452 · 4K/30 · 38,6 s</td><td class="num">0,0 %</td><td class="num">—</td><td>CFR±</td></tr>
+      <tr><td>203813 · 120 fps · 11,4 s</td><td class="num">1,1 %</td><td class="num">—</td><td>VFR</td></tr>
+      <tr><td>203901 · 4K/60 · 31,7 s</td><td class="num">1,9 %</td><td class="num">6</td><td>VFR</td></tr>
+      <tr><td>204045 · 4K/60 · 31,6 s</td><td class="num">0,1 %</td><td class="num">2</td><td>CFR↓2</td></tr>
+    </tbody></table>
+    <p style="margin-top:11px"><strong>Ani jeden nemá čistě konstantní časování.</strong> VFR je výchozí stav, ne okrajový případ. Zahozených snímků celkem devět — telefon při 120 Mbit/s nestíhá zapisovat.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="dot" style="background:var(--dan)"></span>Limit zpomalení daný zdrojem</h3>
+    <p>Pravidlo: <code>zdrojFps × nejnižšíRychlost ≥ výstupFps</code>. Když zdroj nemá dost snímků, duplikují se a zpomalený úsek trhá.</p>
+    <table><thead><tr><th>Zdroj</th><th>Duplikátů</th><th>Čisté zpomalení při 30 fps</th></tr></thead><tbody>
+      <tr><td>120 fps</td><td class="num good">0,0 %</td><td class="num">0,25×</td></tr>
+      <tr><td>60 fps</td><td class="num">13,5 %</td><td class="num">0,5×</td></tr>
+      <tr><td>30 fps</td><td class="num">37,5 %</td><td class="num">1,0× (žádné)</td></tr>
+    </tbody></table>
+    <p style="margin-top:11px">Teorie předpověděla 37,5 %, naměřeno <strong>37,54 %</strong>. Není to chyba k opravě — je to vlastnost materiálu. Patří do UI jako varování dopředu a do svatebního asistenta jako pravidlo „zpomalované záběry toč na 120 fps".</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="dot" style="background:var(--acc2)"></span>Výkon</h3>
+    <table><tbody>
+      <tr><td>Zploštění do ProRes 422 Proxy ve 4K</td><td class="num good">257–426 fps</td></tr>
+      <tr><td>Tedy rychleji než reálný čas</td><td class="num">4–7×</td></tr>
+    </tbody></table>
+    <p style="margin-top:11px">Softwarové kódování by tohle nedalo. <strong>Hardwarový ProRes engine M4 je potvrzený</strong> — přes API to zjistit nejde, ale číslo mluví jasně. Rozptyl mezi klipy je nejspíš náročnost dekódování zdrojového HEVC, ne ProRes zápis.</p>
+  </div>
+
+  <div class="card">
+    <h3><span class="dot" style="background:var(--acc)"></span>Segmentace a zvuk</h3>
+    <p>Čtyři jemnosti dělení, poslech ve sluchátkách na dvou klipech s nejvyšším podílem ticha (41 % a 38 % pauz).</p>
+    <p><strong>Výsledek: všechny znějí stejně.</strong> Segmentace zvuk neovlivňuje. Proto se jemnost nevybírá podle sluchu, ale podle velikosti kompozice — a řídí se mezí skoku rychlosti, ne pevným počtem snímků.</p>
+    <table><thead><tr><th>Klip</th><th>maxSpeedStep 1,5 %</th><th>Skok</th></tr></thead><tbody>
+      <tr><td>11,4 s</td><td class="num">182 úseků po 3 snímcích</td><td class="num good">1,42 %</td></tr>
+      <tr><td>44,9 s</td><td class="num">180 úseků po 12 snímcích</td><td class="num good">1,44 %</td></tr>
+    </tbody></table>
+    <p style="margin-top:11px">Krátký klip dostal jemnější dělení, dlouhý hrubší — a vyšly na stejný počet úseků při čtyřnásobném rozdílu v délce. Plechový zvuk ve zpomaleném úseku je vlastnost algoritmu při 4× roztažení, ne segmentace; <code>.timeDomain</code> zachovává transienty líp než <code>.spectral</code> a je proto výchozí.</p>
+  </div>
+</div>
+
+<div class="pane" id="p2">
+  <div class="card">
+    <h3><span class="dot" style="background:var(--ok)"></span>Hotové a ověřené moduly</h3>
+    <table><thead><tr><th>Modul</th><th>Co dělá</th><th>Stav</th></tr></thead><tbody>
+      <tr><td><code>SpeedRampEngine</code></td><td>Matematika křivky, Bézier, inverze, segmentace</td><td class="good">41 testů</td></tr>
+      <tr><td><code>ProbeKit</code></td><td>Sdílené měřicí a renderovací jádro</td><td class="good">ověřeno</td></tr>
+      <tr><td><code>MediaProbe</code></td><td>Sonda na vlastnosti klipů, detekce VFR</td><td class="good">5 klipů</td></tr>
+      <tr><td><code>Flatten</code></td><td>Zploštění VFR na pevnou mřížku</td><td class="good">3 klipy</td></tr>
+      <tr><td><code>Ramp</code></td><td>Plynulá rychlostní křivka segmentací</td><td class="good">12 výstupů</td></tr>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--ok)"></span>Vrstva 1 — Čistá logika</h3>
+    <p>Žádné Apple frameworky, plně testovatelné. <strong>Bezpečná zóna — piš sem co nejvíc.</strong></p>
+    <table><thead><tr><th>Modul</th><th>Co dělá</th><th>Obtížnost</th></tr></thead><tbody>
+      <tr><td><code>SpeedRampEngine</code></td><td>hotovo</td><td class="st x2">★★☆☆☆</td></tr>
+      <tr><td><code>ProjectModel</code></td><td>Struktury projektu, Codable</td><td class="st x1">★☆☆☆☆</td></tr>
+      <tr><td><code>TimelineModel</code></td><td>Stopy, klipy, split/trim/ripple</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>UndoStack</code></td><td>Historie změn</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>ShotPlanModel</code></td><td>Svatební checklist</td><td class="st x1">★☆☆☆☆</td></tr>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--warn)"></span>Vrstva 2 — Média</h3>
+    <table><thead><tr><th>Modul</th><th>Co dělá</th><th>Obtížnost</th></tr></thead><tbody>
+      <tr><td><code>MediaImporter</code></td><td>NSOpenPanel, bookmarks, sonda</td><td class="st x2">★★☆☆☆</td></tr>
+      <tr><td><code>VFRDetector</code></td><td>Může vyjít z hotového ProbeKit</td><td class="st x2">★★☆☆☆</td></tr>
+      <tr><td><code>ProxyGenerator</code></td><td>Může vyjít z hotového Flatten</td><td class="st x2">★★☆☆☆</td></tr>
+      <tr><td><code>CompositionBuilder</code></td><td>Model → AVMutableVideoComposition</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>PlaybackController</code></td><td>AVPlayer, seek coalescing</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>ExportEngine</code></td><td>AVAssetWriter, VideoToolbox</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>MetalCompositor</code></td><td>AVVideoCompositing + shadery</td><td class="st x5">★★★★★</td></tr>
+      <tr><td><code>AudioEngine</code></td><td>32-bit float, LUFS, pitch</td><td class="st">★★★★☆</td></tr>
+    </tbody></table>
+    <p style="margin-top:11px">Tři z nich spike zlevnil: <strong>VFRDetector, ProxyGenerator i CompositionBuilder mají hotový a ověřený základ.</strong></p>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--acc)"></span>Vrstva 3 — UI</h3>
+    <p><strong>Timeline v AppKitu, zbytek v SwiftUI.</strong> SwiftUI nemá recyklaci buněk, nedá viditelnost do drag session a nad tisíci prvky se seká. Riverside má SwiftUI chrome + samostatný timeline engine, Recut je celý AppKit.</p>
+    <table><thead><tr><th>Modul</th><th>Technologie</th></tr></thead><tbody>
+      <tr><td><code>TimelineView</code></td><td><strong>AppKit</strong> — NSView v NSScrollView, CALayer</td></tr>
+      <tr><td><code>PlayerView</code></td><td>AppKit v NSViewRepresentable</td></tr>
+      <tr><td><code>SpeedRampEditor</code></td><td>AppKit — a musí kreslit žlutou zónu pod limitem zdroje</td></tr>
+      <tr><td>Panely, inspektor, asistent</td><td>SwiftUI</td></tr>
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--dan)"></span>Vrstva 4 — AI (až za v1.0)</h3>
+    <table><thead><tr><th>Modul</th><th>Co dělá</th><th>Obtížnost</th></tr></thead><tbody>
+      <tr><td><code>SceneDetector</code></td><td>Detekce střihů</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>QualityFilter</code></td><td>Rozostření, kvalita záběru</td><td class="st x2">★★☆☆☆</td></tr>
+      <tr><td><code>TranscriptionEngine</code></td><td>WhisperKit, large-v3-turbo</td><td class="st">★★★☆☆</td></tr>
+      <tr><td><code>FaceEmbedder</code></td><td>AuraFace přes Core ML</td><td class="st x5">★★★★★</td></tr>
+    </tbody></table>
+  </div>
+</div>
+
+<div class="pane" id="p3"></div>
+
+<div class="pane" id="p4">
+  <div class="card">
+    <h3><span class="dot" style="background:var(--ok)"></span>Co spike vyřešil</h3>
+    <p>✅ <strong>Hardwarový ProRes engine</strong> — plán psal „přes API zjistit nejde, změř to". Změřeno: 257–426 fps ve 4K. Běží.</p>
+    <p>✅ <strong>Lupance na hranicích segmentů</strong> — hlášené jako riziko, naměřeno: nejsou. Ani při 545 segmentech.</p>
+    <p>✅ <strong>Přesnost mapování času</strong> — délka výstupu sedí na předpověď do jednoho snímku.</p>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--warn)"></span>Co zůstává nejisté</h3>
+    <p>• <strong>Nikdo nikdy nepublikoval benchmark vlastního <code>AVVideoCompositing</code> držícího 4K/60 náhled.</strong> Spike na to neodpověděl — přehrávač neexistuje, takže se to nedalo měřit. Otázka přechází do fází 1–4.</p>
+    <p>• Ze čtyř komerčních macOS video appek, jejichž binárky šly rozebrat, <strong>žádná nekompozituje přes AVVideoComposition</strong> — všechny mají vlastní engine. Může to znamenat, že to nestačí, nebo že chtěly Windows. Nevíme.</p>
+    <p>• Odhady časů fází jsou odhad, ne měření. Násobek 1,7 je odhad odhadu.</p>
+    <p>• Rychlost Whisperu na bezventilátorovém Airu — všechna publikovaná čísla jsou z aktivně chlazených strojů.</p>
+    <p>• Absolutní mez skoku rychlosti funguje, protože klasický ramp je kolem minima plochý. U křivky strmé <em>v</em> pomalém místě by poddimenzovala — okrajový případ, ale ať to není překvapení.</p>
+  </div>
+  <div class="card">
+    <h3><span class="dot" style="background:var(--dan)"></span>Plán B</h3>
+    <p>Není to selhání, je to jiný produkt. <strong>Po uzavření spiku je méně pravděpodobný</strong> — hlavní technické riziko padlo.</p>
+    <p><strong>„AIditor Ramp"</strong> — jedna mini-appka. Nahodíš klip, nakreslíš křivku, exportuješ. Většina enginu už existuje. Prodejné za 490 Kč, dokončitelné.</p>
+    <p><strong>„Svatební asistent"</strong> — checklist, záběrový plán, kalkulace jako PWA v Reactu. Pár dnů. Ověří niku bez řádky Swiftu.</p>
+  </div>
+</div>
+
+<div class="tools">
+  <button class="btn" id="bExp">Zkopírovat stav do PROJECT_STATUS.md</button>
+  <button class="btn" id="bAll">Rozbalit vše</button>
+  <button class="btn" id="bRst">Vynulovat</button>
+</div>
+<div class="out" id="out"></div>
+
+<footer>
+  Projekt AIditor · implementační tracker v4.0 · 30. 7. 2026 — <b>fáze 0–18 hotové</b> (MVP 0–9, vylepšení 10–16, ergonomie 17, přestavba UI 18), 570 automatických testů. Dál koukance rukou a KILL-GATE 1 (svatba, materiál ~konec srpna 2026).<br>
+  Stav se neukládá mezi načteními — po práci klikni na „Zkopírovat stav" a vlož ho do <code>PROJECT_STATUS.md</code>.
+</footer>
+
+</div>
+<script>
+const PH=[
+ {id:0,tag:"F0",t:"Spike 0 — ověření speed rampingu",w:"hotovo",v:"",done:true,
+  note:"<b>Uzavřen 26. 7. 2026 s kladným výsledkem.</b> Plynulý ramp v AVFoundation funguje. Detaily v <b>SPIKE_0.md</b>.",dm:"",
+  ts:["SpeedRampEngine, MediaProbe, Flatten, Ramp — ověřené moduly","Rozhodovací bod vyhodnocen: staví se dál"]},
+ {id:1,tag:"F1",t:"Kostra a přehrávač",w:"hotovo 26. 7.",v:"v0.1",done:true,
+  note:"Import, VFRDetector, přehrávač se seekem dle QA1820. Náhled 4K/60 jede na stropu displeje (přeměřeno po opravě metodiky 27. 7.).",dm:"",
+  ts:["Xcode projekt, sandbox, target 14.0","Základna projektu: 30 fps","MediaImporter + bookmarky","PlaybackController + seek coalescing","VFRDetector z ProbeKit","Měření náhledu"]},
+ {id:2,tag:"F2",t:"Timeline",w:"hotovo 28. 7.",v:"v0.2",done:true,
+  note:"<b>Deset kroků, 2000 klipů bez vypadlého tiku</b> (medián práce na tik 1,99 ms). Model s 254 testy, view jen kreslí.",dm:"",
+  ts:["TimelineModel + testy","Pravítko, hlavičky, playhead, seek","Tažení s undo, zoom na kurzoru, roll/slip","Vlnové průběhy z CGImage dlaždic","Výkonový test: 0 vypadlých tiků na 1202"]},
+ {id:3,tag:"F3",t:"Speed ramping ostrý",w:"hotovo 28. 7.",v:"v0.3",done:true,
+  note:"Přehrávač hraje celou osu včetně křivek, editor křivek se žlutou zónou z měřené frekvence zdroje.",dm:"",
+  ts:["CompositionBuilder — kompozice celé osy","Rampy přes scaleTimeRange pozpátku, mez skoku 1,5 %","RampEditorView — uzly, žlutá zóna, undo"]},
+ {id:4,tag:"F4",t:"Proxy a výkon",w:"hotovo 28. 7.",v:"v0.4",done:true,
+  note:"ProRes 422 Proxy v půlce rozlišení, VFR→CFR, externí disk. Seek 6,2 ms proti 41–95 ms. <b>Kritérium 200GB materiálu se ověří u kill-gate.</b>",dm:"",
+  ts:["ProxyStore + cache otiskem","Přepínač per projekt, fallback na originály","Externí disk + mazání cache"]},
+ {id:5,tag:"F5",t:"Projekt a export",w:"hotovo 28. 7.",v:"v0.5 — MVP NULA",done:true,
+  note:"Jednosouborový .projektkrasa, autosave s obnovou po pádu, export HEVC 4K/30 s <b>kolísáním 0,0 %</b>, dotaz při zavírání.",dm:"",
+  ts:["ProjectFile + bookmarky assetů","Autosave 5 s po změně + při ukončení","Export přes AVAssetWriter (mediaTimeScale!)","Dotaz Uložit/Neukládat/Zrušit"]},
+ {id:6,tag:"F6",t:"Svatební asistent — ŠKRTNUT",w:"—",v:"",done:true,
+  note:"<b>Škrtnut 28. 7. na pokyn autora — produkt je čistě videoeditor.</b> Pravidlo „na zpomalení toč 120 fps“ říká žlutá zóna v editoru křivek.",dm:"",
+  ts:["Rozhodnutí zapsáno v plánu, statusu i CLAUDE.md"]},
+ {id:7,tag:"F7",t:"Audio engine",w:"hotovo 28. 7.",v:"v0.7",done:true,
+  note:"Pět modulů za den. <b>LoudnessMeter ověřen proti pyloudnorm (&lt;0,05 LU), sync klopáku na vzorek přesně.</b> AVAudioEngine nebyl potřeba — mix zvládl AVAudioMix.",dm:"",
+  ts:["LoudnessMeter dle BS.1770-4","Hlasitost/mute stop v přehrávání i exportu","LUFS normalizace se stropem špiček","WaveformSync — korelace přes vlastní FFT","Sync v UI: nahrávka na A2"]},
+ {id:8,tag:"F8",t:"Titulky",w:"hotovo 28. 7.",v:"v0.8",done:true,
+  note:"WhisperKit v1.0.0, model <code>openai_whisper-large-v3-v20240930</code> (= large-v3-turbo; pozor na názvosloví). Český přepis ověřen.",dm:"",
+  ts:["Model přepisu kotvený ve zdroji + SRT (14 testů)","WhisperKit + stažení modelu (~1,5 GB)","Overlay v náhledu + export .srt"]},
+ {id:9,tag:"F9",t:"Distribuce — uzavřena v osobním rozsahu",w:"hotovo 28. 7.",v:"",done:true,
+  note:"<b>Rozhodnutí autora: appka je free a jen pro něj — podpis, notarizace, Sparkle i licence ODLOŽENY.</b> <b>Migrace na Configuration NEPROBĚHLA</b> a je to správně — <code>Configuration</code> na targetu 14.0 neexistuje, takže by to znamenalo druhou větev pod <code>#available(macOS 26.0, *)</code>. Úkol před vydáním. <i>(Opraveno 30. 7. — dřívější zápis tvrdil, že hotová je.)</i>",dm:"",
+  ts:["Rozhodnutí: appka je free a jen pro autora","Zbytek odložen (návod zůstává v plánu)"]},
+ {id:10,tag:"F10",t:"Přechody",w:"hotovo 28. 7.",v:"v0.10",done:true,
+  note:"Prolínačka, zatmívačky, audio crossfade. <b>GPU skok změřen: 0,25 → 12,9 % s prolínačkou</b> — kompozice se staví jen když je co skládat.",
+  dm:"Přechod patří STŘIHU: zanikne s ním, a operace, která by ho rozbila, se odmítne (blockedByTransition).",
+  ts:["Model: Transition na střihu + testy","Kompozice A/B roll + opacity rampy","Audio crossfade přes AVAudioMix","UI: menu, kreslení na ose, délka tažením","Změřen GPU proti baseline"]},
+ {id:11,tag:"F11",t:"Texty a titulky + stopa T1",w:"hotovo 29. 7.",v:"v0.11",done:true,
+  note:"Jména, datum, kapitoly, české šablony. <b>Formát souboru šel na verzi 2</b> (nový druh stopy .title).",
+  dm:"⚠️ AVVideoCompositionCoreAnimationTool se NEPOUŽIL — je dokumentovaný pro AVAssetExportSession, kterou projekt schválně nepoužívá. Titulky vypaluje frameDecorator v CFRRendereru (odchylka mimo titulek 0,14).",
+  ts:["Model: stopa .title + titulkový klip","Pruh T1 na ose (kreslí i titulky z řeči)","Náhled overlay + vypálení do exportu","České šablony","Editace textu titulku (inspektor)"]},
+ {id:12,tag:"F12",t:"Fotky a Ken Burns",w:"hotovo 29. 7.",v:"v0.12",done:true,
+  note:"Fotky přes „still movie“ mezisoubor (jeden ProRes snímek s vpáleným aspect-fitem) — do AVComposition se fotka vložit nedá.",dm:"",
+  ts:["Import fotek jako asset","Klip s volnou délkou na V1","Ken Burns přes TransformRamp","Freeze frame: snímek → fotka"]},
+ {id:13,tag:"F13",t:"Barevné presety",w:"hotovo 29. 7.",v:"v0.13",done:true,
+  note:"Vlastní <code>AVVideoCompositing</code>, NE applyingCIFiltersWithHandler (ten filtruje jen první stopu a naše kompozice má od F10 dvě dráhy). <b>GPU skok medián 24 %.</b>",
+  dm:"Dvě pasti CoreImage, obě chytila kvantitativní kontrola: pracovní prostor musí být týž jako u zdroje, a CIColorMatrix počítá na nepremultiplikovaných hodnotách.",
+  ts:["Volba techniky + měření","Presety jako řetězce CIFilterů","Intenzita 0–100 % per klip","UI v inspektoru/menu"]},
+ {id:14,tag:"F14",t:"Hudební synchronizace — VLAJKOVÁ",w:"hotovo 29. 7.",v:"v0.14",done:true,
+  note:"Beat-grid na vlastní FFT (±0,1 BPM na klikových stopách), magnet na doby, dopasování klipu na dobu. Nízká jistota mřížky se přiznává.",
+  dm:"Dopasování 90–115 % VŽDY nad limitem čistého zpomalení. Doby jsou kotvené ve ZDROJOVÉM čase, takže s nimi trim ani přesun nehnou.",
+  ts:["BeatGrid v AudioEngine + testy na klikách","Mapa dob na ose + magnet","Dopasování tempa klipu 90–115 %","Rampa na úder"]},
+ {id:15,tag:"F15",t:"Analýzy kvality",w:"hotovo 29. 7.",v:"v0.15",done:true,
+  note:"Neostrost a hluchá místa. <b>Klasifikace relativně k mediánu CELÉHO assetu</b> — absolutní prahy nefungují a trim by jinak klasifikaci měnil.",
+  dm:"Vzorky se do projektu NEUKLÁDAJÍ, drží je SharpnessStore s cache otiskem (verze výpočtu je součást otisku).",
+  ts:["Detekce neostrosti + značky na klipu","Detekce ticha/prázdna (zvuk × obraz)","Cache analýz","Citlivost v liště osy"]},
+ {id:16,tag:"F16",t:"Vymazlení a dluhy",w:"hotovo 29. 7.",v:"v1.0-osobní",done:true,
+  note:"Zvukové fade úchyty, strop normalizace na <b>true peak −1 dBTP</b> (4× převzorkování — špička vzorků na reálném klipu lhala o 1,2 dB), správa modelu přepisu.",dm:"",
+  ts:["Zvukové fade úchyty na klipech","Strop normalizace na true peak (dBTP)","Správa modelu Whisperu","Koukance a drobnosti z používání"]},
+ {id:17,tag:"F17",t:"Ergonomie střihu",w:"hotovo 29. 7.",v:"v1.1",done:true,
+  note:"Osa sleduje hlavu (stránkuje), JKL, multi-výběr, schránka, chronologie, export výřezu. <b>Zpětné přehrávání naše kompozice UMÍ</b> — na 84 % rychlosti; krokovací fallback proto zůstává a kontrola ho vynucuje, aby nespouštěná cesta neshnila.",dm:"",
+  ts:["Auto-scroll za hlavou + JKL","Multi-výběr a schránka (čerstvý LinkID!)","Hromadné operace na výběru","Chronologie podle času natočení","Export výřezu I—O"]},
+ {id:18,tag:"F18",t:"Přestavba UI podle design handoffu",w:"hotovo 30. 7.",v:"v1.2",done:true,
+  note:"<b>Třináct modulů, každý za vlastní CLI branou; žádný se neodložil.</b> Zadání: design_handoff_aiditor_ui (šest hi-fi obrazovek), plán ve FAZE_18_UI.md. Model se skoro nehnul (+10 testů, formát souboru beze změny).",
+  dm:"Cena zůstává na stole: třináct sessions čerstvého kódu, který nikdo neodzkoušel na zakázce. Drží ho regresní sada — ergonomii ověří až koukance a svatba.",
+  ts:["A: rám okna, stavový řádek, lišta osy","B: výšky stop, miniatury na klipech, přehled osy","C: panel se záložkami, knihovna médií + drop","D: list exportu, panel přepisu řeči","D: prázdný start a fullscreen náhled"]},
+ {id:19,tag:"F19+",t:"Třetí vlna — až po svatbě",w:"",v:"",
+  note:"<b>F19</b> druhá obrazová stopa (V2), <b>F20</b> ducking hudby pod řečí + jednotná obálka mixu, <b>F21</b> multikamera, markery a třídění materiálu, <b>F22</b> stabilizace (spike první, s právem přestat). Podmíněné: <b>F23</b> detekce momentů, <b>F24</b> rozpoznávání obličejů (tři gaty).",
+  dm:"⚠️ Přečíslováno 30. 7. — číslo 18 dostala přestavba UI, protože je vypálené ve 45 zdrojových souborech; ustoupila nepostavená fáze.",
+  ts:["Pořadí rozhodne svatba: co bolelo, jde nahoru"]}
+];
+const GATES={18:{t:"KILL-GATE 1 — na konci vývoje",q:"Sestříhej touhle appkou celou reálnou svatbu. Od začátku do konce. Bez cheatů. (Materiál ~konec srpna 2026.)",
+  li:["Zvládl jsi to a nebylo to utrpení → hotovo; podmíněné fáze podle chuti","Zvládl jsi to, ale bolelo to → opravy toho, co bolelo; žádné nové funkce","Nezvládl jsi to → zastav a zúži. Nejdůležitější rozhodnutí v plánu.","Při gate se ověří i 200GB kritérium F4, přepis reálné řeči a všechny koukance"]}};
+const FIX=[
+ ["1","<b>AVMutableVideoComposition je od macOS 26 deprecated, ale používá se dál.</b> Náhrada <code>AVVideoComposition.Configuration</code> je <code>@available(macOS 26.0, *)</code> — na macOS 14–25 neexistuje.","Hlavní cesta zůstává deprecated API. Migrace až ve fázi 9 jako druhá větev. <i>Dřívější text tvrdil opak — byla to chyba.</i>"],
+ ["2","<b>scaleTimeRange neumí plynulou křivku.</b> <code>CMTimeMapping</code> je dvojice rozsahů, křivka do něj nejde zapsat z principu.","<b>Ramp = segmentace, jiná cesta není.</b> Vlastní compositor do časování nevidí."],
+ ["3","<b>AVAssetWriter si bez instrukce zvolí timescale 600</b> a kvantizuje do ní zapisované časy.","U 29,97 / 59,94 / 23,976 to vyrobí rozptyl. Vždy <code>videoInput.mediaTimeScale = frameDuration.timescale</code>; na zvuku NE. Odhaleno až ověřením na druhém klipu."],
+ ["4","<b>Zvuk má edit list, který zahazuje prvních 44 ms</b> — priming AAC, u všech pěti klipů.","Zvuk nikdy nečíst ze syrové tabulky vzorků, jen přes <code>AVComposition</code>. Jinak je posunutý o skoro tři snímky."],
+ ["5","<b>Zpomalení má tvrdý limit daný zdrojem:</b> <code>zdrojFps × nejnižšíRychlost ≥ výstupFps</code>.","Není to chyba k opravě, je to vlastnost materiálu. Do UI jako varování dopředu, do asistenta jako pravidlo natáčení."],
+ ["6","<b>VFR je výchozí stav, ne výjimka.</b> Ani jeden z pěti klipů ze Samsungu nemá čistě konstantní časování.","Zploštění VFR→CFR není volitelné. <code>nominalFrameRate</code> navíc lže — 119,369 vs naměřených 120,000."],
+ ["7","<b>Whisper-small je pro češtinu nepoužitelný</b> (34–38 % WER). <b>SpeechAnalyzer češtinu nepodporuje vůbec.</b>","Model <code>large-v3-turbo</code> (~13 %). Sekce 4.3.1 specifikace se ruší, Whisper není dočasné řešení."],
+ ["8","<b>Vision nemá veřejné API pro otisk obličeje</b> a většina modelů je komerčně zakázaná (InsightFace, ArcFace: <i>non-commercial only</i>).","Jediný čistý je AuraFace-v1 (Apache 2.0), a z jeho repa jen <code>glintr100.onnx</code>. Face grouping odsunut za v1.0 se třemi gaty."],
+ ["9","<b>EU AI Act čl. 2(10) nechrání dodavatele software</b>, jen koncového uživatele.","Termín pro Annex III po Digital Omnibus: 2. 12. 2027."],
+ ["10","<b>AVAudioUnitTimePitch je pro tuhle cestu špatná třída</b> — patří k <code>AVAudioEngine</code>.","Správně je <code>AVAssetReaderTrackOutput.audioTimePitchAlgorithm</code>. Výchozí <code>.timeDomain</code>, volitelně <code>.spectral</code>."],
+ ["+","<b>AVAssetExportSession ignoruje frameDuration</b> → export přes <code>AVAssetWriter</code>. <b>Zvuk v proxy jen jako LPCM</b> — AAC by přidal vlastní priming.","Zjištění z průběhu spiku, všechna ověřená měřením."],
+ ["11","<b>OpenAI „large-v3-turbo“ se v repozitáři whisperkit-coreml jmenuje <code>openai_whisper-large-v3-v20240930</code></b> (podle data vydání). Přípona <code>_turbo</code> tam značí komprimované varianty WhisperKitu — jinou věc.","S doslovným jménem z plánu stažení spadne na modelsUnavailable. Nalezeno 28. 7. při fázi 8."],
+ ["12","<b>Dekodéry AAC se neshodnou na rozjezdu:</b> afconvert a čtení přes AVComposition se liší přesně o 528 vzorků (11,00 ms).","Interní cesty appky (sync, přehrávač, export) čtou všechny přes kompozici → jsou konzistentní. Další patrona do pravidla „zvuk jen přes AVComposition“. Nalezeno 28. 7. při ověřování syncu."],
+ ["13","<b><code>AVAudioMix.volume</code> má dokumentovaný rozsah jen 0,0–1,0</b> — zesílení přes něj by stálo na nedokumentovaném chování.","Normalizační gain se násobí přímo do vzorků (float32, vDSP) v CFRRendereru. Strop špiček <b>−1 dBTP (true peak, 4× převzorkování)</b>, poctivě hlášený — špička vzorků mezivzorkovou špičku nevidí a na reálném klipu lhala o 1,2 dB."]
+];
+
+const S={};PH.forEach(p=>S[p.id]=new Set(p.done?p.ts.map((_,i)=>i):[]));
+const el=id=>document.getElementById(id);
+
+function build(){
+  let h='';
+  PH.forEach(p=>{
+    h+=`<div class="ph${p.done?' finished':''}" data-id="${p.id}">
+      <div class="ph-h"><span class="chev">▶</span><span class="tag">${p.tag}</span>
+        <span class="ph-t">${p.t}</span>
+        <span class="mini"><i data-m="${p.id}"></i></span>
+        <span class="ph-meta" data-c="${p.id}">0/${p.ts.length}</span>
+        <span class="ph-meta">${p.w}</span></div>
+      <div class="ph-b">
+        ${p.note?`<div class="note${p.done?' green':''}">${p.note}</div>`:''}
+        ${p.ts.map((t,i)=>`<div class="t${p.done?' on':''}" data-p="${p.id}" data-i="${i}"><span class="cb"></span><span>${t}</span></div>`).join('')}
+        ${p.dm?`<div class="dm">${p.dm}</div>`:''}
+      </div></div>`;
+    if(GATES[p.id]){const g=GATES[p.id];
+      h+=`<div class="gate"><div class="gate-t">${g.t}</div><div class="gate-q">${g.q}</div>
+        <ul>${g.li.map(x=>`<li>${x}</li>`).join('')}</ul></div>`;}
+  });
+  el('p1').innerHTML=h;
+
+  el('p3').innerHTML=`<div class="card"><h3><span class="dot" style="background:var(--acc2)"></span>Co se změnilo oproti specifikaci v2.0</h3>
+    <p>Deset oprav. Prvních devět z rešerší, desátá vyplavala až při psaní kódu. <strong>Kde si specifikace a plán odporují, platí plán.</strong></p></div>
+    <table><thead><tr><th style="width:28px">#</th><th>Zjištění</th><th>Dopad</th></tr></thead><tbody>
+    ${FIX.map(f=>`<tr><td style="color:var(--tx3);font-weight:700">${f[0]}</td><td>${f[1]}</td><td style="color:var(--tx2)">${f[2]}</td></tr>`).join('')}
+    </tbody></table>`;
+}
+
+function upd(){
+  let d=0,tt=0;
+  PH.forEach(p=>{
+    const n=S[p.id].size,m=p.ts.length;d+=n;tt+=m;
+    document.querySelector(`[data-c="${p.id}"]`).textContent=`${n}/${m}`;
+    document.querySelector(`[data-m="${p.id}"]`).style.width=(n/m*100)+'%';
+  });
+  const pc=Math.round(d/tt*100);
+  el('pct').textContent=pc+' %';el('fill').style.width=pc+'%';
+  el('miles').innerHTML=PH.filter(p=>p.v).map(p=>{
+    const done=S[p.id].size===p.ts.length;
+    return `<span class="ms${done?' done':''}">${p.v}</span>`;}).join('');
+}
+
+build();upd();
+
+el('p1').addEventListener('click',e=>{
+  const t=e.target.closest('.t');
+  if(t){const p=+t.dataset.p,i=+t.dataset.i;
+    S[p].has(i)?S[p].delete(i):S[p].add(i);
+    t.classList.toggle('on');upd();return;}
+  const hd=e.target.closest('.ph-h');
+  if(hd)hd.parentElement.classList.toggle('open');
+});
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');el(b.dataset.p).classList.add('on');});
+
+el('bAll').onclick=()=>{const any=document.querySelector('.ph:not(.open)');
+  document.querySelectorAll('.ph').forEach(p=>p.classList.toggle('open',!!any));
+  el('bAll').textContent=any?'Sbalit vše':'Rozbalit vše';};
+el('bRst').onclick=()=>{PH.forEach(p=>S[p.id].clear());
+  document.querySelectorAll('.t').forEach(t=>t.classList.remove('on'));
+  el('out').classList.remove('on');upd();};
+el('bExp').onclick=()=>{
+  let s='## ⏭️ Postup podle implementačního plánu\n';
+  let cur=null;
+  PH.forEach(p=>{
+    const n=S[p.id].size,m=p.ts.length;
+    const ico=n===m?'✅':n>0?'🔄':'⬜';
+    s+=`\n${ico} **${p.tag} — ${p.t}** (${n}/${m})`;
+    if(n>0&&n<m&&!cur)cur=p;
+    if(n>0&&n<m)p.ts.forEach((t,i)=>{if(!S[p.id].has(i))s+=`\n   - [ ] ${t}`;});
+  });
+  if(!cur)cur=PH.find(p=>S[p.id].size===0);
+  if(cur){const nx=cur.ts.find((t,i)=>!S[cur.id].has(i));
+    s=`## ⏭️ Příští krok\n**${nx}**\n_(${cur.tag} — ${cur.t})_\n\n`+s;}
+  el('out').textContent=s;el('out').classList.add('on');
+  navigator.clipboard&&navigator.clipboard.writeText(s).then(
+    ()=>el('bExp').textContent='Zkopírováno ✓',()=>{}).finally(
+    ()=>setTimeout(()=>el('bExp').textContent='Zkopírovat stav do PROJECT_STATUS.md',2000));
+};
+</script>
+</body>
+</html>

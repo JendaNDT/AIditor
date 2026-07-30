@@ -1,6 +1,6 @@
 //
 //  Quality.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Analýzy kvality záběrů (fáze 15): NÁVRHOVÁ vrstva. Model umí spočítat
 //  ostrost obrazu, klasifikovat vzorky a promítnout problémová místa na

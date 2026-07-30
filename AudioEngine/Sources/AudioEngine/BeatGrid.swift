@@ -1,6 +1,6 @@
 //
 //  BeatGrid.swift
-//  Projekt Krása — AudioEngine (fáze 14)
+//  Projekt AIditor — AudioEngine (fáze 14)
 //
 //  Mřížka dob hudebního podkladu: tempo, fáze (čas první doby) a takty.
 //  Čistá matematika bez signálu — signál analyzuje `BeatDetector`, tahle

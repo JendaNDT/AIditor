@@ -1,6 +1,6 @@
 //
 //  Music.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Hudební mapa na ose (fáze 14, modul 2).
 //

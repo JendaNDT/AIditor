@@ -1,6 +1,6 @@
 //
 //  SampleTiming.swift
-//  Projekt Krása / ProbeKit
+//  Projekt AIditor / ProbeKit
 //
 //  Měřicí jádro: klasifikace délek vzorků a verdikt CFR/VFR.
 //

@@ -1,6 +1,6 @@
 //
 //  CFRRenderer.swift
-//  Projekt Krása / ProbeKit
+//  Projekt AIditor / ProbeKit
 //
 //  Vyrenderuje libovolný asset na pevnou snímkovou mřížku do ProRes 422 Proxy.
 //

@@ -1,6 +1,6 @@
 //
 //  RampEditorTests.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Logika editoru rychlostní křivky: škála, pozice uzlů, přidávání, mazání,
 //  tažení a mez čistého zpomalení. Kreslení se testuje okem, tohle vším,

@@ -1,6 +1,6 @@
 //
 //  SampleTimingReader.swift
-//  Projekt Krása / ProbeKit
+//  Projekt AIditor / ProbeKit
 //
 //  Čtení skutečných délek jednotlivých vzorků. Tohle je jádro celé sondy —
 //  Apple nemá API, které by řeklo „tenhle soubor je VFR", takže se délky

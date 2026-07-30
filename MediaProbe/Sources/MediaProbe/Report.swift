@@ -1,6 +1,6 @@
 //
 //  Report.swift
-//  Projekt Krása / MediaProbe
+//  Projekt AIditor / MediaProbe
 //
 //  Formátování výsledků do konzole a do RESULTS.md. Žádné měření tady
 //  neprobíhá — jen se tiskne, co Inspect a SampleTimingReader naměřily.

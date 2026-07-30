@@ -1,6 +1,6 @@
 //
 //  AudioOpsTests.swift
-//  Projekt Krása — TimelineModel
+//  Projekt AIditor — TimelineModel
 //
 //  Fáze 7, modul 2: hlasitost a mute stopy.
 //

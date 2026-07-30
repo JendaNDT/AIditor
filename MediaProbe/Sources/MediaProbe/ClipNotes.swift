@@ -1,6 +1,6 @@
 //
 //  ClipNotes.swift
-//  Projekt Krása / MediaProbe
+//  Projekt AIditor / MediaProbe
 //
 //  Načtení ručně psaných poznámek z CLIPS.txt. Názvy klipů jsou časová
 //  razítka, ze kterých po týdnu nikdo nepozná, co na nich je — a obsah

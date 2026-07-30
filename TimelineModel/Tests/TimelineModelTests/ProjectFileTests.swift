@@ -1,6 +1,6 @@
 //
 //  ProjectFileTests.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Formát souboru .projektkrasa: round-trip beze ztráty, deterministické
 //  bajty, jasné odmítnutí novější verze.

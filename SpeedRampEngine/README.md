@@ -1,6 +1,6 @@
 # SpeedRampEngine
 
-První modul Projektu Krása. Čistá matematika rychlostní křivky — **žádné AVFoundation, žádné UI**.
+První modul Projektu AIditor. Čistá matematika rychlostní křivky — **žádné AVFoundation, žádné UI**.
 
 Vzniklo ještě před Xcode záměrně: tohle je jediná část speed rampingu, která jde ověřit
 bez videa, bez zvuku a bez Macu. Když je matematika špatně, žádné ladění compositoru to nespraví.

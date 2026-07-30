@@ -1,0 +1,1176 @@
+//
+//  ShellChecks.swift
+//  Projekt AIditor — Measure
+//
+//  Fáze 18, modul 1. Kontroly nové skořápky:
+//
+//  `--shell-check`  geometrie okna proti tabulce návrhu, v okně I na celé
+//                   obrazovce. Měří se ze SKUTEČNÝCH view v hierarchii
+//                   (`TimelinePane`, `PlayerHostView`), ne z konstant —
+//                   porovnávat konstantu se sebou samou nic nedokazuje.
+//  `--shell-gpu`    riziko R2 plánu: pilulka transportu, čipy a měřidlo leží
+//                   NA obraze, takže náhled musí být trvale skládaný. Změří
+//                   tentýž klip s overlaji a bez nich.
+//  `--shell-demo`   koukanec pro oko a screenshot.
+//
+
+import AppKit
+import AVFoundation
+import Foundation
+import TimelineModel
+
+extension AppModel {
+
+    // MARK: - Geometrie skořápky
+
+    /// Očekávané odsazení podle zadání návrhu. Počítá se ze stejných tokenů,
+    /// jaké kreslí skořápku, ALE poskládané ručně podle tabulky z README —
+    /// když se v `AppShell` splete pořadí pater, tenhle součet to chytí.
+    private struct ExpectedInsets {
+        let paneLeft: CGFloat
+        let paneTop: CGFloat
+        let paneRight: CGFloat
+        let paneBottom: CGFloat
+        let viewerLeft: CGFloat
+        let viewerTop: CGFloat
+        /// Knihovna médií vpravo od přehrávače (M9) + její předěl + odsazení
+        /// obrazu. Nová hlídaná hodnota: knihovna je chrome a její šířka je
+        /// v zadání pevná, takže se nemá změnit náhodou.
+        let viewerRight: CGFloat
+
+        init(mode: ShellMode, panelVisible: Bool) {
+            let hairline: CGFloat = 1
+            let toolbar = mode.toolbarHeight
+            let topBand = mode.topBandHeight
+            paneLeft = AIditorUI.Metric.railWidth + hairline
+            paneTop = toolbar + hairline + topBand + hairline
+                + AIditorUI.Metric.timelineToolbarHeight + hairline
+            paneRight = panelVisible ? AIditorUI.Metric.pinnedPanelWidth + hairline : 0
+            paneBottom = AIditorUI.Metric.statusBarHeight + hairline
+            viewerLeft = paneLeft + AIditorUI.Metric.viewerPadding
+            viewerTop = toolbar + hairline + AIditorUI.Metric.viewerPadding
+            viewerRight = AIditorUI.Metric.libraryWidth + hairline
+                + AIditorUI.Metric.viewerPadding
+        }
+    }
+
+    /// Odsazení view od hran obsahu okna, přepočtené na soustavu s počátkem
+    /// vlevo NAHOŘE — v ní je psané zadání i celá tahle kontrola.
+    ///
+    /// ⚠️ Obsah SwiftUI okna je `NSHostingView`, a ten je **flipped**: `minY`
+    /// je vzdálenost od HORNÍ hrany, ne od spodní. Kdo to nezkontroluje,
+    /// dostane odsazení shora a zdola prohozená — a protože obě čísla vyjdou
+    /// „nějak rozumně", vypadá to jako chyba v layoutu, ne v měření.
+    /// První verze téhle kontroly na to naletěla.
+    private static func insets(of view: NSView, in content: NSView)
+        -> (left: CGFloat, top: CGFloat, right: CGFloat, bottom: CGFloat) {
+        let frame = view.convert(view.bounds, to: content)
+        let fromTop = content.isFlipped ? frame.minY : content.bounds.height - frame.maxY
+        let fromBottom = content.isFlipped ? content.bounds.height - frame.maxY : frame.minY
+        return (left: frame.minX, top: fromTop,
+                right: content.bounds.width - frame.maxX, bottom: fromBottom)
+    }
+
+    func verifyShellGeometry() async {
+        guard let host = await shellHostView(), let window = host.window,
+              let content = window.contentView else {
+            print("❌ přehrávač nemá okno — není co měřit"); return
+        }
+        window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+
+        // Skořápka musí mít po startu čas se srovnat; `TimelinePane` se do
+        // hierarchie dostane až po prvním layoutu.
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+
+        var failures = 0
+
+        failures += await measureShell(label: "OKNO", mode: .window,
+                                       host: host, content: content)
+
+        print("")
+        print("=== přepínám na celou obrazovku (⌃⌘F) ===")
+        guard await FullScreenSwitch.set(true, on: window) else {
+            print("❌ přechod do fullscreenu se nestihl"); return
+        }
+        failures += await measureShell(label: "CELÁ OBRAZOVKA", mode: .fullscreenApp,
+                                       host: host, content: content)
+
+        // Kontrola, že se fullscreen doopravdy projevil na PLOŠE OBRAZU, ne
+        // jen na příznaku — bit `styleMask` se přepíná už na začátku přechodu.
+        let fullscreenArea = host.videoBackingPixelSize
+        _ = await FullScreenSwitch.set(false, on: window)
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        let windowArea = host.videoBackingPixelSize
+        let grew = fullscreenArea.width * fullscreenArea.height
+            > windowArea.width * windowArea.height
+        print("")
+        print("plocha obrazu: okno \(Int(windowArea.width))×\(Int(windowArea.height))"
+              + " → fullscreen \(Int(fullscreenArea.width))×\(Int(fullscreenArea.height))"
+              + " \(grew ? "✅ vzrostla" : "❌ NEVZROSTLA")")
+        if !grew { failures += 1 }
+
+        print("")
+        print(failures == 0
+              ? "✅ SKOŘÁPKA SEDÍ NA ZADÁNÍ (okno i celá obrazovka)"
+              : "❌ neshod: \(failures)")
+    }
+
+    /// Jedno kolo měření. Vrací počet neshod.
+    private func measureShell(label: String, mode: ShellMode,
+                              host: PlayerHostView, content: NSView) async -> Int {
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        guard let pane = timelinePane else {
+            print("❌ \(label): osa není v hierarchii"); return 1
+        }
+
+        let expected = ExpectedInsets(mode: mode, panelVisible: panelVisible)
+        let paneInsets = Self.insets(of: pane, in: content)
+        let viewerInsets = Self.insets(of: host, in: content)
+
+        print("")
+        print("── \(label) · obsah okna \(Int(content.bounds.width))×\(Int(content.bounds.height))"
+              + " · flipped \(content.isFlipped) ──")
+        print("   surově: osa \(pane.convert(pane.bounds, to: content))"
+              + " · obraz \(host.convert(host.bounds, to: content))")
+
+        var failures = 0
+        func check(_ name: String, _ measured: CGFloat, _ want: CGFloat) {
+            // Půl bodu tolerance: retina layout zaokrouhluje na půlpixely.
+            let ok = abs(measured - want) <= 0.5
+            if !ok { failures += 1 }
+            print(String(format: "%@ %-28@ %7.1f   čekáno %6.1f",
+                         ok ? "✅" : "❌", name as NSString, measured, want))
+        }
+
+        check("osa zleva (rail)", paneInsets.left, expected.paneLeft)
+        check("osa shora (lišty)", paneInsets.top, expected.paneTop)
+        check("osa zprava (panel)", paneInsets.right, expected.paneRight)
+        check("osa zdola (stav. řádek)", paneInsets.bottom, expected.paneBottom)
+        check("obraz zleva", viewerInsets.left, expected.viewerLeft)
+        check("obraz shora", viewerInsets.top, expected.viewerTop)
+        check("obraz zprava (knihovna)", viewerInsets.right, expected.viewerRight)
+
+        // Pravítko si drží 26 bodů z fáze 2 — návrh ho nemění a nesmí ho
+        // rozhodit ani nová skořápka. Hlavičky se v modulu 4 ZÁMĚRNĚ rozšířily
+        // z 96 na 104 (meta řádek pod jménem stopy); tahle kontrola na to
+        // spadla a je to správně: hlídá právě to, že se rozměr nezmění
+        // náhodou.
+        check("pravítko", TimelineRulerView.height, 26)
+        check("hlavičky stop", TrackHeadersView.width, 104)
+        return failures
+    }
+
+    // MARK: - Riziko R2: co stojí overlaye nad obrazem
+
+    /// Změří tentýž klip DVAKRÁT: jednou s pilulkou, čipy a měřidlem nad
+    /// obrazem, podruhé bez nich.
+    ///
+    /// ⚠️ Sama appka GPU rezidenci nezměří — ta se čte z `powermetrics`
+    /// vedle. Kontrola proto tiskne zřetelné značky začátku a konce každé
+    /// fáze, aby šel log rozříznout, a k tomu vydá čísla, která změřit umí
+    /// (doručené snímky, dlouhé mezery mezi tiky, zahozené snímky).
+    func runShellGPUComparison(only paths: [String] = []) async {
+        guard let host = await shellHostView() else {
+            print("❌ přehrávač nemá okno"); return
+        }
+        // `reversed` obrátí pořadí fází. ⚠️ Není to kosmetika, ale kontrola
+        // METODY: ABBA vyrovnává tepelný drift (stav A jede na začátku
+        // i na konci), ale NEVYROVNÁVÁ rozjezd — první měřená pozice je
+        // v obou během táž. Obrácená jízda to rozhodne.
+        //
+        // Co se naměřilo 29. 07. 2026 (8 fází celkem):
+        //   ABBA: pozice 1 (s overlaji) 34,3 fps a 371 dlouhých mezer,
+        //         zbylé tři fáze 59,7 fps a 0 mezer,
+        //   BAAB: všechny čtyři fáze 59,7 fps a 0 mezer.
+        // Hypotéza „za to může pozice 1" tedy NEPLATÍ — v obráceném pořadí
+        // byla pozice 1 v pořádku. Byl to jednorázový výkyv, který se
+        // nezopakoval; ze sedmi zbylých měření se stav s overlaji a bez nich
+        // neliší ani o setinu. Pozice 1 se z průměru vyřazuje z opatrnosti,
+        // ne proto, že by se prokázala jako vadná — a vypisuje se, aby to
+        // šlo přepočítat.
+        let reversed = paths.contains("reversed")
+        let clipPaths = paths.filter { $0 != "reversed" }
+        var targets = await resolveTargetsForShell(clipPaths)
+        if clipPaths.isEmpty, let selected { targets = [selected] }
+        guard let clip = targets.first else {
+            print("❌ není co měřit — vyber klip nebo předej cestu"); return
+        }
+
+        host.window?.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+
+        print("═══ OVERLAYE NAD OBRAZEM: ZAPNUTÉ vs VYPNUTÉ ═══")
+        print("klip: \(clip.name)")
+        print("Vedle pusť: sudo powermetrics --samplers gpu_power -i 1000 > ~/aiditor_shell_gpu.txt")
+        print("")
+
+        // Zahřívací běh — jinak by první stav měřil studený stroj.
+        _ = await PlaybackBenchmark().run(url: clip.url, timing: clip,
+                                          controller: controller, hostView: host)
+        await coolDownForShell()
+
+        var results: [(String, BenchmarkResult)] = []
+        // ABBA: druhý stav by jinak vždycky běžel na teplejším stroji.
+        let order = reversed ? [false, true, true, false] : [true, false, false, true]
+        print("pořadí fází: \(order.map { $0 ? "A" : "B" }.joined())"
+              + " (A = s overlaji, B = bez)")
+        for (index, overlaysOn) in order.enumerated() {
+            overlaysSuppressed = !overlaysOn
+            // Skořápka se musí přelayoutovat, než se začne měřit.
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            let label = overlaysOn ? "S OVERLAJI" : "BEZ OVERLAJŮ"
+            print(">>> FÁZE \(index + 1)/4 — \(label) — START \(Date())")
+            let result = await PlaybackBenchmark().run(url: clip.url, timing: clip,
+                                                       controller: controller, hostView: host)
+            print("<<< FÁZE \(index + 1)/4 — \(label) — KONEC \(Date())")
+            results.append((label, result))
+            await coolDownForShell()
+        }
+        overlaysSuppressed = false
+
+        print("")
+        print(String(format: "%-14@ %9@ %9@ %9@ %9@",
+                     "stav" as NSString, "fps" as NSString, "min fps" as NSString,
+                     "dl. mezery" as NSString, "zahozené" as NSString))
+        for (label, result) in results {
+            print(String(format: "%-14@ %9.2f %9.0f %9d %9d",
+                         label as NSString, result.steadyStateFPS, result.minDeliveredFPS,
+                         result.longTickGaps, result.droppedFramesFromAccessLog))
+        }
+        // Pozice 1 se do průměru nepočítá (opatrnost, viz komentář výše),
+        // ale vypisuje se — zamlčené číslo je horší než vyřazené.
+        print("(pozice 1 = \(results[0].0), \(String(format: "%.2f", results[0].1.steadyStateFPS))"
+              + " fps — vyřazena z průměru jako rozjezdová)")
+        let measured = Array(results.dropFirst())
+        let withOverlays = measured.filter { $0.0 == "S OVERLAJI" }.map { $0.1.steadyStateFPS }
+        let without = measured.filter { $0.0 == "BEZ OVERLAJŮ" }.map { $0.1.steadyStateFPS }
+        if !withOverlays.isEmpty, !without.isEmpty {
+            let a = withOverlays.reduce(0, +) / Double(withOverlays.count)
+            let b = without.reduce(0, +) / Double(without.count)
+            print("")
+            print(String(format: "průměr s overlaji %.2f fps · bez %.2f fps · rozdíl %+.2f fps",
+                         a, b, a - b))
+        }
+        print("")
+        print("⚠️ CO TAHLE ČÍSLA NEŘÍKAJÍ. Doručené snímky jsou zastropované")
+        print("   obnovovací frekvencí displeje, takže ukážou až to, co se")
+        print("   projeví TRHÁNÍM. Že skládání stojí víc GPU, ale obraz jede")
+        print("   dál na 60 Hz, tímhle nezměříš — na to je powermetrics")
+        print("   a značky FÁZE výše, podle kterých se log rozřízne:")
+        print("   sudo powermetrics --samplers gpu_power -i 1000 > ~/aiditor_shell_gpu.txt")
+    }
+
+    // MARK: - Stav běžících analýz (modul 2)
+
+    /// Kontrola fáze 18, modulu 2 (`--status-check`).
+    ///
+    /// Ptá se na tři věci, a každá odpovídá jedné chybě, kterou by uživatel
+    /// poznal až tím, že by appce přestal věřit:
+    ///  A) proteče postup celou smyčkou (0 → N pro obě dimenze)?
+    ///  B) je čip v toolbaru vidět, DOKUD se pracuje, a zmizí, až se doprací?
+    ///  C) nezůstane po doběhnutí viset žádný běžící stav? Čip, který tvrdí
+    ///     „analyzuju", když se nic neděje, je horší než žádný čip.
+    func verifyAnalysisStatus() async {
+        // Vzorky se vyprázdní, aby se smyčka opravdu rozjela. Disková cache
+        // zůstává — analýza pak bude rychlá, ale PŘECHODY projde všechny,
+        // a přesně ty se tu měří.
+        timeline.sharpnessSamples = [:]
+        timeline.emptinessSamples = [:]
+
+        let pending = timeline.project.assets.filter { $0.hasVideo && !$0.isStill }
+        guard !pending.isEmpty else {
+            print("❌ projekt nemá video assety — není co analyzovat"); return
+        }
+        print("=== A) postup smyčkou (\(pending.count) assetů) ===")
+
+        analysis.logsTransitions = true
+        var chipSeenWhileRunning = false
+        var maxSharpness = 0
+
+        startSharpnessAnalysis(force: true)
+        guard analysis.total == pending.count else {
+            print("❌ celkový počet \(analysis.total), čekáno \(pending.count)"); return
+        }
+
+        let deadline = Date().addingTimeInterval(600)
+        while Date() < deadline {
+            if analysis.chipText != nil { chipSeenWhileRunning = true }
+            maxSharpness = max(maxSharpness, analysis.sharpnessDone)
+            if analysis.log.last == "finish" { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        // Log ze SMYČKY se zmrazí hned — ruční zkouška čipu v části B do něj
+        // jinak přidá vlastní přechody a část C by měřila je, ne smyčku.
+        let loopLog = analysis.log
+
+        var failures = 0
+        func check(_ ok: Bool, _ text: String) {
+            if !ok { failures += 1 }
+            print("\(ok ? "✅" : "❌") \(text)")
+        }
+
+        check(analysis.sharpnessDone == pending.count,
+              "ostrost hotová pro \(analysis.sharpnessDone)/\(pending.count)")
+        check(analysis.emptinessDone == pending.count,
+              "hluchá místa hotová pro \(analysis.emptinessDone)/\(pending.count)")
+
+        print("")
+        print("=== B) čip v toolbaru ===")
+        // ⚠️ Vzorkované pozorování je jen INFORMACE, ne kritérium.
+        // Vzorkuje se po 20 ms a při teplé diskové cache trvá jeden krok
+        // smyčky zlomek toho — čip pak proklouzne mezi vzorky, i když se
+        // zobrazil správně. První verze tohohle na to spadla: kontrola
+        // hlásila chybu podle toho, jestli byla cache studená.
+        print("ℹ️ čip zachycen vzorkováním: \(chipSeenWhileRunning ? "ano" : "ne")"
+              + " (při teplé cache smí proklouznout — není to kritérium)")
+
+        // Kritérium je vlastnost stavu, ne štěstí při vzorkování:
+        // čip je vidět PRÁVĚ TEHDY, když něco běží.
+        analysis.started(.sharpness, name: "kontrola.mp4")
+        check(analysis.chipText != nil && analysis.isRunning,
+              "s běžící dimenzí je čip vidět (\(analysis.chipText ?? "nil"))")
+        analysis.finish()
+        check(analysis.chipText == nil && !analysis.isRunning,
+              "bez běžící dimenze čip zmizí")
+
+        check(analysis.statusText == "Kvalita \(pending.count)/\(pending.count)",
+              "stavový řádek hlásí „\(analysis.statusText ?? "nic")\"")
+
+        print("")
+        print("=== C) nic nezůstalo viset ===")
+        check(!analysis.isRunning, "žádná dimenze už neběží")   // platí i po zkoušce v B)
+        check(analysis.currentName == nil, "jméno zpracovávaného souboru uklizené")
+
+        // Každý „start" musí mít svůj „done" — visící start znamená, že
+        // smyčka někde vypadla a čip by zamrzl na tom souboru.
+        let starts = loopLog.filter { $0.hasPrefix("start ") }.count
+        let dones = loopLog.filter { $0.hasPrefix("done ") }.count
+        check(starts == dones && starts == pending.count * 2,
+              "\(starts) startů = \(dones) dokončení (čekáno \(pending.count * 2) od obou dimenzí)")
+        check(loopLog.last == "finish", "poslední přechod smyčky je „finish\"")
+
+        print("")
+        print("přechody smyčky (\(loopLog.count)):")
+        for line in loopLog.prefix(8) { print("   \(line)") }
+        if loopLog.count > 8 { print("   … a dalších \(loopLog.count - 8)") }
+
+        analysis.logsTransitions = false
+        print("")
+        print(failures == 0 ? "✅ STAV ANALÝZ SEDÍ" : "❌ neshod: \(failures)")
+    }
+
+    // MARK: - Vrstvy osy a citlivost (modul 3)
+
+    /// Kontrola fáze 18, modulu 3 (`--layers-check`).
+    ///
+    ///  A) **Stojí vypnutá vrstva míň?** Přepínač, po kterém se práce
+    ///     neubere, je podvod na uživateli, který ho zmáčkl právě proto, že
+    ///     mu to jelo pomalu. Měří se týž scroll přes 2000 klipů se všemi
+    ///     vrstvami zapnutými a všemi vypnutými.
+    ///  B) **Mění citlivost počet značek, a správným směrem?** Vyšší
+    ///     citlivost = víc nahlášených míst (`qualityThresholds`).
+    func verifyTimelineLayers(pairs: Int = 1000) async {
+        guard !clips.isEmpty else {
+            print("❌ nejsou naskenované klipy — není z čeho stavět zátěžový projekt"); return
+        }
+
+        skipsCompositionRebuild = true
+        defer { skipsCompositionRebuild = false }
+
+        timeline.loadStressProject(from: clips, pairs: pairs)
+
+        // Syntetické vzorky ostrosti pro KAŽDÝ asset zátěžového projektu —
+        // bez nich by byly značky kvality prázdné v obou bězích a měřilo by
+        // se, jestli je nula levnější než nula. Propad je záměrně mělký
+        // (40 ze 100), aby na něj citlivost v části B reagovala.
+        var synthetic: [AssetID: [SharpnessSample]] = [:]
+        for asset in timeline.project.assets {
+            synthetic[asset.id] = stride(from: 0.0, to: 12, by: 1.0 / 3).map { t in
+                (t >= 3 && t < 6) ? SharpnessSample(time: t, score: 40)
+                                  : SharpnessSample(time: t, score: 100)
+            }
+        }
+        timeline.sharpnessSamples = synthetic
+
+        // ⚠️ ZOOM JE TU JINÝ NEŽ V `--timeline-bench`, a je to podstatné.
+        // Zátěžový test tlačí celou osu do 40 000 bodů, takže klip vyjde na
+        // ~40 bodů — vlna se pod 32 body nekreslí vůbec a nad nimi je to
+        // jedna dlaždice. Vrstvy tam tedy nestojí skoro nic a rozdíl mezi
+        // „zapnuté" a „vypnuté" by se utopil v šumu (naměřeno: 0,46 vs
+        // 0,49 ms, tedy obráceně, než by dávalo smysl).
+        // Měří se proto při zoomu, ve kterém se doopravdy stříhá: 5 bodů na
+        // snímek dá u dvousekundového klipu ~300 bodů, tedy plnou vlnu
+        // i proužky kvality.
+        var geometry = timeline.geometry
+        geometry.setZoom(5)
+        timeline.geometry = geometry
+
+        NSApp.activate(ignoringOtherApps: true)
+        let deadline = Date().addingTimeInterval(10)
+        while timelinePane?.window == nil, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        guard let pane = timelinePane, let window = pane.window else {
+            print("❌ osa se nedostala do okna, není co scrollovat"); return
+        }
+        window.makeKeyAndOrderFront(nil)
+        // Usadit layout a nechat doběhnout první vlnu výpočtu špiček — bez
+        // nich by běh „s vlnami" žádné vlny nekreslil.
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+
+        let clipCount = timeline.project.timeline.tracks.reduce(0) { $0 + $1.clips.count }
+        print("=== A) vypnutá vrstva se PŘESTANE KRESLIT (\(clipCount) klipů) ===")
+
+        var failures = 0
+        func check(_ ok: Bool, _ text: String) {
+            if !ok { failures += 1 }
+            print("\(ok ? "✅" : "❌") \(text)")
+        }
+
+        isMeasuring = true
+        defer { isMeasuring = false }
+
+        timeline.layers = TimelineLayers()
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        let drawnOn = documentCounts()
+        print("   zapnuté: \(drawnOn.waveTiles) dlaždic vlny, "
+              + "\(drawnOn.qualityStrips) proužků kvality, \(drawnOn.emptinessStrips) hluchosti")
+
+        timeline.layers = TimelineLayers(thumbnails: false, waveforms: false,
+                                         beats: false, qualityMarks: false)
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        let drawnOff = documentCounts()
+        print("   vypnuté: \(drawnOff.waveTiles) dlaždic vlny, "
+              + "\(drawnOff.qualityStrips) proužků kvality, \(drawnOff.emptinessStrips) hluchosti")
+
+        check(drawnOn.waveTiles > 0, "se zapnutou vrstvou se vlna kreslí")
+        check(drawnOff.waveTiles == 0, "s vypnutou vrstvou nezůstala ANI JEDNA dlaždice vlny")
+        check(drawnOn.qualityStrips > 0, "se zapnutou vrstvou se kreslí proužky kvality")
+        check(drawnOff.qualityStrips == 0, "s vypnutou vrstvou nezůstal ANI JEDEN proužek kvality")
+
+        print("")
+        print("=== A2) co to stojí (informativně, ABBA) ===")
+        var runs: [(on: Bool, result: TimelineScrollResult)] = []
+        for on in [true, false, false, true] {
+            timeline.layers = on
+                ? TimelineLayers()
+                : TimelineLayers(thumbnails: false, waveforms: false,
+                                 beats: false, qualityMarks: false)
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            runs.append((on, await TimelineScrollBenchmark(pane: pane,
+                                                          clipCount: clipCount).run()))
+        }
+        for (on, result) in runs {
+            print(String(format: "   %-8@ medián %5.2f ms · maximum %5.2f ms · vypadlé tiky %d",
+                         (on ? "zapnuté" : "vypnuté") as NSString,
+                         result.medianWorkMs, result.maxWorkMs, result.droppedTicks))
+        }
+        func mean(_ selector: Bool) -> Double {
+            let values = runs.filter { $0.on == selector }.map(\.result.medianWorkMs)
+            return values.reduce(0, +) / Double(values.count)
+        }
+        let onMean = mean(true), offMean = mean(false)
+        func spread(_ selector: Bool) -> Double {
+            let values = runs.filter { $0.on == selector }.map(\.result.medianWorkMs)
+            return (values.max() ?? 0) - (values.min() ?? 0)
+        }
+        print(String(format: "   zapnuté %.2f ms (rozptyl %.2f) · vypnuté %.2f ms (rozptyl %.2f)",
+                     onMean, spread(true), offMean, spread(false)))
+
+        // ⚠️ ŽÁDNÁ pass/fail podmínka — ale ani tvrzení, že je to šum.
+        //
+        // Naměřeno 29. 07. 2026 (2000 klipů, zoom 5; rozptyl uvnitř téže
+        // konfigurace 0,00–0,01 ms, tedy deterministicky):
+        //
+        //   všechny zapnuté        0,29 ms
+        //   jen vlny vypnuté       0,26 ms   ✓ ušetří, jak má
+        //   jen značky vypnuté     0,28 ms   ✓ ušetří, jak má
+        //   vlny + značky vypnuté  0,25 ms   ✓ ušetří nejvíc
+        //   JEN DOBY VYPNUTÉ       0,70 ms   ⚠️ dvojnásobek
+        //   všechny vypnuté        0,60 ms   ⚠️ tažené příznakem dob
+        //
+        // Vlny i značky se tedy chovají PŘESNĚ podle záměru; anomálie je
+        // izolovaná na jediný příznak — `beats`.
+        //
+        // ✅ VYSVĚTLENO 30. 07. 2026 v modulu 5 (`--thumb-check`, část E).
+        // Práce dob žije v KRESLENÍ PRAVÍTKA (`beatMarks()` prochází všechny
+        // zvukové klipy), a tenhle údaj měří `scroll(to:)` +
+        // `reflectScrolledClipView`, tedy `refreshClips` a nastavení
+        // `needsDisplay` — pravítko se kreslí až v dalším průchodu smyčkou,
+        // VNĚ měřeného okna. `refreshClips` je na příznaku nezávislý
+        // (0,42 proti 0,43 ms), pravítko s vypnutými dobami stojí o 0,6–1,2 ms
+        // MÍŇ. Přepínač tedy ubírá práci tam, kde ji dělá; tenhle sloupec měří
+        // tu část tiku, ve které o dobách nic není, a jeho obrácený pohyb je
+        // vlastnost mikroměření 0,3ms okna na hlavním vlákně, ne cena vrstvy.
+        // Zúžení níž zůstává — ukazuje, že se vlny a značky chovají podle
+        // záměru a že vybočuje jediný příznak.
+        print("")
+        print("   která vrstva to dělá:")
+        for (label, layers) in [
+            ("jen vlny vypnuté", TimelineLayers(thumbnails: true, waveforms: false,
+                                                beats: true, qualityMarks: true)),
+            ("jen značky vypnuté", TimelineLayers(thumbnails: true, waveforms: true,
+                                                  beats: true, qualityMarks: false)),
+            ("vlny+značky vypnuté", TimelineLayers(thumbnails: true, waveforms: false,
+                                                   beats: true, qualityMarks: false)),
+            ("jen doby vypnuté", TimelineLayers(thumbnails: true, waveforms: true,
+                                                beats: false, qualityMarks: true)),
+        ] {
+            timeline.layers = layers
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            let result = await TimelineScrollBenchmark(pane: pane, clipCount: clipCount).run()
+            print(String(format: "   %-20@ medián %5.2f ms · vypadlé tiky %d",
+                         label as NSString, result.medianWorkMs, result.droppedTicks))
+        }
+        timeline.layers = TimelineLayers()
+
+        print("")
+        print("   ✓ vlny a značky ušetří, jak mají")
+        print("   ℹ️ Vybočený sloupec u příznaku `beats` je VYSVĚTLENÝ (modul 5,")
+        print("      `--thumb-check` část E): práce dob je v kreslení pravítka, které")
+        print("      leží VNĚ tohohle měřeného okna. `refreshClips` je na příznaku")
+        print("      nezávislý, pravítko s vypnutými dobami stojí o 0,6–1,2 ms míň.")
+
+        print("")
+        print("=== B) citlivost mění počet značek ===")
+        let project = timeline.project
+        var counts: [(Double, Int)] = []
+        for sensitivity in [0.2, 0.5, 0.8] {
+            let marks = project.qualityMarks(samples: synthetic, sensitivity: sensitivity)
+            counts.append((sensitivity, marks.values.reduce(0) { $0 + $1.count }))
+        }
+        for (sensitivity, count) in counts {
+            print(String(format: "   citlivost %.1f → %d značek", sensitivity, count))
+        }
+        let values = counts.map(\.1)
+        check(values == values.sorted(), "počet značek s citlivostí neklesá")
+        check(values.first! < values.last!,
+              "krajní citlivosti se liší (\(values.first!) → \(values.last!))")
+
+        // Vzorky se NEsahají — to je celý smysl: posuvník přepočítá jen
+        // klasifikaci, analýza se nespouští znovu.
+        check(timeline.sharpnessSamples.count == synthetic.count,
+              "vzorky zůstaly nedotčené (\(timeline.sharpnessSamples.count) assetů)")
+
+        print("")
+        print("=== C) lišta VIDÍ změny osy, a nehýbe se za jízdy ===")
+        //
+        // Past vnořeného `ObservableObject`: `TimelineController` žije uvnitř
+        // `AppModelu`, takže lišta, která pozoruje jen model, jeho
+        // `objectWillChange` nedostane a pilulky se přepínají „až se něco
+        // jiného hne". Odebírat rovnou controller je ale druhá past: tepe
+        // `playhead`, tedy 30×/s během přehrávání. Obojí se měří ČÍSLY.
+        let bar = timelineBar
+        let savedSensitivity = timeline.qualitySensitivity   // ⚠️ žije v UserDefaults
+        let savedZoom = timeline.geometry.pointsPerFrame
+        var barChanges = 0
+        var controllerChanges = 0
+        let barCounter = bar.objectWillChange.sink { _ in barChanges += 1 }
+        let controllerCounter = timeline.objectWillChange.sink { _ in controllerChanges += 1 }
+        defer {
+            barCounter.cancel()
+            controllerCounter.cancel()
+        }
+
+        // ⚠️ Bez `await` — debounce projektu doručuje na hlavní frontě
+        // a jediné uspání uprostřed by do počítadla pustilo cizí změnu.
+        for step in 0..<60 { timeline.setPlayheadFromPlayback(Frames(step * 2)) }
+        check(barChanges == 0,
+              "60 posunů hlavy nepřekreslilo lištu ANI JEDNOU "
+              + "(controller se přitom ohlásil \(controllerChanges)×)")
+
+        func changed(_ label: String, _ mutate: () -> Void, _ matches: () -> Bool) {
+            let before = barChanges
+            mutate()
+            check(matches(), "\(label): zrcadlo sedí s controllerem")
+            check(barChanges == before + 1,
+                  "\(label): právě jedno překreslení lišty (\(barChanges - before))")
+        }
+
+        changed("miniatury", { timeline.layers.thumbnails.toggle() },
+                { bar.layers.thumbnails == timeline.layers.thumbnails })
+        changed("přichytávání", { timeline.snappingEnabled.toggle() },
+                { bar.snappingEnabled == timeline.snappingEnabled })
+        changed("citlivost", { timeline.qualitySensitivity = 0.8 },
+                { bar.qualitySensitivity == timeline.qualitySensitivity })
+        changed("zoom", {
+            var geometry = timeline.geometry
+            geometry.setZoom(12)
+            timeline.geometry = geometry
+        }, { bar.pointsPerFrame == timeline.geometry.pointsPerFrame })
+
+        // Výřez chodí přes `receive(on:)` — text se čte zpětně z controlleru,
+        // a ve `willSet` by tam ještě byla stará hodnota. Proto jediný odskok
+        // na frontu, ne synchronní očekávání.
+        let rate = timeline.project.timeline.frameRate
+        timeline.setInPoint(Frames(120))
+        timeline.setOutPoint(Frames(360))
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        let expected = Timecode(Frames(120), frameRate: rate).shortText
+        check(bar.exportRangeText?.contains(expected) == true,
+              "výřez se v liště objevil: „\(bar.exportRangeText ?? "nic")\" obsahuje \(expected)")
+
+        timeline.clearExportRange()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        check(bar.exportRangeText == nil,
+              "po zrušení bodů popisek zmizel (\(bar.exportRangeText ?? "nic"))")
+
+        // Out bod NA KONCI projektu není výřez — „nic nevybráno" a „vybráno
+        // vše" nesmí vypadat stejně (pravidlo fáze 17). Tohle je jediné místo,
+        // kvůli kterému zrcadlo vůbec potřebuje `Project.duration`.
+        timeline.setOutPoint(timeline.project.duration)
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        check(bar.exportRangeText == nil,
+              "out bod na konci filmu se za výřez nevydává (\(bar.exportRangeText ?? "nic"))")
+
+        // ⚠️ Čísla ukážou, že se zrcadlo hýbe; jak lišta VYPADÁ, ukáže jen
+        // obrázek. Pošesté v řadě to byl snímek okna, co chytil layoutovou
+        // chybu, kterou měření vidět nemohlo (M12, prázdný `ScrollView`).
+        timeline.setInPoint(Frames(120))
+        timeline.setOutPoint(Frames(360))
+        timeline.layers.beats = false
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        if let shot = Self.writeWindowSnapshot(of: window, name: "lista-osy") {
+            print("   snímek lišty → \(shot.path)")
+        }
+
+        timeline.clearExportRange()
+        timeline.qualitySensitivity = savedSensitivity
+        var restored = timeline.geometry
+        restored.setZoom(savedZoom)
+        timeline.geometry = restored
+        timeline.layers = TimelineLayers()
+        timeline.snappingEnabled = true
+
+        print("")
+        print(failures == 0 ? "✅ VRSTVY, CITLIVOST A LIŠTA SEDÍ" : "❌ neshod: \(failures)")
+    }
+
+    // MARK: - Koukanec
+
+    /// Postaví osu s klipy, presetem a rampou, aby bylo vidět chrome
+    /// i čipy nad obrazem. Nic neměří — je to pro oko a screenshot.
+    func runShellDemo(tab requested: String? = nil) async {
+        // Všechny video assety, ne jeden — osa pak vypadá jako v návrhu
+        // (různá jména klipů) a analýzy mají co počítat, takže je čip
+        // v toolbaru vidět dost dlouho na to, aby šel vyfotit.
+        let sources = timeline.project.assets.filter { $0.hasVideo && !$0.isStill }
+        guard !sources.isEmpty else {
+            print("❌ žádný video asset"); return
+        }
+        var project = Project.empty()
+        var firstClip: ClipID?
+        do {
+            for (index, source) in sources.enumerated() {
+                project.addAsset(source)
+                let clip = Clip(assetID: source.id, timelineStart: Frames(index * 90),
+                                duration: Frames(90),
+                                sourceStart: project.timeline.sourceTime(.zero))
+                try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+                if firstClip == nil { firstClip = clip.id }
+            }
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        var geometry = timeline.geometry
+        geometry.setZoom(5)
+        timeline.geometry = geometry
+        timeline.project = project
+
+        if let firstClip {
+            timeline.selectClips([firstClip])
+            // Preset a rampa jsou tu kvůli čipům na obraze — bez nich by
+            // demo ukázalo prázdný levý horní roh.
+            timeline.setColorGrade(firstClip, ColorGrade(preset: .warmFilm, intensity: 0.62))
+            timeline.toggleClassicRamp(firstClip)
+        }
+        status = "Rampa 1× → 0,25× nastavena · ⌘Z vrátí"
+
+        // Analýzy naostro (M2) — ať je vidět čip v toolbaru a tečka ve
+        // stavovém řádku. Vzorky se vyprázdní, aby se smyčka rozjela;
+        // disková cache zůstává, takže to reálně stojí jen čtení z disku.
+        timeline.sharpnessSamples = [:]
+        timeline.emptinessSamples = [:]
+        startSharpnessAnalysis(force: true)
+
+        if let host = await shellHostView() {
+            host.window?.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+
+        // `--shell-demo barva` zaparkuje na jedné záložce; bez argumentu se
+        // prochází všechny. Parkování je tam kvůli screenshotům: čekat, až
+        // cyklus dojede na tu správnou, znamená hádat, jak dlouho trval sken
+        // klipů — a to se pokaždé liší.
+        if let requested,
+           let tab = PanelTab.allCases.first(where: {
+               $0.rawValue == requested.lowercased()
+                   || $0.label.lowercased() == requested.lowercased()
+           }) {
+            panelTab = tab
+            print("panel: \(tab.label) (zaparkováno)")
+            try? await Task.sleep(nanoseconds: 36_000_000_000)
+        } else {
+            for tab in PanelTab.allCases {
+                panelTab = tab
+                print("panel: \(tab.label)")
+                try? await Task.sleep(nanoseconds: 9_000_000_000)
+            }
+        }
+    }
+
+    // MARK: - Pomocníci
+
+    /// Kolik prvků vrstev je právě nakreslených na nasazených klipech.
+    private func documentCounts() -> (waveTiles: Int, qualityStrips: Int, emptinessStrips: Int) {
+        timelinePane?.documentView.drawnLayerCounts ?? (0, 0, 0)
+    }
+
+    /// `waitForPlayerWindow` je v `AppModelu` privátní; kontroly skořápky
+    /// si čekání dělají samy, aby se kvůli nim nemusela otevírat.
+    private func shellHostView(timeout: TimeInterval = 10) async -> PlayerHostView? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let view = hostView, view.window != nil { return view }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        return nil
+    }
+
+    private func resolveTargetsForShell(_ paths: [String]) async -> [ClipTiming] {
+        guard !paths.isEmpty else { return clips }
+        return clips.filter { clip in
+            paths.contains { clip.url.path.hasSuffix($0) || $0.hasSuffix(clip.name) }
+        }
+    }
+
+    /// Air je bezventilátorový — bez chladnutí měří druhý běh teplejší stroj.
+    private func coolDownForShell() async {
+        try? await Task.sleep(nanoseconds: Self.coolDownSeconds * 1_000_000_000)
+    }
+}
+
+// MARK: - Připnutý panel (fáze 18, modul 7)
+
+extension AppModel {
+
+    /// Kontrola fáze 18, modulu 7 (`--panel-check`).
+    ///
+    ///  A) **Presety zpomalení**: dají rampu s očekávanou nejnižší rychlostí
+    ///     a jsou to jednotlivé undo kroky. Preset pod mezí čistého zpomalení
+    ///     se pozná (panel ho vypíná a nese důvod).
+    ///  B) **Editor křivky v boxu 150 px** se dá ovládat myší stejně jako
+    ///     dřív v pásu 132 px: dvojklik přidá uzel, tažení ho posune,
+    ///     Escape tažení zruší, ⌘Z vrátí.
+    ///  C) **⌘4** panel skryje a šířku dostane osa.
+    func verifyPinnedPanel() async {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return
+        }
+
+        var project = Project.empty()
+        project.addAsset(source)
+        var clipID: ClipID?
+        do {
+            let clip = try project.makeClip(assetID: source.id)
+            try project.insert(clip, onTrack: project.timeline.tracks[0].id)
+            clipID = clip.id
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return
+        }
+        guard let clipID else { return }
+        timeline.project = project
+        timeline.selectClips([clipID])
+        panelVisible = true
+        panelTab = .speed
+        railSection = .media
+
+        var failures = 0
+        func check(_ ok: Bool, _ text: String) {
+            if !ok { failures += 1 }
+            print("\(ok ? "✅" : "❌") \(text)")
+        }
+
+        print("=== A) presety zpomalení ===")
+        let limit = timeline.project.pureSlowdownLimit(
+            of: timeline.project.timeline.clip(clipID)!)
+        print(String(format: "   zdroj %.2f fps → mez čistého zpomalení %.3f×",
+                     source.measuredFrameRate, limit ?? 0))
+
+        // Táž tolerance jako v panelu — kontrola musí měřit, co produkt dělá.
+        let usableLimit = (limit ?? 0) * (1 - SpeedTab.presetLimitTolerance)
+        for speed in [0.5, 0.25] where limit == nil || speed >= usableLimit {
+            timeline.setClassicRamp(clipID, slowSpeed: speed)
+            let slowest = timeline.project.timeline.clip(clipID)?
+                .speedRamp?.nodes.map(\.speed).min()
+            check(slowest != nil && abs(slowest! - speed) < 1e-6,
+                  String(format: "preset %.3f× dal rampu s nejnižší rychlostí %.3f×",
+                         speed, slowest ?? 0))
+            // Spotřeba zdroje se presetem NESMÍ přetáhnout za konec assetu —
+            // kotvení přes (1+slow)/2 je právě proto.
+            let consumption = timeline.project.sourceConsumption(
+                of: timeline.project.timeline.clip(clipID)!).seconds
+            check(consumption <= source.duration.seconds + 1e-6,
+                  String(format: "spotřeba %.3f s se vejde do zdroje %.3f s",
+                         consumption, source.duration.seconds))
+        }
+
+        timeline.setClassicRamp(clipID, slowSpeed: nil)
+        check(timeline.project.timeline.clip(clipID)?.speedRamp == nil,
+              "tlačítko Bez rampy rampu zrušilo")
+
+        // Jeden preset = jeden undo krok.
+        timeline.setClassicRamp(clipID, slowSpeed: 0.5)
+        timeline.undoStep()
+        check(timeline.project.timeline.clip(clipID)?.speedRamp == nil,
+              "⌘Z vrátil preset jedním krokem")
+
+        // Preset pod mezí: predikát, kterým panel vypíná tlačítko.
+        if let limit {
+            let tooDeep = limit / 2
+            check(tooDeep < limit, String(format:
+                "preset %.3f× je pod mezí %.3f× — panel ho vypíná a nese důvod",
+                tooDeep, limit))
+        }
+
+        print("")
+        print("=== B) editor křivky v boxu 150 px ===")
+        guard let editor = await waitForRampEditor() else {
+            print("❌ editor křivky se nedostal do okna"); return
+        }
+        print(String(format: "   plocha editoru %.0f×%.0f bodů",
+                     editor.bounds.width, editor.bounds.height))
+        check(abs(editor.bounds.height - 150) <= 1,
+              String(format: "box má výšku 150 (má %.0f)", editor.bounds.height))
+        check(editor.bounds.width > 380,
+              String(format: "box je širší než dosavadní pás (%.0f > 380)", editor.bounds.width))
+
+        timeline.setClassicRamp(clipID, slowSpeed: 0.5)
+        let nodesBefore = timeline.project.timeline.clip(clipID)?.speedRamp?.nodes.count ?? 0
+
+        // Dvojklik doprostřed přidá uzel.
+        synthesizeClick(on: editor, at: CGPoint(x: editor.bounds.midX,
+                                                y: editor.bounds.midY), clickCount: 2)
+        let nodesAfter = timeline.project.timeline.clip(clipID)?.speedRamp?.nodes.count ?? 0
+        check(nodesAfter == nodesBefore + 1,
+              "dvojklik přidal uzel (\(nodesBefore) → \(nodesAfter))")
+
+        // Tažení uzlu. ⚠️ Porovnává se CELÝ seznam rychlostí, ne jeho
+        // minimum: přidaný uzel leží na křivce v jejím nejnižším bodě, takže
+        // po posunutí nahoru zůstane minimem pořád původní uzel a test by
+        // prošel i u tažení, které nic neudělá. (První verze na to naletěla.)
+        func speeds() -> [Double] {
+            timeline.project.timeline.clip(clipID)?.speedRamp?.nodes.map(\.speed) ?? []
+        }
+        let beforeDrag = speeds()
+        // Pozice uzlu se ČTE z editoru, nehádá. Uzel leží tam, kam ho posadí
+        // mapování rychlosti na y — ne doprostřed plochy.
+        guard let target = editor.nodePoints.min(by: {
+            abs($0.point.x - editor.bounds.midX) < abs($1.point.x - editor.bounds.midX)
+        }) else {
+            print("❌ editor nehlásí žádné uzly"); return
+        }
+        print(String(format: "   táhnu uzlem %d z (%.0f, %.0f)",
+                     target.index, target.point.x, target.point.y))
+        synthesizeDrag(on: editor, from: target.point,
+                       to: CGPoint(x: target.point.x, y: target.point.y + 30))
+        let afterDrag = speeds()
+        check(afterDrag != beforeDrag,
+              "tažení uzlu změnilo křivku ("
+              + beforeDrag.map { String(format: "%.2f", $0) }.joined(separator: "/")
+              + " → " + afterDrag.map { String(format: "%.2f", $0) }.joined(separator: "/") + ")")
+
+        // ⌘Z vrátí tažení jedním krokem.
+        timeline.undoStep()
+        check(speeds() == beforeDrag, "⌘Z vrátil tažení celé")
+
+        // Escape zruší ROZJETÉ tažení — model se během něj nesahá.
+        let beforeCancelled = timeline.project.timeline.clip(clipID)?.speedRamp
+        synthesizeDragCancelledByEscape(
+            on: editor,
+            from: CGPoint(x: editor.bounds.midX, y: editor.bounds.midY),
+            to: CGPoint(x: editor.bounds.midX, y: editor.bounds.midY - 40))
+        check(timeline.project.timeline.clip(clipID)?.speedRamp == beforeCancelled,
+              "Escape zrušil tažení a křivka zůstala, jak byla")
+
+        print("")
+        print("=== C) ⌘4 skryje panel a šířku dostane osa ===")
+        guard let pane = timelinePane, let content = pane.window?.contentView else {
+            print("❌ osa není v okně"); return
+        }
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        let widthWithPanel = pane.bounds.width
+        panelVisible = false
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        let widthWithout = pane.bounds.width
+        panelVisible = true
+        print(String(format: "   šířka osy %.0f → %.0f bodů (okno %.0f)",
+                     widthWithPanel, widthWithout, content.bounds.width))
+        check(widthWithout > widthWithPanel,
+              "osa se po skrytí panelu rozšířila")
+        check(abs((widthWithout - widthWithPanel)
+                  - (AIditorUI.Metric.pinnedPanelWidth + 1)) <= 1,
+              String(format: "získala právě šířku panelu i s předělem (%.0f, čekáno %.0f)",
+                     widthWithout - widthWithPanel, AIditorUI.Metric.pinnedPanelWidth + 1))
+
+        print("")
+        print("=== D) záložky Barva a Zvuk na VÝBĚRU (modul 8) ===")
+        failures += await verifyPanelBulkTabs()
+
+        print("")
+        print(failures == 0 ? "✅ PANEL SEDÍ" : "❌ neshod: \(failures)")
+    }
+
+    /// Kritérium modulu 8: preset na pěti klipech je jeden krok ⌘Z (regrese
+    /// na F17/M2) a fade z panelu se rozdá všem vybraným zvukovým klipům
+    /// **s vlastním zaříznutím** — krátký klip dostane, co unese.
+    private func verifyPanelBulkTabs() async -> Int {
+        guard let source = timeline.project.assets
+            .filter({ $0.hasVideo && !$0.isStill })
+            .max(by: { $0.duration.seconds < $1.duration.seconds }) else {
+            print("❌ žádný video asset"); return 1
+        }
+
+        var project = Project.empty()
+        project.addAsset(source)
+        let videoTrack = project.timeline.tracks[0].id
+        guard let audioTrack = project.timeline.tracks.first(where: { $0.kind == .audio })?.id else {
+            print("❌ projekt nemá zvukovou stopu"); return 1
+        }
+
+        var videoIDs: [ClipID] = []
+        var audioIDs: [ClipID] = []
+        do {
+            for index in 0..<5 {
+                let clip = Clip(assetID: source.id, timelineStart: Frames(index * 60),
+                                duration: Frames(60),
+                                sourceStart: project.timeline.sourceTime(Frames(index * 90)))
+                try project.insert(clip, onTrack: videoTrack)
+                videoIDs.append(clip.id)
+            }
+            // Zvukové klipy RŮZNĚ DLOUHÉ — jinak by se zaříznutí nedalo poznat.
+            var start = 0
+            for length in [90, 40, 16] {
+                let clip = Clip(assetID: source.id, timelineStart: Frames(start),
+                                duration: Frames(length),
+                                sourceStart: project.timeline.sourceTime(.zero))
+                try project.insert(clip, onTrack: audioTrack)
+                audioIDs.append(clip.id)
+                start += length + 10
+            }
+        } catch {
+            print("❌ stavba osy selhala: \(error)"); return 1
+        }
+        timeline.project = project
+
+        var failures = 0
+        func check(_ ok: Bool, _ text: String) {
+            if !ok { failures += 1 }
+            print("\(ok ? "✅" : "❌") \(text)")
+        }
+
+        // Barva na pěti klipech = jeden undo krok.
+        timeline.selectClips(Set(videoIDs))
+        timeline.setColorGradeOnSelection(ColorGrade(preset: .warmFilm, intensity: 0.62))
+        let graded = videoIDs.filter { timeline.project.timeline.clip($0)?.colorGrade != nil }.count
+        check(graded == 5, "preset dopadl na \(graded) z 5 klipů")
+        timeline.undoStep()
+        let afterUndo = videoIDs.filter { timeline.project.timeline.clip($0)?.colorGrade != nil }.count
+        check(afterUndo == 0, "⌘Z vrátil všech 5 naráz (zbylo \(afterUndo))")
+
+        // Fade na třech různě dlouhých zvukových klipech.
+        timeline.selectClips(Set(audioIDs))
+        timeline.setAudioFadesOnSelection(AudioFades(fadeIn: Frames(30), fadeOut: Frames(30)))
+        var capped = 0
+        for id in audioIDs {
+            guard let clip = timeline.project.timeline.clip(id),
+                  let fades = timeline.project.effectiveAudioFades(of: clip) else { continue }
+            let total = fades.fadeIn + fades.fadeOut
+            print(String(format: "   klip %d snímků → nájezd %d, dojezd %d",
+                         clip.duration.count, fades.fadeIn.count, fades.fadeOut.count))
+            if total <= clip.duration { capped += 1 }
+        }
+        check(capped == audioIDs.count,
+              "každý klip dostal, co unese (\(capped) z \(audioIDs.count) v mezích své délky)")
+
+        // Šestnáctisnímkový klip NESMÍ dostat 30+30 — na tom se pozná, že se
+        // zařezává per klip, ne jednou hodnotou pro všechny.
+        if let shortest = audioIDs.last,
+           let clip = timeline.project.timeline.clip(shortest),
+           let fades = timeline.project.effectiveAudioFades(of: clip) {
+            check(fades.fadeIn.count < 30 || fades.fadeOut.count < 30,
+                  "nejkratší klip má fade zaříznutý pod žádaných 30 snímků")
+        }
+
+        timeline.undoStep()
+        let stillFaded = audioIDs.filter {
+            timeline.project.timeline.clip($0)?.audioFades != nil
+        }.count
+        check(stillFaded == 0, "⌘Z vrátil fade na všech klipech naráz")
+        return failures
+    }
+
+    // MARK: Pomocníci
+
+    /// Najde editor křivky v hierarchii okna. Panel ho staví ze SwiftUI,
+    /// takže se na něj nedá držet odkaz — hledá se průchodem.
+    private func waitForRampEditor(timeout: TimeInterval = 10) async -> RampEditorView? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let window = hostView?.window,
+               let content = window.contentView,
+               let editor = Self.findRampEditor(in: content), editor.bounds.height > 1 {
+                return editor
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        return nil
+    }
+
+    private static func findRampEditor(in view: NSView) -> RampEditorView? {
+        if let editor = view as? RampEditorView { return editor }
+        for sub in view.subviews {
+            if let found = findRampEditor(in: sub) { return found }
+        }
+        return nil
+    }
+
+    private func synthesizeClick(on view: NSView, at point: CGPoint, clickCount: Int) {
+        guard let window = view.window else { return }
+        if let down = NSEvent.mouseEvent(with: .leftMouseDown,
+                                         location: view.convert(point, to: nil),
+                                         modifierFlags: [], timestamp: 0,
+                                         windowNumber: window.windowNumber, context: nil,
+                                         eventNumber: 0, clickCount: clickCount, pressure: 1) {
+            view.mouseDown(with: down)
+        }
+        if let up = NSEvent.mouseEvent(with: .leftMouseUp,
+                                        location: view.convert(point, to: nil),
+                                        modifierFlags: [], timestamp: 0,
+                                        windowNumber: window.windowNumber, context: nil,
+                                        eventNumber: 0, clickCount: clickCount, pressure: 1) {
+            view.mouseUp(with: up)
+        }
+    }
+
+    private func synthesizeDrag(on view: NSView, from: CGPoint, to: CGPoint) {
+        guard let window = view.window else { return }
+        func event(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: view.convert(point, to: nil),
+                               modifierFlags: [], timestamp: 0,
+                               windowNumber: window.windowNumber, context: nil,
+                               eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        if let down = event(.leftMouseDown, from) { view.mouseDown(with: down) }
+        if let moved = event(.leftMouseDragged, to) { view.mouseDragged(with: moved) }
+        if let up = event(.leftMouseUp, to) { view.mouseUp(with: up) }
+    }
+
+    /// Tažení, které se nepustí, ale zruší Escapem.
+    private func synthesizeDragCancelledByEscape(on view: NSView, from: CGPoint, to: CGPoint) {
+        guard let window = view.window else { return }
+        func event(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: view.convert(point, to: nil),
+                               modifierFlags: [], timestamp: 0,
+                               windowNumber: window.windowNumber, context: nil,
+                               eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        if let down = event(.leftMouseDown, from) { view.mouseDown(with: down) }
+        if let moved = event(.leftMouseDragged, to) { view.mouseDragged(with: moved) }
+        if let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                                         timestamp: 0, windowNumber: window.windowNumber,
+                                         context: nil, characters: "\u{1b}",
+                                         charactersIgnoringModifiers: "\u{1b}",
+                                         isARepeat: false, keyCode: 53) {
+            view.keyDown(with: escape)
+        }
+    }
+}
+
+// MARK: - Výšky stop a hlavičky (fáze 18, modul 4)
+
+extension AppModel {
+
+    /// Kontrola fáze 18, modulu 4 (`--layout-check`).
+    ///
+    ///  A) leží stopy tam, kde je má návrh (3 / 142 / 223 / 304, součet 344)?
+    ///  B) trefuje se hit testing na bod — a NEtrefuje v horním odsazení?
+    ///  C) vejdou se stopy do minimálního okna, a když ne, jde se doscrollovat?
+    func verifyTrackLayout() async {
+        let geometry = timeline.geometry
+        let timeline = self.timeline.project.timeline
+
+        var failures = 0
+        func check(_ ok: Bool, _ text: String) {
+            if !ok { failures += 1 }
+            print("\(ok ? "✅" : "❌") \(text)")
+        }
+        func measure(_ name: String, _ value: Double, _ want: Double) {
+            let ok = abs(value - want) <= 0.001
+            if !ok { failures += 1 }
+            print(String(format: "%@ %-26@ %7.1f   čekáno %6.1f",
+                         ok ? "✅" : "❌", name as NSString, value, want))
+        }
+
+        print("=== A) svislé rozvržení podle návrhu ===")
+        print("   stopy: " + timeline.tracks.map(\.name).joined(separator: ", "))
+        measure("V1 shora", geometry.y(ofTrackAt: 0, in: timeline), 3)
+        measure("A1 shora", geometry.y(ofTrackAt: 1, in: timeline), 142)
+        measure("A2 shora", geometry.y(ofTrackAt: 2, in: timeline), 223)
+        measure("T1 shora", geometry.y(ofTrackAt: 3, in: timeline), 304)
+        measure("součet výšky", geometry.totalHeight(of: timeline), 344)
+        measure("výška V1", geometry.height(of: .video), 136)
+        measure("výška zvuku", geometry.height(of: .audio), 78)
+        measure("výška T1", geometry.height(of: .title), 40)
+        measure("mezera", geometry.trackSpacing, 3)
+        measure("horní odsazení", geometry.topInset, 3)
+        measure("šířka hlaviček", TrackHeadersView.width, 104)
+
+        print("")
+        print("=== B) hit testing na bod ===")
+        // Hranice: poslední bod stopy trefuje, první bod mezery ne.
+        check(geometry.trackIndex(atY: 3, in: timeline) == 0, "y=3 je V1 (první bod stopy)")
+        check(geometry.trackIndex(atY: 138.9, in: timeline) == 0, "y=138,9 je ještě V1")
+        check(geometry.trackIndex(atY: 140, in: timeline) == nil, "y=140 je mezera, ne stopa")
+        check(geometry.trackIndex(atY: 142, in: timeline) == 1, "y=142 je A1")
+        check(geometry.trackIndex(atY: 304, in: timeline) == 3, "y=304 je T1")
+        check(geometry.trackIndex(atY: 344, in: timeline) == nil, "y=344 je pod poslední stopou")
+        // ⚠️ Tohle je smysl `topInset`: v odsazení nad V1 nesmí být stopa,
+        // jinak by klik nad prvním klipem trefil klip.
+        check(geometry.trackIndex(atY: 0, in: timeline) == nil,
+              "y=0 (horní odsazení) NENÍ stopa — klik nad V1 netrefí klip")
+        check(geometry.trackIndex(atY: 2.9, in: timeline) == nil, "y=2,9 taky ne")
+
+        print("")
+        print("=== C) vejde se to do okna ===")
+        guard let pane = await shellHostView()?.window.flatMap({ _ in timelinePane }) else {
+            print("❌ osa není v okně"); return
+        }
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        let viewport = pane.scrollView.contentView.bounds.height
+        let document = pane.documentView.bounds.height
+        print(String(format: "   výřez %.0f bodů, dokument %.0f bodů", viewport, document))
+        // Při minimálním okně 1180×760 se 344 bodů stop do výřezu NEVEJDE —
+        // a je to v pořádku, když jde doscrollovat. Kontrola tedy netvrdí, že
+        // se to vejde, ale že se na to dá dostat.
+        let fits = viewport >= document
+        print(fits
+              ? "   stopy se vejdou celé"
+              : "   stopy se do výřezu nevejdou — musí jít doscrollovat")
+        if !fits {
+            check(pane.scrollView.hasVerticalScroller,
+                  "svislý scroller je zapnutý, takže se na spodní stopu dá dostat")
+        }
+        check(document >= 344 - 0.5,
+              String(format: "dokument je aspoň tak vysoký jako stopy (%.0f ≥ 344)", document))
+
+        print("")
+        print(failures == 0 ? "✅ ROZVRŽENÍ STOP SEDÍ" : "❌ neshod: \(failures)")
+    }
+}

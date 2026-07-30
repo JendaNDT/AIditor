@@ -1,6 +1,6 @@
 //
 //  WaveformSyncTests.swift
-//  Projekt Krása — AudioEngine (fáze 7)
+//  Projekt AIditor — AudioEngine (fáze 7)
 //
 //  Kotvy: FFT proti naivnímu DFT (dvě nezávislé formulace, O(n²) vs
 //  O(n·log n)) a korelace proti přímému součtu. Syntetické nahrávky mají

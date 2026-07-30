@@ -1,6 +1,6 @@
 //
 //  Flattener.swift
-//  Projekt Krása / Flatten
+//  Projekt AIditor / Flatten
 //
 //  Přepis VFR souboru na pevnou snímkovou mřížku.
 //

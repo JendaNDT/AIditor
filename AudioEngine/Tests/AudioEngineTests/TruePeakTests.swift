@@ -1,6 +1,6 @@
 //
 //  TruePeakTests.swift
-//  Projekt Krása — AudioEngine (fáze 16, modul 2)
+//  Projekt AIditor — AudioEngine (fáze 16, modul 2)
 //
 //  Kotvy true peak měření. Hlavní je klasický případ mezivzorkové
 //  špičky: sinus na fs/4 s fází π/4 má VZORKY nejvýš 0,707·A, ale

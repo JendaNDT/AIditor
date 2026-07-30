@@ -1,6 +1,6 @@
 //
 //  Timecode.swift
-//  TimelineModel — Projekt Krása
+//  TimelineModel — Projekt AIditor
 //
 //  Popisky pravítka: převod snímků na timecode a volba rozteče rysek.
 //

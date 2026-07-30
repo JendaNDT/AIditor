@@ -485,17 +485,20 @@ extension AppModel {
         //   všechny vypnuté        0,60 ms   ⚠️ tažené příznakem dob
         //
         // Vlny i značky se tedy chovají PŘESNĚ podle záměru; anomálie je
-        // izolovaná na jediný příznak — `beats`. A je tím divnější, že
-        // `drawBeatMarks` s vypnutým příznakem dělá STRIKTNĚ MÍŇ práce
-        // (vrátí se dřív, než vůbec zavolá `beatMarks()`) a měřený projekt
-        // navíc žádnou mřížku dob nemá, takže by obě větve měly stát nula.
-        // Příčinu se vyčíst nepodařilo.
+        // izolovaná na jediný příznak — `beats`.
         //
-        // Prakticky to zatím nevadí: 0,70 ms proti rozpočtu 16,67 ms na tik
-        // a `--timeline-bench` dál hlásí nula vypadlých tiků. Ale **v M5 to
-        // vysvětlené být musí** — tam se přepínač miniatur stane pojistkou,
-        // na které záleží, a pojistka, která zdražuje, je horší než žádná.
-        // Zúžení: která z vrstev za to může? Jeden běh na každou zvlášť.
+        // ✅ VYSVĚTLENO 30. 07. 2026 v modulu 5 (`--thumb-check`, část E).
+        // Práce dob žije v KRESLENÍ PRAVÍTKA (`beatMarks()` prochází všechny
+        // zvukové klipy), a tenhle údaj měří `scroll(to:)` +
+        // `reflectScrolledClipView`, tedy `refreshClips` a nastavení
+        // `needsDisplay` — pravítko se kreslí až v dalším průchodu smyčkou,
+        // VNĚ měřeného okna. `refreshClips` je na příznaku nezávislý
+        // (0,42 proti 0,43 ms), pravítko s vypnutými dobami stojí o 0,6–1,2 ms
+        // MÍŇ. Přepínač tedy ubírá práci tam, kde ji dělá; tenhle sloupec měří
+        // tu část tiku, ve které o dobách nic není, a jeho obrácený pohyb je
+        // vlastnost mikroměření 0,3ms okna na hlavním vlákně, ne cena vrstvy.
+        // Zúžení níž zůstává — ukazuje, že se vlny a značky chovají podle
+        // záměru a že vybočuje jediný příznak.
         print("")
         print("   která vrstva to dělá:")
         for (label, layers) in [
@@ -517,12 +520,11 @@ extension AppModel {
         timeline.layers = TimelineLayers()
 
         print("")
-        print("   ✓ vlny a značky ušetří, jak mají (0,25–0,28 proti 0,29 ms)")
-        print("   ⚠️ ANOMÁLIE izolovaná na příznak `beats`: s vypnutými dobami 0,70 ms,")
-        print("      přestože `drawBeatMarks` tehdy dělá striktně míň práce a měřený")
-        print("      projekt žádné doby nemá. Deterministické (rozptyl 0,00 ms).")
-        print("      Prakticky bez dopadu (rozpočet 16,67 ms/tik), ale v M5 to musí být")
-        print("      vysvětlené — tam se přepínač stane pojistkou, na které záleží.")
+        print("   ✓ vlny a značky ušetří, jak mají")
+        print("   ℹ️ Vybočený sloupec u příznaku `beats` je VYSVĚTLENÝ (modul 5,")
+        print("      `--thumb-check` část E): práce dob je v kreslení pravítka, které")
+        print("      leží VNĚ tohohle měřeného okna. `refreshClips` je na příznaku")
+        print("      nezávislý, pravítko s vypnutými dobami stojí o 0,6–1,2 ms míň.")
 
         print("")
         print("=== B) citlivost mění počet značek ===")

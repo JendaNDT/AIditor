@@ -165,6 +165,13 @@ final class TimelinePane: NSView {
                 .dropFirst()
                 .throttle(for: .milliseconds(100), scheduler: DispatchQueue.main, latest: true)
                 .sink { [weak self] _ in self?.documentView.refreshClips() },
+            // Dogenerované miniatury (fáze 18, modul 5) — týž throttle
+            // a z tého důvodu: dlaždice dorazí po dávkách a každá by jinak
+            // spustila celý refresh navíc k tomu scrollovacímu.
+            controller.thumbnails.$version
+                .dropFirst()
+                .throttle(for: .milliseconds(100), scheduler: DispatchQueue.main, latest: true)
+                .sink { [weak self] _ in self?.documentView.refreshClips() },
             // Dopočítané vzorky ostrosti a hluchosti (fáze 15) — přijdou
             // jednou za asset z pozadí, reload přepočítá značky kvality.
             // In/out výřezu (fáze 17, modul 3) — mění se jen pruh v pravítku.
@@ -287,6 +294,11 @@ final class TimelinePane: NSView {
         let origin = scrollView.contentView.bounds.origin
         rulerView.scrollX = Double(origin.x)
         headersView.scrollY = Double(origin.y)
+        // Osa se hýbe → miniatury se zatím negenerují (fáze 18, modul 5).
+        // Bez tohohle spadne brána R1: dekodéry na pozadí soutěží o výpočetní
+        // čas s hlavním vláknem a tiky vypadávají, i když je práce na tik
+        // dvacetinásobně pod rozpočtem. Zdůvodnění v `ThumbnailStore`.
+        controller.thumbnails.deferGeneration()
         documentView.refreshClips()
     }
 

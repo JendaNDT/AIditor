@@ -129,6 +129,27 @@ enum TimelinePalette {
     /// Jméno klipu.
     static let clipText = adaptive("clipText", dark: 0.94)
 
+    // MARK: Miniatury, křivka na klipu a popisky (fáze 18, modul 5)
+
+    /// Podklad pásu miniatur, dokud dlaždice nedorazí. Tmavší než výplň
+    /// klipu — pás musí být vidět jako pás i prázdný, jinak to při
+    /// dogenerovávání vypadá, že se klip překresluje na dvě různé věci.
+    static let thumbStripFill = adaptive("clipThumbStrip",
+        dark: NSColor(calibratedWhite: 0.10, alpha: 1))
+    /// Křivka rychlosti kreslená na klipu — `rampCurve` z tokenů (#8CB8FF),
+    /// táž barva jako v editoru v panelu.
+    static let clipRampCurve = adaptive("clipRampCurve",
+        dark: NSColor(calibratedRed: 0x8C / 255.0, green: 0xB8 / 255.0,
+                      blue: 0xFF / 255.0, alpha: 1))
+    /// Uzel křivky na klipu.
+    static let clipRampNode = adaptive("clipRampNode", dark: 0.92)
+    /// Text popisky presetu (#FFD88A — teplá, patří k barvám).
+    static let badgePresetText = adaptive("clipBadgePreset",
+        dark: NSColor(calibratedRed: 1.0, green: 0xD8 / 255.0,
+                      blue: 0x8A / 255.0, alpha: 1))
+    /// Text neutrální popisky (Ken Burns, BPM) — `#C9CCD1`.
+    static let badgeNeutralText = adaptive("clipBadgeNeutral", dark: 0.79)
+
     /// Výplň lichoběžníku přechodu. Fialová — jediná na ose, nesmí se plést
     /// s modrým obrazem, zeleným zvukem ani žlutým výběrem. Poloprůhledná,
     /// aby pod ní zůstaly čitelné okraje klipů, přes které se prolíná.
@@ -159,6 +180,93 @@ enum TimelinePalette {
         dark: NSColor(calibratedRed: 1.00, green: 0.27, blue: 0.23, alpha: 1))
 }
 
+/// Popiska v rohu klipu (fáze 18, modul 5): preset, rampa, Ken Burns.
+/// Poloprůhledná černá podložka s textem 9 px — na modrém klipu i na
+/// miniatuře je čitelná, protože si nese vlastní pozadí.
+///
+/// Šířku si počítá sama a JEN při změně textu: `NSString.size(withAttributes:)`
+/// je měření textu, tedy přesně ta věc, kterou se při scrollu šedesátkrát
+/// za sekundu dělat nesmí (vzorec `ClipLayer.titleText`).
+final class ClipBadgeLayer: CALayer {
+
+    static let height: Double = 13
+    private static let padding: Double = 5
+    private static let font = NSFont.systemFont(ofSize: 9)
+
+    private let label = CATextLayer()
+    private var text: String?
+    /// Stínová kopie `isHidden`. ⚠️ **Ptát se `CALayer` je při scrollu drahé:**
+    /// getter konzultuje probíhající transakci, což je ~stovky nanosekund,
+    /// a tahle cesta jede pro každý klip a tik (změřeno 30. 07. 2026 —
+    /// samotné příznaky modulu 5 stály 0,19 ms na tik při 2000 klipech,
+    /// se stínovými příznaky 0,03).
+    private var shadowHidden = true
+    /// Šířka, kterou si badge potřebuje vzít. Platná, když není `isHidden`.
+    private(set) var intrinsicWidth: Double = 0
+
+    override init() {
+        super.init()
+        cornerRadius = 4
+        masksToBounds = true
+        backgroundColor = NSColor.black.withAlphaComponent(0.5).cgColor
+        label.fontSize = 9
+        label.font = Self.font
+        label.truncationMode = .end
+        addSublayer(label)
+        isHidden = true
+    }
+
+    override init(layer: Any) {
+        super.init(layer: layer)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("nepoužívá se") }
+
+    func setContentsScale(_ scale: CGFloat) {
+        contentsScale = scale
+        label.contentsScale = scale
+    }
+
+    /// Schová popisku. Vlastní metoda, ne `set(nil, color:)` — schovávací
+    /// cesta se volá pro KAŽDÝ klip při KAŽDÉM tiku scrollu a nesmí si říct
+    /// o barvu: `NSColor.cgColor` u dynamické barvy vyhodnocuje poskytovatele,
+    /// a to se při stovce volání na tik pozná. (Změřeno 30. 07. 2026: první
+    /// verze modulu 5 tímhle zdražila scrollovací tik o ~0,3 ms.)
+    func hide() {
+        guard !shadowHidden else { return }
+        shadowHidden = true
+        isHidden = true
+    }
+
+    /// `nil` badge schová. Vrací `false`, když se nekreslí.
+    @discardableResult
+    func set(_ newText: String?, color: CGColor) -> Bool {
+        guard let newText, !newText.isEmpty else {
+            hide()
+            return false
+        }
+        if text != newText {
+            text = newText
+            label.string = newText
+            let measured = (newText as NSString)
+                .size(withAttributes: [.font: Self.font]).width
+            intrinsicWidth = ceil(measured) + 2 * Self.padding
+        }
+        label.foregroundColor = color
+        if shadowHidden { shadowHidden = false; isHidden = false }
+        return true
+    }
+
+    /// Rámec se zadává levým horním rohem; text uvnitř sedí s odsazením.
+    func place(x: Double, y: Double, maxWidth: Double) {
+        let width = min(intrinsicWidth, maxWidth)
+        frame = CGRect(x: x, y: y, width: width, height: Self.height)
+        label.frame = CGRect(x: Self.padding, y: 1,
+                             width: max(0, width - 2 * Self.padding), height: 11)
+    }
+}
+
 /// Vrstva jednoho klipu. ŽÁDNÉ kreslení — jen barvy, obrys a `CATextLayer`
 /// se jménem. Kreslené view by tu dostalo vadnou celookenní `ContentLayer`
 /// (viz `TimelinePane`), vrstvy s barvami jsou imunní.
@@ -175,17 +283,76 @@ final class ClipLayer: CALayer {
     /// Úroveň zoomu, pro kterou dlaždice platí. Při změně se mění celá sada.
     var waveRung: Double = 0
 
+    // MARK: Miniatury (fáze 18, modul 5)
+
+    /// Pás miniatur v dolní části obrazového klipu. Vlastní kontejner
+    /// s ořezem, aby dlaždice na hranách klipu nepřetékaly.
+    let thumbContainer = CALayer()
+    /// Dlaždice podle indexu MŘÍŽKY ZDROJE (ne pořadí v klipu) — trim jimi
+    /// nehne, jen posune výřez.
+    var thumbTiles: [Int: CALayer] = [:]
+    var thumbRung: Double = 0
+    /// Stínové příznaky viditelnosti — týž důvod jako u `ClipBadgeLayer`.
+    private var thumbHidden = true
+    private var rampHidden = true
+
+    /// Ztmavení pod křivkou rychlosti. ⚠️ **Chytil to screenshot:** křivka
+    /// leží na miniaturách, a na světlém záběru (bílá zeď, nebe) se světle
+    /// modrá čára ztratí. Pás návrhu měl pod křivkou tmavé gradienty, reálný
+    /// záběr je jakýkoli — takže si podklad musí přinést křivka sama.
+    let rampScrim = CAGradientLayer()
+    /// Křivka rychlosti kreslená přímo na klipu. `CAShapeLayer`, žádné
+    /// `draw` (past s celookenní `ContentLayer`, viz `TimelinePane`).
+    let rampShape = CAShapeLayer()
+    /// Uzly křivky — kolečka 3 px, recyklovaná indexem.
+    var rampNodeLayers: [CALayer] = []
+
+    /// Popisky: vpravo nahoře rampa (u fotky Ken Burns), vlevo dole preset.
+    /// Dva sloty, které se nikdy nepřekryjí — a každý má právě jeden
+    /// význam, takže se nemůže stát, že „nájezd 1,3×" zakryje preset.
+    let badgeTop = ClipBadgeLayer()
+    let badgeBottom = ClipBadgeLayer()
+
     override init() {
         super.init()
         cornerRadius = 3
         masksToBounds = true
         borderWidth = 1
+        // Pořadí přidání = pořadí vrstvení. Miniatury nejspodněji, na nich
+        // vlna (na zvukovém klipu miniatury nejsou, takže se nepřekrývají),
+        // pak křivka, jméno a popisky. Proužky kvality si `layoutStrips`
+        // přidává později, takže leží nad miniaturami — tak to má být,
+        // je to varování a nesmí ho nic překrýt.
+        thumbContainer.masksToBounds = true
+        addSublayer(thumbContainer)
         waveContainer.masksToBounds = true
         addSublayer(waveContainer)
+        // Přechod, ne plná plocha: plná dělala přes miniatury viditelný
+        // vodorovný šev na hraně pásu a vypadalo to jako chyba kreslení
+        // (taky screenshot). Vrstva je `isGeometryFlipped` po rodiči, takže
+        // start je u SPODNÍ hrany klipu — tam má být tma.
+        // Tři zastávky: horní hrana pásu průhledná, do čtvrtiny výšky
+        // ztmavne a dál drží. Dvě zastávky nešly použít — buď zůstal šev
+        // nahoře, nebo se ztmavení nedostalo tam, kde křivka na 1× leží.
+        rampScrim.colors = [NSColor.black.withAlphaComponent(0).cgColor,
+                            NSColor.black.withAlphaComponent(0.40).cgColor,
+                            NSColor.black.withAlphaComponent(0.40).cgColor]
+        rampScrim.locations = [0, 0.3, 1]
+        rampScrim.startPoint = CGPoint(x: 0.5, y: 0)
+        rampScrim.endPoint = CGPoint(x: 0.5, y: 1)
+        rampScrim.isHidden = true
+        addSublayer(rampScrim)
+        rampShape.fillColor = nil
+        rampShape.lineWidth = 1.5
+        rampShape.lineJoin = .round
+        rampShape.isHidden = true
+        addSublayer(rampShape)
         title.fontSize = 11
         title.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         title.truncationMode = .end
         addSublayer(title)
+        addSublayer(badgeTop)
+        addSublayer(badgeBottom)
         for shape in [fadeInShape, fadeOutShape] {
             shape.isHidden = true
             addSublayer(shape)
@@ -248,6 +415,72 @@ final class ClipLayer: CALayer {
     func clearWaveTiles() {
         for tile in waveTiles.values { tile.removeFromSuperlayer() }
         waveTiles = [:]
+    }
+
+    /// Totéž pro miniatury.
+    func clearThumbTiles() {
+        for tile in thumbTiles.values { tile.removeFromSuperlayer() }
+        thumbTiles = [:]
+        thumbRung = 0
+    }
+
+    /// Křivka rychlosti na klipu. `speeds` je profil od začátku do konce
+    /// klipu, `nodes` pozice uzlů ve zlomkových snímcích od začátku klipu.
+    /// Převod rychlosti na výšku dělá volající — vrstva jen kreslí.
+    ///
+    /// Prázdný profil křivku schová. Uzly mimo pás se nekreslí: po trimu
+    /// leží uzel klidně za hranou klipu a kolečko přilepené na okraji
+    /// by tvrdilo, že tam uzel je.
+    /// Schová křivku. Zvlášť od `setRampCurve` ze stejného důvodu jako
+    /// `ClipBadgeLayer.hide()`: tahle cesta jede pro každý klip a tik
+    /// a nesmí si říct o barvu.
+    func hideRampCurve() {
+        guard !rampHidden else { return }
+        rampHidden = true
+        rampShape.isHidden = true
+        rampScrim.isHidden = true
+        for node in rampNodeLayers where !node.isHidden { node.isHidden = true }
+    }
+
+    /// Ukázat pás miniatur (nebo schovat a zahodit dlaždice). Vrací, jestli
+    /// se stav změnil — volající tím ušetří zápis rámce.
+    func setThumbStrip(hidden: Bool) {
+        guard hidden != thumbHidden else { return }
+        thumbHidden = hidden
+        thumbContainer.isHidden = hidden
+        if hidden { clearThumbTiles() }
+    }
+
+    func setRampCurve(points: [CGPoint], nodes: [CGPoint], band: CGRect,
+                      color: CGColor, nodeColor: CGColor) {
+        guard points.count >= 2 else {
+            hideRampCurve()
+            return
+        }
+        rampHidden = false
+        rampScrim.isHidden = false
+        rampScrim.frame = band
+        rampShape.isHidden = false
+        rampShape.frame = bounds
+        rampShape.strokeColor = color
+        let path = CGMutablePath()
+        path.move(to: points[0])
+        for point in points.dropFirst() { path.addLine(to: point) }
+        rampShape.path = path
+
+        while rampNodeLayers.count < nodes.count {
+            let dot = CALayer()
+            dot.cornerRadius = 3
+            addSublayer(dot)
+            rampNodeLayers.append(dot)
+        }
+        for (index, dot) in rampNodeLayers.enumerated() {
+            guard index < nodes.count else { dot.isHidden = true; continue }
+            dot.isHidden = false
+            dot.backgroundColor = nodeColor
+            dot.frame = CGRect(x: nodes[index].x - 3, y: nodes[index].y - 3,
+                               width: 6, height: 6)
+        }
     }
 
     /// Rozmístí proužky kvality; prázdné pole je všechny schová.
@@ -383,6 +616,41 @@ final class TimelineDocumentView: NSView {
         }
         return (tiles, quality, emptiness)
     }
+
+    /// Co je z modulu 5 na nasazených klipech nakreslené. Zvlášť dlaždice
+    /// (vrstva existuje) a zvlášť ty s OBRÁZKEM: dokud generátor nedoběhne,
+    /// je dlaždice prázdné místo — a kontrola miniatur, která by tenhle
+    /// rozdíl nevidela, by prošla i s pásem, do kterého se nikdy nic
+    /// nedostalo.
+    var drawnThumbCounts: (tiles: Int, withImage: Int, ramps: Int, badges: Int) {
+        var tiles = 0, withImage = 0, ramps = 0, badges = 0
+        for layer in mountedClipLayers.values {
+            tiles += layer.thumbTiles.count
+            withImage += layer.thumbTiles.values.filter { $0.contents != nil }.count
+            if !layer.rampShape.isHidden { ramps += 1 }
+            if !layer.badgeTop.isHidden { badges += 1 }
+            if !layer.badgeBottom.isHidden { badges += 1 }
+        }
+        return (tiles, withImage, ramps, badges)
+    }
+    /// Měřicí okno pro `--thumb-check`: co je v pásech miniatur doopravdy
+    /// nasazené, s indexem mřížky a obsahem. Kontrola tím může ověřit, že na
+    /// dlaždici leží snímek z toho zdrojového času, který jí patří — a to
+    /// nejde spočítat, jen porovnat s obrázkem vygenerovaným napřímo.
+    var thumbnailProbe: [(clipID: ClipID, index: Int, x: Double, image: CGImage?)] {
+        var rows: [(clipID: ClipID, index: Int, x: Double, image: CGImage?)] = []
+        for (clipID, layer) in mountedClipLayers {
+            for (index, tile) in layer.thumbTiles {
+                // `contents` je `Any?`; přetypování na `CGImage` je u CF typu
+                // vždy úspěšné, takže se musí zeptat na prázdnotu zvlášť.
+                let image = tile.contents.map { $0 as! CGImage }
+                rows.append((clipID, index, Double(layer.frame.origin.x + tile.frame.origin.x),
+                             image))
+            }
+        }
+        return rows.sorted { ($0.x, $0.index) < ($1.x, $1.index) }
+    }
+
     /// Fond odložených vrstev. Vrstva se nikdy nezahazuje, jen odpojuje —
     /// zakládání vrstev při každém scrollnutí je přesně to, čemu se recyklací
     /// předchází.
@@ -496,12 +764,19 @@ final class TimelineDocumentView: NSView {
         for track in project.timeline.tracks {
             for clip in track.clips {
                 let asset = project.asset(clip.assetID)
+                var name = asset.map { $0.originalURL.deletingPathExtension().lastPathComponent }
+                    ?? "—"
+                // Tempo hudby k názvu (fáze 18, modul 5 — návrh to takhle
+                // kreslí na A2). Jen když mřížka existuje: dopisovat „0 BPM"
+                // k řeči by bylo horší než nic.
+                if let bpm = asset?.beatGrid?.bpm, bpm > 0, track.kind == .audio {
+                    name += String(format: " · %.1f BPM", bpm)
+                }
                 info[clip.id] = ClipDrawInfo(
                     clip: clip,
                     asset: asset,
                     kind: track.kind,
-                    name: asset.map { $0.originalURL.deletingPathExtension().lastPathComponent }
-                        ?? "—")
+                    name: name)
             }
         }
         clipInfo = info
@@ -634,6 +909,10 @@ final class TimelineDocumentView: NSView {
             guard let layer = mountedClipLayers.removeValue(forKey: clipID) else { continue }
             layer.clearWaveTiles()
             layer.waveRung = 0
+            layer.clearThumbTiles()
+            layer.hideRampCurve()
+            layer.badgeTop.hide()
+            layer.badgeBottom.hide()
             layer.setQualityMarks([])
             layer.setEmptinessMarks([])
             layer.removeFromSuperlayer()
@@ -644,6 +923,8 @@ final class TimelineDocumentView: NSView {
             let layer = clipLayerPool.popLast() ?? ClipLayer()
             layer.contentsScale = window?.backingScaleFactor ?? 2
             layer.title.contentsScale = layer.contentsScale
+            layer.badgeTop.setContentsScale(layer.contentsScale)
+            layer.badgeBottom.setContentsScale(layer.contentsScale)
             clipsContainer.addSublayer(layer)
             mountedClipLayers[clipID] = layer
         }
@@ -817,10 +1098,280 @@ final class TimelineDocumentView: NSView {
         layer.title.frame = CGRect(x: 6, y: 2,
                                    width: max(0, placement.width - 12), height: 15)
 
+        // ⚠️ Podmínky se testují TADY, ne uvnitř těch funkcí, a je to
+        // měřitelné: `ClipDrawInfo` se předává hodnotou a nese `Asset`
+        // s URL, daty bookmarku a poli, takže každé volání znamená několik
+        // retain/release párů. Šest volání na klip a tik při 2000 klipech
+        // stálo 0,12 ms z rozpočtu 16,67 (změřeno 30. 07. 2026); zúžením se
+        // pro zvukový a titulkový klip nezavolá nic.
+        let isVideo = kind == .video
+        if isVideo, controller.layers.thumbnails {
+            applyThumbnails(placement, to: layer, info: info)
+        } else {
+            layer.setThumbStrip(hidden: true)
+        }
         applyWaveform(placement, to: layer, info: info, visible: visible)
+        if isVideo, info?.clip.speedRamp != nil {
+            applyRampCurve(placement, to: layer, info: info)
+        } else {
+            layer.hideRampCurve()
+        }
+        if placement.width >= 90, info != nil {
+            applyBadges(placement, to: layer, info: info)
+        } else {
+            layer.badgeTop.hide()
+            layer.badgeBottom.hide()
+        }
         applyQualityMarks(placement, to: layer)
         applyFades(placement, to: layer, info: info)
     }
+
+    // MARK: - Miniatury (fáze 18, modul 5)
+
+    /// Pás miniatur v dolní části obrazového klipu.
+    ///
+    /// Dlaždice jsou kotvené v MŘÍŽCE ZDROJE (index × sekundy na dlaždici),
+    /// ne v klipu — trim a slip jimi nehnou, jen posunou výřez. Detaily
+    /// a zdůvodnění v `ThumbnailStore`.
+    ///
+    /// ⚠️ Mapování bodů na zdrojový čas je LINEÁRNÍ i na klipu s rampou —
+    /// jen se škáluje skutečnou spotřebou zdroje (`sourceConsumption`), takže
+    /// pás pokrývá přesně ten úsek materiálu, který klip použije. Rozestupy
+    /// uvnitř zpomaleného úseku tedy neodpovídají křivce; co se v klipu
+    /// doopravdy děje s časem, říká křivka nakreslená přes pás. Přesné
+    /// mapování by znamenalo invertovat rampu pro každou dlaždici, a to
+    /// `TimelineModel` veřejně neumí.
+    private func applyThumbnails(_ placement: TimelineLayout.Placement, to layer: ClipLayer,
+                                 info: ClipDrawInfo?) {
+        let side = min(ThumbnailStore.tileSidePoints, placement.height - 40)
+        guard controller.layers.thumbnails,          // vypnutá vrstva (F18/M3)
+              let info, info.kind == .video,
+              placement.width >= 40, side >= 40,
+              let asset = info.asset, !asset.isOffline
+        else {
+            layer.setThumbStrip(hidden: true)
+            return
+        }
+
+        layer.setThumbStrip(hidden: false)
+        layer.thumbContainer.backgroundColor = TimelinePalette.thumbStripFill.cgColor
+        layer.thumbContainer.frame = CGRect(x: 0, y: placement.height - side,
+                                            width: placement.width, height: side)
+
+        let scale = window?.backingScaleFactor ?? 2
+        let url = asset.url(usingProxies: controller.project.usesProxies)
+
+        // Fotka: jedna dlaždice na celý pás. Filmový pás by u ní byl třikrát
+        // týž obrázek (návrh ji taky kreslí jako jednu plochu).
+        if asset.isStill {
+            if layer.thumbRung != 0 { layer.clearThumbTiles() }
+            layer.thumbRung = 0
+            let tile = thumbTile(on: layer, index: 0)
+            tile.frame = CGRect(x: 0, y: 0, width: placement.width, height: side)
+            tile.contents = controller.thumbnails.stillTile(url: url, side: side, scale: scale)
+            for (index, extra) in layer.thumbTiles where index != 0 {
+                extra.removeFromSuperlayer()
+                layer.thumbTiles.removeValue(forKey: index)
+            }
+            return
+        }
+
+        let pointsPerFrame = controller.geometry.pointsPerFrame
+        let rung = ThumbnailStore.rung(for: pointsPerFrame)
+        if layer.thumbRung != rung { layer.clearThumbTiles() }
+        layer.thumbRung = rung
+
+        // Body → sekundy zdroje. Bez rampy je to zoom, s rampou skutečná
+        // spotřeba rozprostřená přes šířku klipu.
+        let secondsPerPoint: Double
+        if info.clip.speedRamp != nil {
+            let consumed = controller.project.sourceConsumption(of: info.clip).seconds
+            secondsPerPoint = consumed / max(1, placement.width)
+        } else {
+            secondsPerPoint = 1.0 / (30.0 * pointsPerFrame)
+        }
+        let secondsPerTile = ThumbnailStore.secondsPerTile(rung: rung, side: side)
+        let clipStartSeconds = info.clip.sourceStart.seconds
+
+        let fromSeconds = clipStartSeconds
+        let toSeconds = clipStartSeconds + placement.width * secondsPerPoint
+        let firstTile = max(0, Int(fromSeconds / secondsPerTile))
+        let lastTile = max(firstTile, Int(toSeconds / secondsPerTile))
+        // Pojistka proti absurdní sadě, kdyby zoom a spotřeba vyšly divně:
+        // na klip se vejde nejvýš šířka/hrana dlaždic a dvě navíc na okraje.
+        let limit = firstTile + Int(placement.width / side) + 2
+
+        for (index, tile) in layer.thumbTiles
+        where index < firstTile || index > min(lastTile, limit) {
+            tile.removeFromSuperlayer()
+            layer.thumbTiles.removeValue(forKey: index)
+        }
+
+        for index in firstTile...min(lastTile, limit) {
+            let tile = thumbTile(on: layer, index: index)
+            let tileStartSeconds = Double(index) * secondsPerTile
+            let x = (tileStartSeconds - clipStartSeconds) / secondsPerPoint
+            tile.frame = CGRect(x: x, y: 0,
+                                width: secondsPerTile / secondsPerPoint, height: side)
+            // `nil` = ještě se generuje; až dorazí, zvedne store `version`
+            // a tenhle průchod se zopakuje (vzorec vln).
+            tile.contents = controller.thumbnails.tile(url: url, rung: rung, index: index,
+                                                       side: side, scale: scale)
+        }
+    }
+
+    /// Dlaždice pásu — z vrstvy, nebo nová. `resizeAspectFill`: dlaždice se
+    /// při pinchi natahuje mezi úrovněmi zoomu a čtvercový snímek v širším
+    /// slotu se má ZAŘÍZNOUT, ne roztáhnout. Deformovaná tvář na miniatuře
+    /// je horší než chybějící okraj záběru.
+    private func thumbTile(on layer: ClipLayer, index: Int) -> CALayer {
+        if let existing = layer.thumbTiles[index] { return existing }
+        let tile = CALayer()
+        tile.contentsGravity = .resizeAspectFill
+        tile.masksToBounds = true
+        tile.contentsScale = window?.backingScaleFactor ?? 2
+        layer.thumbContainer.addSublayer(tile)
+        layer.thumbTiles[index] = tile
+        return tile
+    }
+
+    // MARK: - Křivka rychlosti na klipu (fáze 18, modul 5)
+
+    /// Křivka v pásu 40 bodů u spodní hrany klipu.
+    ///
+    /// ⚠️ Svislá škála je STLAČENÁ (0,125× – 2×), ne plná škála editoru
+    /// (0,125× – 8×). Na 40 bodech by plná škála narvala celé zpomalení
+    /// do dolní třetiny a 1× by ležela přesně v polovině; se stlačenou
+    /// leží 1× u horní hrany a 0,25× v dolní třetině — přesně jak křivku
+    /// kreslí návrh. Rychlosti nad 2× se zařezávají: na klipu je to
+    /// UKAZATEL, editor je v panelu.
+    private func applyRampCurve(_ placement: TimelineLayout.Placement, to layer: ClipLayer,
+                                info: ClipDrawInfo?) {
+        let band: Double = 40
+        guard let info, info.kind == .video, info.clip.speedRamp != nil,
+              placement.width >= 40, placement.height >= band + 20
+        else {
+            layer.hideRampCurve()
+            return
+        }
+
+        let scale = RampEditorScale(minSpeed: 0.125, maxSpeed: 2)
+        let top = placement.height - band
+        func y(ofSpeed speed: Double) -> Double {
+            // 4 body rezerva na obou koncích, ať se křivka na 1× nelepí
+            // na hranu klipu.
+            top + 4 + (band - 8) * (1 - scale.unit(ofSpeed: speed))
+        }
+
+        let samples = max(8, min(64, Int(placement.width / 6)))
+        let profile = controller.project.rampSpeedProfile(of: info.clip, samples: samples)
+        let step = placement.width / Double(max(1, profile.count - 1))
+        let points = profile.enumerated().map { index, speed in
+            CGPoint(x: Double(index) * step, y: y(ofSpeed: speed))
+        }
+
+        let duration = Double(info.clip.duration.count)
+        let nodes = controller.project.rampEditorNodes(of: info.clip)
+            .filter { $0.outputFrame >= 0 && $0.outputFrame <= duration }
+            .map { node in
+                CGPoint(x: node.outputFrame / max(1, duration) * placement.width,
+                        y: y(ofSpeed: node.speed))
+            }
+
+        layer.setRampCurve(points: points, nodes: nodes,
+                           band: CGRect(x: 0, y: top, width: placement.width, height: band),
+                           color: TimelinePalette.clipRampCurve.cgColor,
+                           nodeColor: TimelinePalette.clipRampNode.cgColor)
+    }
+
+    // MARK: - Popisky na klipu (fáze 18, modul 5)
+
+    /// Dva sloty: vpravo nahoře rampa (u fotky Ken Burns), vlevo dole
+    /// barevný preset. Nikdy se nepřekryjí a každý má jeden význam.
+    ///
+    /// Badge `sync −0,42 s` z návrhu se NEDĚLÁ: model posun z klopáku nikde
+    /// nedrží — synchronizace klip přesune a číslo zahodí. Vymýšlet ho by
+    /// znamenalo napsat na klip údaj, který nemá odkud vzít (týž důvod, proč
+    /// modul 4 nedělal viditelnost a zámek stopy).
+    private func applyBadges(_ placement: TimelineLayout.Placement, to layer: ClipLayer,
+                             info: ClipDrawInfo?) {
+        // Pod 90 bodů se popisky netisknou vůbec — zaříznutý text („Tepl…")
+        // nic neříká a jen zašumí klip (vzorec „titěrný klip" u jména).
+        // ⚠️ Barvy se berou až TADY, za guardem: `cgColor` dynamické barvy
+        // není zdarma a tahle funkce jede pro každý klip a tik.
+        guard let info, placement.width >= 90 else {
+            layer.badgeTop.hide()
+            layer.badgeBottom.hide()
+            return
+        }
+        let presetColor = TimelinePalette.badgePresetText.cgColor
+        let rampColor = TimelinePalette.clipRampCurve.cgColor
+        let neutral = TimelinePalette.badgeNeutralText.cgColor
+
+        let isStill = info.asset?.isStill == true
+        var topText: String?
+        var topColor = rampColor
+        if let ramp = info.clip.speedRamp, ramp.isUsable {
+            topText = Self.describeRamp(ramp)
+        } else if isStill, let kenBurns = info.clip.kenBurns {
+            topText = Self.describeKenBurns(kenBurns)
+            topColor = neutral
+        }
+        if layer.badgeTop.set(topText, color: topColor) {
+            layer.badgeTop.place(x: max(0, placement.width - 5 - layer.badgeTop.intrinsicWidth),
+                                 y: 4, maxWidth: placement.width - 10)
+        }
+
+        var bottomText: String?
+        if let grade = info.clip.colorGrade {
+            bottomText = "\(grade.preset.displayName) \(Int((grade.intensity * 100).rounded())) %"
+        }
+        if layer.badgeBottom.set(bottomText, color: presetColor) {
+            layer.badgeBottom.place(x: 5,
+                                    y: placement.height - ClipBadgeLayer.height - 4,
+                                    maxWidth: placement.width - 10)
+        }
+    }
+
+    /// `1× → 0,25× → 1×` — nejnižší rychlost mezi krajními. Delší křivku
+    /// popisuje trojicí taky: badge má říct „tady je zpomalení a jak hluboké",
+    /// ne vypsat všechny uzly.
+    private static func describeRamp(_ ramp: SpeedRamp) -> String {
+        let speeds = ramp.nodes.map(\.speed)
+        guard let first = speeds.first, let last = speeds.last,
+              let lowest = speeds.min() else { return "" }
+        func text(_ speed: Double) -> String {
+            String(format: "%@×", numberFormatter.string(from: NSNumber(value: speed))
+                   ?? String(format: "%.2f", speed))
+        }
+        if lowest < min(first, last) - 0.001 {
+            return "\(text(first)) → \(text(lowest)) → \(text(last))"
+        }
+        return first == last ? text(first) : "\(text(first)) → \(text(last))"
+    }
+
+    private static func describeKenBurns(_ kenBurns: KenBurns) -> String {
+        // Zoom je poměr ploch výřezů; nájezd = konec je menší než start.
+        let startArea = kenBurns.start.width * kenBurns.start.height
+        let endArea = kenBurns.end.width * kenBurns.end.height
+        guard startArea > 0, endArea > 0 else { return "" }
+        let ratio = (startArea / endArea).squareRoot()
+        let label = ratio >= 1 ? "nájezd" : "odjezd"
+        let value = ratio >= 1 ? ratio : 1 / ratio
+        let formatted = numberFormatter.string(from: NSNumber(value: value))
+            ?? String(format: "%.1f", value)
+        return "\(label) \(formatted)×"
+    }
+
+    /// Desetinná čárka a nejvýš dvě místa — `%g` psalo „0,502667×“
+    /// (chyba, kterou v modulu 8 chytil až screenshot).
+    private static let numberFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "cs_CZ")
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
 
     /// Klíny zvukových fade (fáze 16): tažený náhled má přednost před
     /// modelem — během tažení se do modelu nepíše (vzorec `move`).
@@ -994,6 +1545,14 @@ final class TimelineDocumentView: NSView {
         for layer in mountedClipLayers.values + clipLayerPool {
             layer.contentsScale = scale
             layer.title.contentsScale = scale
+            layer.badgeTop.setContentsScale(scale)
+            layer.badgeBottom.setContentsScale(scale)
+            // Dlaždice miniatur se při změně měřítka zahazují, ne
+            // přeznačkují: obrázek je vyrenderovaný na PIXELY (scale je
+            // součástí klíče do mezipaměti), takže po přesunu okna na displej
+            // s jiným rozlišením se musí vzít jiná dlaždice, ne natáhnout
+            // ta stará. Příští refresh si je vyžádá.
+            layer.clearThumbTiles()
         }
         for layer in mountedTransitionLayers.values + transitionLayerPool {
             layer.contentsScale = scale

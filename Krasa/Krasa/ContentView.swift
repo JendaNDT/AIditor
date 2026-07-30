@@ -3779,6 +3779,8 @@ struct ContentView: View {
                     await model.verifyPinnedPanel()
                 } else if arguments.contains("--layout-check") {
                     await model.verifyTrackLayout()
+                } else if arguments.contains("--thumb-check") {
+                    await model.verifyThumbnails()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

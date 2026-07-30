@@ -28,9 +28,9 @@ import TimelineModel
 /// práci na dvacetiminutové ose. Rozhodnutí patří do `rebuildClipInfo`
 /// a `applyWaveform`, ne do neprůhlednosti vrstvy.
 struct TimelineLayers: Equatable {
-    /// Miniatury na klipech. Přijdou v modulu 5 — přepínač už existuje,
-    /// protože je to POJISTKA pro ně: kdyby srazily scroll benchmark, musí
-    /// jít vypnout, a vypínač nemá vznikat až ve chvíli, kdy je zle.
+    /// Miniatury na klipech (modul 5). Přepínač vznikl už v modulu 3,
+    /// protože je to POJISTKA: kdyby miniatury srazily scroll benchmark,
+    /// musí jít vypnout — a vypínač nemá vznikat ve chvíli, kdy je zle.
     var thumbnails = true
     var waveforms = true
     var beats = true
@@ -163,6 +163,9 @@ final class TimelineController: ObservableObject {
     /// Mezipaměť vlnových průběhů (krok 10). Mezipaměť, ne dokument —
     /// špičky i dlaždice se dají kdykoli zahodit a spočítat znovu.
     let waveforms = WaveformStore()
+
+    /// Mezipaměť miniatur (fáze 18, modul 5). Totéž: dá se zahodit.
+    let thumbnails = ThumbnailStore()
 
     init(project: Project = .empty(), geometry: TimelineGeometry = .krasa) {
         self.project = project

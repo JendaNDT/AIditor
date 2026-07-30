@@ -58,12 +58,13 @@ struct TimelineLayerBar: View {
 
     private var layerToggles: some View {
         HStack(spacing: 6) {
-            // Miniatury zatím nejsou (přijdou v M5). Přepínač je vypnutý
-            // a NESE DŮVOD — položka, která se tváří dostupně a nic nedělá,
-            // je horší než položka, která přizná, proč nejde.
+            // Od modulu 5 zapojené naostro. Vypnutá vrstva se NEPOČÍTÁ:
+            // early-out je v `applyThumbnails`, takže se nezadá ani jeden
+            // požadavek na dekódování snímku.
             BarPill(title: "Miniatury", isOn: model.timeline.layers.thumbnails,
-                    isEnabled: false,
-                    help: "Miniatury na klipech zatím nejsou — přidá je modul 5.") {}
+                    help: "Pás miniatur v dolní části obrazových klipů.") {
+                model.timeline.layers.thumbnails.toggle()
+            }
 
             BarPill(title: "Vlny", isOn: model.timeline.layers.waveforms,
                     help: "Vlnové průběhy na zvukových klipech.") {

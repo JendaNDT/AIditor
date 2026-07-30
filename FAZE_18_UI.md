@@ -951,7 +951,13 @@ v `PROJECT_STATUS.md`.
 
 ---
 
-#### M13 · Fullscreen aplikace a fullscreen náhledu
+#### M13 · Fullscreen aplikace a fullscreen náhledu ✅ *(hotovo 30. 07. 2026 — `--fullscreen-ui-check`, 29 kontrol)*
+
+**Jak to dopadlo:** riziko „návrat z fullscreenu přestavuje hierarchii“ se nenaplnilo, protože
+se nepřestavuje — náhled je TÁŽ hierarchie bez chrome (vzorec `chromeHidden` z M1), takže
+`PlayerView` zůstává na místě stromu. Změřeno za běžícího přehrávání: `rate` se nezměnil
+a hlava po návratu zůstala na svém snímku. `⌃⌘F` (celá aplikace) zůstal systémový — skořápka
+ho umí od M1. Podrobnosti v `PROJECT_STATUS.md`.
 
 | | |
 |---|---|
@@ -1024,10 +1030,11 @@ Podle rozhodnutí z 2.1 jde **všech 13 modulů před svatbou**, v jednom sledu.
 | M10 ✅ | list exportu | D | střední | `--export-check`, `--export-ui-check` |
 | M11 ✅ | panel přepisu řeči | D | střední | `--transcript-ui-check` |
 | M12 ✅ | prázdný start | D | nízké | `--empty-start-check` |
-| M13 | fullscreen aplikace a náhledu | D | střední | `--fullscreen-ui-check` |
+| M13 ✅ | fullscreen aplikace a náhledu | D | střední | `--fullscreen-ui-check` |
 
 **Pořadí: M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 ✅ → M11 ✅
-→ M12 ✅ → M13 → 🚧 KILL-GATE 1.** (Zbývá POSLEDNÍ modul: fullscreen aplikace a náhledu.)
+→ M12 ✅ → M13 ✅ → 🚧 KILL-GATE 1.** **Fáze 18 je HOTOVÁ — všech třináct modulů prošlo svou branou.**
+Odsud vedou koukance rukou (seznam u každého modulu v `PROJECT_STATUS.md`) a pak svatba.
 
 Proč zrovna takhle, když se jede všechno: **ergonomie napřed, kosmetika vzadu.** Prvních pět modulů
 zavírá potíže #2, #3 a #4 ze zadání a nepřidává funkce — kdyby došel čas nebo se něco zadrhlo, jsou

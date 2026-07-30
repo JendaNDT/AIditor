@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotových 12 modulů z 13; zbývá poslední: fullscreen)*
+*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 HOTOVÁ — všech 13 modulů; dál koukance rukou a KILL-GATE 1)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -11,11 +11,11 @@ Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (v
 
 Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (463, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 560 automatických testů, 0 selhání.** Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
 
-**Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
+**Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **A od 30. 07. 2026 i celá fáze 18 — přestavba UI podle design handoffu, všech třináct modulů.** Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 13 — fullscreen aplikace a fullscreen náhledu** (`⌃⌘F` celá aplikace, náhled se stavy `čistý / ovládání / osa`, mini osa a plovoucí náhled snímku; brána `--fullscreen-ui-check` + regrese `--fullscreen`). Plán celé fáze je ve `FAZE_18_UI.md`. **Hotovo dvanáct modulů ze třinácti — zbývá poslední.**
+**➡️ PŘÍŠTÍ KROK: KOUKANCE RUKOU.** Fáze 18 je hotová celá — třináct modulů, každý za svou branou. Odsud už žádný naplánovaný kód není: **sejde se seznam koukanců** (u každého modulu je dole kurzívou) a projde se rukou na reálném materiálu. Teprve pak 🚧 **KILL-GATE 1 — sestříhat touhle appkou skutečnou svatbu** (materiál ~konec srpna 2026).
 
-**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 ✅ → M11 ✅ → M12 ✅ → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
+**Pořadí odsud:** fáze 18 ✅ (M1–M13, všechny brány prošly) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
 ⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
 
@@ -54,6 +54,57 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
     v nastaveném stavu — čísla vidí mechanismus, vzhled jen obrázek.
   - **Regrese:** `--timeline-bench` **0 vypadlých tiků** (medián práce 1,89 ms),
     `--range-check` ✅, `--shell-check` ✅, `--empty-start-check` ✅.
+
+✅ **Modul 13 — fullscreen náhled se třemi stavy (30. 07. 2026). FÁZE 18 HOTOVÁ.**
+
+  - **Náhled přes celou obrazovku, tři stavy:** **čistý** (jen obraz a titulky, vpravo nahoře
+    ztlumená kapsle `timecode · ⎋ zpět do editoru`), **ovládání** (horní pruh 112 se jménem
+    projektu, klipem POD HLAVOU a čipy Proxy / preset / LUFS; dolní pruh 168 s timecodem
+    22 mono, scrub lištou s výřezem a dobami, transportem s kruhem 52 a čipem shuttle,
+    `Titulky ✓` / `Osa ⇧T`) a **osa** (mini osa 76 s pásem miniatur, zvukem, dobami, výřezem
+    a hlavou; nad kurzorem plovoucí náhled snímku 192×108 s timecodem).
+    Zapíná ⇧⌘F nebo tlačítko v pilulce transportu, ⎋ vrací. Řečový titulek se ve stavu
+    „ovládání" **zvedá**, aby nesedl na scrub lištu.
+  - **⚠️ Riziko modulu ošetřené vzorcem, ne novou cestou: je to TÁŽ hierarchie, jen bez chrome.**
+    `previewFullscreen` odebírá skořápku stejně jako `chromeHidden` z M1, takže `PlayerView`
+    zůstává na témže místě stromu. Druhé okno by znamenalo druhý `AVPlayerView` — a stěhování
+    přehrávače mezi okny je přesně ta cesta, na které projekt jednou strávil den honěním
+    „černého náhledu".
+  - **Ověřeno `--fullscreen-ui-check`, 29 kontrol:** přepnutí ZA BĚŽÍCÍHO přehrávání nezměnilo
+    `rate` (1,0 → 1,0) a hlava jela dál (97 → 124), po návratu **zůstala na svém** (124);
+    osa je v náhledu **z okna pryč** (odebírá se, nekryje), přehrávač zůstal; overlay po
+    2 s nečinnosti zmizí, pohyb myši ho vrátí, myš u spodní hrany vytáhne mini osu a ta
+    **připnutá přes ⇧T nemizí** (kdežto vytažená myší ano); mini osa mapuje 0 / 50 / 100 %
+    na snímky 0 / 90 / 180.
+  - **⚠️ Sledovací oblast myši se ověřuje ČÍSLY, ne vírou.** `NSTrackingArea` je jediná cesta,
+    jak se dozvědět o pohybu bez klikání, a sledovač má `hitTest` na `nil`, aby nebral kliknutí
+    tlačítkům overlaye. Kontrola se ptá: **jedna oblast, volby obsahují `mouseMoved`
+    i `activeInKeyWindow`, hit test vrací `nil`.** Bez toho by overlay tiše zůstal viset navždy.
+  - **⚠️ Snímek okna chytil zalomený timecode — posedmé v řadě to našel obrázek.** Návrh dává
+    timecodu 132 bodů, jenže to je šířka z HTML prototypu: SF Mono 22 potřebuje na
+    `00:00:04:04` ~150 a zbytek si zalomí na druhý řádek. Čísla o tom nevědí nic.
+  - **⚠️ NÁLEZ V MĚŘENÍ, tentokrát v cizí kontrole: `--thumb-check` padal na věci, která
+    nebyla v kódu.** Druhý průchod hlásil „vygenerováno 7 dlaždic" místo nuly a vypadalo to na
+    chybu v mezipaměti. Ověřeno stashnutím celého modulu 13: **táž neshoda i bez něj** — od M9
+    si dlaždice žádá i knihovna médií (hrana 104) a do globálních statistik store se míchají
+    její požadavky. Kontrola teď na dobu měření přepne rail na `Řeč` (knihovna se vymění za
+    Zdroje řeči) a hlásí **6 vygenerovaných / 6 z disku**. `--thumb-check` se od M6 nepouštěl,
+    takže to leželo tři moduly.
+  - **Regrese:** `--fullscreen` (pojmenovaná brána modulu) **59,6 fps v ustáleném stavu, 0 dlouhých
+    mezer, scrubování medián 47,3 ms**; `--shell-check` ✅, `--empty-start-check` ✅,
+    `--layers-check` ✅, `--select-check` ✅, `--range-check` ✅, `--thumb-check` ✅ (po opravě
+    izolace), `--transition-check` číslo po čísle jako ve fázi 10 (0,7 / 12,9 / 13,1),
+    `--export-check` 6087 snímků = 202,900 s osy, `--timeline-bench` 0 vypadlých tiků
+    (medián 1,91 ms).
+  - **Co se NEDĚLÁ:** přepínač „přehrávat jen výřez" z návrhu — je to změna v přehrávací cestě
+    (hlava by musela na hraně výřezu zastavit), a ta se do modulu o UI nevejde; scrub lišta
+    výřez ukazuje, ale přehrávání ho neomezuje. `⌃⌘F` (fullscreen CELÉ aplikace) zůstává
+    systémový: skořápka ho umí od M1 a `--shell-check` ho měří.
+  - **Přiznané meze:** snímek okna z `cacheDisplay` **video nezachytí** (obraz je na něm černý —
+    kreslí ho `AVPlayerView` mimo naši vrstvu), takže tři snímky stavů ukazují overlay, ne film;
+    plovoucí náhled snímku se na snímku neobjeví, protože kontrola nemá myš.
+  - *Koukanec rukou (v seznamu): ⇧⌘F na reálném projektu, mizení overlaye a jeho návrat myší,
+    ⇧T a plovoucí náhled nad mini osou, scrub tažením a klik do doby, ⎋ zpět.*
 
 ✅ **Modul 12 — prázdný start (30. 07. 2026).**
 

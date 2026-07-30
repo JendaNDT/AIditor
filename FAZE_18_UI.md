@@ -408,6 +408,54 @@ celý klip je dojezd a nájezd zmizel. Vychází to z `setAudioFadesOnSelection`
 nájezd na `délka − dojezd`. Rozdělit zbytek napůl by bylo asi milejší, ale je to změna chování
 hromadné operace, ne úklid.
 
+### ✅ M11 — panel přepisu řeči (30. 07. 2026)
+
+**Postaveno:** `UI/Transcript/TranscriptPanel.swift` a `SpeechSourcesPane.swift` (nové), průběžné
+úseky v `Media/TranscriptionService.swift`, zvýraznění rozsahu na ose v `TimelineDocumentView`,
+kontrola `Measure/TranscriptUIChecks.swift` (`--transcript-ui-check`, **21 ověření, 0 neshod**).
+**Model: `splitTranscriptSegment(atCharacter:)` a `speechCueRanges` — +4 testy, celkem 463.**
+
+**Riziko modulu (průběžné doručování) je vyřešené API, ne obcházením** — WhisperKit má
+`segmentDiscoveryCallback`. Pravidlo 6: ověřeno ve zdrojácích balíčku, ne odhadem, a našly se
+u toho **dvě pasti**:
+① parametr `segmentCallback:` se při VAD chunkingu **nepoužije** — batchovaná cesta si staví closure
+nad INSTANČNÍ vlastností `segmentDiscoveryCallback`, takže kdo předá jen parametr, nedostane nic;
+② v té closure se posouvá jen pole `seek` (o offset kusu ve vzorcích), **ne `start`/`end`** — časy
+v průběžném callbacku jsou tedy relativní ke kusu. Proto je průběžný seznam **NÁHLED** a uložené
+úseky přijdou z návratové hodnoty, jako dosud. Procenta se počítají ze `seek`, který absolutní JE.
+
+**Ověřeno naostro** (`--transcribe-check` na reálném klipu): **11 úseků průběžně, 11 ve výsledku**;
+kontrola to hlídá zvlášť od výsledku, protože kdyby callback přestal chodit, výsledek dorazí stejně
+a nikdo si toho nevšimne.
+
+| ověření | naměřeno |
+|---|---|
+| oprava textu úseku | nový text na **obou** klipech zdroje i v `.srt`, **jeden** undo krok |
+| rozdělit v kurzoru | „před" 4,00–4,43 s + „tímto shromážděním" 4,43–6,00 s, součet délek zachovaný |
+| prázdný text | úsek smazán, `.srt` o něm neví, výběr zanikl |
+| zvýraznění na ose | 30–90 a 630–690, tedy **dvakrát** (zdroj je na ose dvakrát) |
+
+**Přiznaná heuristika:** čas řezu při „Rozdělit v kurzoru" se dělí **poměrem znaků**. Naše cesta
+WhisperKitu vrací časy na úsek, ne na slovo — a vymýšlet „přesný" čas z ničeho by bylo horší než
+přiznaný odhad, který si uživatel může doupravit.
+
+**⚠️ Snímek panelu chytil past, na kterou tenhle projekt už jednou narazil, a její horší polovinu.**
+`TranscriptPanel` pozoroval jen `AppModel`, ale `TimelineController` je **vnořený**
+`ObservableObject` — změnu `selectedSpeech` panel neviděl, takže se vybraný úsek nepřekreslil na
+kartu. Horší bylo, co se skrývalo za tím: pole s textem zůstalo **prázdné**, a protože prázdný text
+úsek MAŽE, ⏎ by ho zahodilo. Text se teď plní z jednoho místa (`syncDraft`) při každé změně výběru
+a `commit` má proti smazání nedopatřením pojistku (`loadedSelection`).
+**Kontrola tuhle chybu chytit nemohla** — sama nastavovala výběr přímo, což je právě ta cesta, která
+byla rozbitá. Obsah pole se dá ověřit jen okem, a proto se snímek dělá.
+
+**Regrese:** `--transcribe-check` naostro (11 úseků), `--select-check` 15 ✅, `--range-check` 9 ✅,
+`--library-check` 26 ✅, `--export-ui-check` ✅, `--shell-check` ✅, `--timeline-bench` medián 1,96 ms.
+
+*Koukanec rukou (v seznamu): přepis naostro s panelem otevřeným (úseky přitékají), oprava textu
+a ⏎, rozdělení v kurzoru, klik do pásku řeči na ose a hned ⏎.*
+
+---
+
 ### ✅ M10 — list exportu (30. 07. 2026) · začátek etapy D
 
 **Postaveno:** `UI/Export/ExportSheet.swift` (nový, list 660 bodů nad ztmaveným oknem),
@@ -967,13 +1015,12 @@ Podle rozhodnutí z 2.1 jde **všech 13 modulů před svatbou**, v jednom sledu.
 | M6 ✅ | přehled celé osy | B | střední | `--overview-check` |
 | M9 ✅ | knihovna médií a přetažení | C | střední | `--library-check` |
 | M10 ✅ | list exportu | D | střední | `--export-check`, `--export-ui-check` |
-| M11 | panel přepisu řeči | D | střední | `--transcript-ui-check` |
+| M11 ✅ | panel přepisu řeči | D | střední | `--transcript-ui-check` |
 | M12 | prázdný start | D | nízké | `--empty-start-check` |
 | M13 | fullscreen aplikace a náhledu | D | střední | `--fullscreen-ui-check` |
 
-**Pořadí: M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 ✅ → M11
-→ M12 → M13 → 🚧 KILL-GATE 1.** (Etapy A, B, C hotové; z etapy D zbývá přepis, prázdný start
-a fullscreen náhledu.)
+**Pořadí: M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 ✅ → M11 ✅
+→ M12 → M13 → 🚧 KILL-GATE 1.** (Zbývají DVA moduly: prázdný start a fullscreen náhledu.)
 
 Proč zrovna takhle, když se jede všechno: **ergonomie napřed, kosmetika vzadu.** Prvních pět modulů
 zavírá potíže #2, #3 a #4 ze zadání a nepřidává funkce — kdyby došel čas nebo se něco zadrhlo, jsou

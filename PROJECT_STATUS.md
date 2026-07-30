@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotových 10 modulů z 13; etapy A, B, C hotové, D rozjetá)*
+*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotových 11 modulů z 13; zbývá prázdný start a fullscreen náhledu)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -9,13 +9,13 @@ Stack: Swift, SwiftUI (panely) + AppKit (timeline), AVFoundation, AudioEngine (v
 
 **⭐ VŠECHNY NAPLÁNOVANÉ FÁZE HOTOVÉ: 0–9 (MVP) i vylepšovací 10–16; všechna klíčová čísla ověřená sondami.** Appka umí: import s měřením VFR → střih na ose (2000 klipů bez vypadlého tiku) → rychlostní křivky kreslené myší (žlutá zóna limitu zdroje) → proxy (seek 6 ms) → hlasitosti stop za běhu → sync klopáku (na vzorek přesně) → titulky z české řeči (WhisperKit) → **přechody na střihu (prolínačka, zatmívačky, audio crossfade)** → **grafické titulky na T1 s náhledem, inspektorem a vypálením do exportu** → **fotky s Ken Burns a freeze frame** → **barevné presety per klip s intenzitou (vlastní compositor)** → **hudba s dobami v pravítku, magnetem a dopasováním klipů na dobu** → **analýzy kvality (neostrost, hluchá místa) se značkami na klipech** → **zvukové fade úchyty** → projekt s autosave a obnovou po pádu → export HEVC 4K/30 s kolísáním 0,0 % a normalizací na −1 dBTP → export SRT.
 
-Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (459, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 560 automatických testů, 0 selhání.** Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
+Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (463, 29 invariantů), `AudioEngine` (54), `ProbeKit`+`MediaProbe`, `Flatten`, `Ramp`; aplikace `Krasa`. **Celkem 560 automatických testů, 0 selhání.** Závislost: WhisperKit v1.0.0. Formát projektového souboru **verze 2** (nový druh stopy `.title`; soubory v1 se dál načtou).
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 11 — panel přepisu řeči** (rail na Řeč, panel se seznamem úseků a editací, stav průběhu s přitékajícími úseky; brána `--transcript-ui-check`). Plán celé fáze je ve `FAZE_18_UI.md`. **Hotovo deset modulů ze třinácti; zbývá přepis, prázdný start a fullscreen náhledu.**
+**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 12 — prázdný start** (obrazovka bez projektu: zóna přetažení místo přehrávače, Poslední projekty místo knihovny; brána `--empty-start-check`). Plán celé fáze je ve `FAZE_18_UI.md`. **Hotovo jedenáct modulů ze třinácti — zbývá prázdný start a fullscreen náhledu.**
 
-**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 ✅ → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
+**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 ✅ → M11 ✅ → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
 ⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
 
@@ -26,6 +26,41 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
+
+✅ **Modul 11 — panel přepisu řeči a Zdroje řeči (30. 07. 2026).**
+
+  - **Panel se dvěma stavy:** PRŮBĚH (procenta z reálné pozice v nahrávce, tři fáze, **úseky
+    přitékají průběžně** a poslední je vybledlý, „přepis běží ve stroji") a EDITACE (hledání,
+    „jen pod hlavou", seznam úseků, vybraný jako karta s editovatelným polem, `Rozdělit v kurzoru` /
+    `Smazat úsek`, poznámka „platí pro všechny klipy ze zdroje"). V horním pásu **Zdroje řeči**
+    místo knihovny, když je rail na Řeč. Na ose **zvýrazněný rozsah** vybraného úseku na VŠECH
+    klipech zdroje.
+  - **Riziko modulu (průběžné doručování) vyřešené API, ne obcházením:** WhisperKit má
+    `segmentDiscoveryCallback`. ⚠️ **Dvě pasti vyčtené ze zdrojáků balíčku:** parametr
+    `segmentCallback:` se při VAD chunkingu **nepoužije** (batchovaná cesta bere instanční
+    vlastnost), a v té cestě se posouvá jen pole `seek`, **ne `start`/`end`** — časy v callbacku jsou
+    relativní ke kusu nahrávky. Proto je průběžný seznam **NÁHLED** a uložené úseky přijdou
+    z návratové hodnoty; procenta se počítají ze `seek`, který absolutní je. Zapsané v CLAUDE.md.
+  - **Ověřeno naostro** (`--transcribe-check` na reálném klipu): **11 úseků průběžně, 11 ve
+    výsledku**. Kontrola to hlídá ZVLÁŠŤ od výsledku — kdyby callback přestal chodit, výsledek
+    dorazí stejně a nikdo si toho nevšimne.
+  - **Model:** `splitTranscriptSegment(atCharacter:)` a `speechCueRanges` — **+4 testy, celkem 463.**
+    Čas řezu se dělí **poměrem znaků**; je to přiznaná heuristika, protože naše cesta WhisperKitu
+    vrací časy na úsek, ne na slovo.
+  - **Ověřeno `--transcript-ui-check`, 21 kontrol:** oprava textu se projeví na OBOU klipech zdroje
+    i v `.srt` a je to JEDEN undo krok; rozdělení dá „před" 4,00–4,43 s a „tímto shromážděním"
+    4,43–6,00 s se zachovaným součtem délek; prázdný text úsek maže a `.srt` o něm neví; zvýraznění
+    se kreslí na 30–90 a 630–690, tedy dvakrát.
+  - **⚠️ Snímek panelu chytil past projektu a její horší polovinu.** Panel pozoroval jen `AppModel`,
+    ale `TimelineController` je **vnořený** `ObservableObject` — vybraný úsek se nepřekreslil na
+    kartu. Horší bylo, co se za tím skrývalo: pole s textem zůstalo **prázdné**, a protože prázdný
+    text úsek MAŽE, ⏎ by ho zahodilo. Text se teď plní z jednoho místa a `commit` má pojistku.
+    **Kontrola to chytit nemohla** — sama nastavovala výběr přímo, tedy tou cestou, která byla
+    rozbitá; obsah pole se dá ověřit jen okem.
+  - **Regrese:** `--transcribe-check` naostro, `--select-check` 15 ✅, `--range-check` 9 ✅,
+    `--library-check` 26 ✅, `--export-ui-check` ✅, `--shell-check` ✅, `--timeline-bench` 1,96 ms.
+  - *Koukanec rukou (v seznamu): přepis naostro s otevřeným panelem, oprava textu a ⏎, rozdělení
+    v kurzoru, klik do pásku řeči na ose a hned ⏎.*
 
 ✅ **Modul 10 — list exportu (30. 07. 2026). Začátek etapy D.**
 

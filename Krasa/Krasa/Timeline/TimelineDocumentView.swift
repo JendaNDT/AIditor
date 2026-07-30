@@ -96,6 +96,15 @@ enum TimelinePalette {
     /// Pozadí pravítka a hlaviček. Mezi pozadím osy a pruhy, ať je poznat,
     /// že je to ovládací lišta a ne obsah.
     static let chrome = adaptive("timelineChrome", dark: 0.14)
+
+    /// Pás přehledu celé osy (fáze 18, modul 6) — `surfaceRail` z tokenů.
+    static let overviewBackground = adaptive("timelineOverview",
+        dark: NSColor(calibratedRed: 0x13 / 255.0, green: 0x14 / 255.0,
+                      blue: 0x17 / 255.0, alpha: 1))
+    /// Vnitřní plocha přehledu — tmavší než pás, aby bloky vystoupily.
+    static let overviewStrip = adaptive("timelineOverviewStrip",
+        dark: NSColor(calibratedRed: 0x0F / 255.0, green: 0x10 / 255.0,
+                      blue: 0x13 / 255.0, alpha: 1))
     /// Popisky timecode a jména stop.
     static let text = adaptive("timelineText", dark: 0.68)
     /// Rysky pravítka.

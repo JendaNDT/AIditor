@@ -35,6 +35,8 @@ final class TimelinePane: NSView {
     let documentView: TimelineDocumentView
     let rulerView: TimelineRulerView
     let headersView: TrackHeadersView
+    /// Přehled celé osy (fáze 18, modul 6) — pás pod stopami.
+    let overviewView: TimelineOverviewView
     private let cornerView = CornerView()
 
     /// Roh mezi pravítkem a hlavičkami. ŽÁDNÉ `draw(_:)` — jen vrstva
@@ -66,6 +68,7 @@ final class TimelinePane: NSView {
         self.documentView = TimelineDocumentView(controller: controller)
         self.rulerView = TimelineRulerView(controller: controller)
         self.headersView = TrackHeadersView(controller: controller)
+        self.overviewView = TimelineOverviewView(controller: controller)
         super.init(frame: .zero)
 
         scrollView.hasHorizontalScroller = true
@@ -90,7 +93,33 @@ final class TimelinePane: NSView {
         addSubview(scrollView)
         addSubview(rulerView)
         addSubview(headersView)
+        addSubview(overviewView)
         addSubview(cornerView)
+
+        // Přehled: klik skočí hlavou, tažení rámečku scrolluje osu.
+        overviewView.onSeek = { [weak self] frame in
+            guard let self else { return }
+            // Klik do přehledu je VÝSLOVNÁ navigace, takže ruší i odstavené
+            // následování hlavy z dřívějšího ručního scrollu — jinak by
+            // uživatel skočil hlavou a osa by zůstala stát jinde.
+            self.followSuspended = false
+            self.controller.setPlayheadFromUser(frame)
+        }
+        overviewView.onScrollTo = { [weak self] documentX in
+            guard let self else { return }
+            let clipView = self.scrollView.contentView
+            let maxX = max(0, Double(self.documentView.frame.width - clipView.bounds.width))
+            clipView.scroll(to: NSPoint(x: min(documentX, maxX),
+                                        y: clipView.bounds.origin.y))
+            self.scrollView.reflectScrolledClipView(clipView)
+        }
+        overviewView.onViewportDragChange = { [weak self] isDragging in
+            guard let self else { return }
+            self.isDraggingOverview = isDragging
+            // Po puštění platí totéž co po ručním scrollu: kdo si odjel od
+            // hlavy, toho osa nechá být, dokud hlava sama nevjede do výřezu.
+            if !isDragging { self.followSuspended = self.playheadTargetScroll() != nil }
+        }
 
         // ⚠️ **Bez tohohle řádku notifikace nechodí vůbec.** Výchozí hodnota
         // je `false` a `NSScrollView` ji sám nezapíná. Chyba se navíc
@@ -153,6 +182,7 @@ final class TimelinePane: NSView {
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in
                     self?.documentView.updatePlayhead()
+                    self?.overviewView.syncPlayhead()
                     self?.followPlayhead()
                 },
             // Dopočítané špičky a dlaždice vlny (krok 10). Verze roste na
@@ -241,14 +271,21 @@ final class TimelinePane: NSView {
         let headerWidth = TrackHeadersView.width
         let rulerHeight = TimelineRulerView.height
 
+        // Přehled ukrajuje ze spodu celou šířku — popisek „přehled" leží
+        // pod hlavičkami stop, jak to má návrh.
+        let overviewHeight = TimelineOverviewView.height
+        let bodyHeight = max(0, bounds.height - rulerHeight - overviewHeight)
+
         cornerView.frame = NSRect(x: 0, y: 0, width: headerWidth, height: rulerHeight)
         rulerView.frame = NSRect(x: headerWidth, y: 0,
                                  width: bounds.width - headerWidth, height: rulerHeight)
         headersView.frame = NSRect(x: 0, y: rulerHeight,
-                                   width: headerWidth, height: bounds.height - rulerHeight)
+                                   width: headerWidth, height: bodyHeight)
         scrollView.frame = NSRect(x: headerWidth, y: rulerHeight,
                                   width: bounds.width - headerWidth,
-                                  height: bounds.height - rulerHeight)
+                                  height: bodyHeight)
+        overviewView.frame = NSRect(x: 0, y: rulerHeight + bodyHeight,
+                                    width: bounds.width, height: overviewHeight)
 
         sizeDocument()
         // Změna velikosti okna posune `bounds` klipované plochy, ale
@@ -300,7 +337,15 @@ final class TimelinePane: NSView {
         // dvacetinásobně pod rozpočtem. Zdůvodnění v `ThumbnailStore`.
         controller.thumbnails.deferGeneration()
         documentView.refreshClips()
+        // Rámeček výřezu v přehledu (F18/M6) — dvě čísla, žádná přestavba.
+        let clipBounds = scrollView.contentView.bounds
+        overviewView.visibleDocumentRange = (origin: Double(clipBounds.origin.x),
+                                             width: Double(clipBounds.width))
     }
+
+    /// Uživatel právě táhne rámečkem v přehledu (F18/M6). Po tu dobu se osa
+    /// za hlavou netahá — týž důvod jako u `isLiveScrolling`.
+    private var isDraggingOverview = false
 
     // MARK: - Osa sleduje hlavu (fáze 17)
 
@@ -335,7 +380,8 @@ final class TimelinePane: NSView {
     /// Stránkovací posun za hlavou. Rozhodnutí KAM dělá `TimelineGeometry`
     /// (otestované bez UI), tady zbývá jen „kdy ne" a samotný scroll.
     private func followPlayhead() {
-        guard !controller.isUserScrubbing, !documentView.hasActiveDrag, !isLiveScrolling else { return }
+        guard !controller.isUserScrubbing, !documentView.hasActiveDrag,
+              !isLiveScrolling, !isDraggingOverview else { return }
         guard let target = playheadTargetScroll() else {
             followSuspended = false      // hlava je vidět → následování zase platí
             return
@@ -418,6 +464,10 @@ final class TimelinePane: NSView {
     func reload() {
         documentView.rebuildLanes()
         documentView.refreshClips()
+        // Přehled si sám pozná, že se v něm nic nemění (otisk projektu),
+        // takže reload při zoomu ho nepřestavuje — jen se srovná výřez.
+        overviewView.rebuild()
+        overviewView.syncPlayhead()
         rulerView.needsDisplay = true
         headersView.needsDisplay = true
         headersView.reloadControls()   // mute a hlasitost (fáze 7)

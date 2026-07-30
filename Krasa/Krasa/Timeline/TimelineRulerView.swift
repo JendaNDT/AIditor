@@ -109,6 +109,23 @@ final class TimelineRulerView: NSView {
     /// by znamenalo, že „nic nevybráno" a „vybráno vše" vypadá stejně,
     /// a uživatel by pak nevěděl, jestli mu export ukrojí konec.
     private func drawExportRange(geometry: TimelineGeometry) {
+        // ⚠️ Bez in/out bodů se rovnou vrací, a je to VÝKONOVÁ věc, ne úklid.
+        // `hasExportRange` i `exportRange` počítají `Project.duration`, a ta
+        // prochází všechny klipy a alokuje přitom dvě pole — na 2000 klipech
+        // ~0,8 ms na jedno kreslení. Pravítko se překresluje při každém tiku
+        // scrollu, takže se to platilo za informaci „výřez není nastavený".
+        // Kreslení pravítka spadlo z 0,88 na 0,08 ms (změřeno M6, `--thumb-check`
+        // část E). Výsledek je stejný, jen bez počítání.
+        //
+        // ⚠️ **A pozor na to, co udělá `--timeline-bench`: medián práce na tik
+        // STOUPNE z 0,97 na 1,95 ms.** Není to regrese — A/B na tomhle jednom
+        // řádku (třikrát každá varianta, rozptyl 0,02 ms) ukazuje pořád
+        // stejnou věc: ten údaj měří `scroll(to:)` na hlavním vlákně, a když
+        // vlákno mezi tiky nemá co dělat, platí se za probuzení (rampa
+        // frekvence, studená cache). Součet práce na snímek se nezměnil
+        // (~2 ms z 16,67) a vypadlé tiky zůstávají 0–1. Nevracet to „zpátky"
+        // podle benchmarku — je to práce, která zmizela.
+        guard controller.inPoint != nil || controller.outPoint != nil else { return }
         guard controller.hasExportRange else { return }
         let range = controller.exportRange
         let startX = geometry.x(for: range.lowerBound) - scrollX

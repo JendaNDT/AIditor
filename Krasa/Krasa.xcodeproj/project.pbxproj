@@ -55,6 +55,8 @@
 		F1820000000000000000000D /* ColorTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000D /* ColorTab.swift */; };
 		F18200000000000000000010 /* ThumbnailStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000010 /* ThumbnailStore.swift */; };
 		F18200000000000000000011 /* ThumbChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000011 /* ThumbChecks.swift */; };
+		F18200000000000000000012 /* TimelineOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000012 /* TimelineOverviewView.swift */; };
+		F18200000000000000000013 /* OverviewChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000013 /* OverviewChecks.swift */; };
 		F1820000000000000000000E /* AudioTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000E /* AudioTab.swift */; };
 		F1820000000000000000000F /* InfoTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000F /* InfoTab.swift */; };
 /* End PBXBuildFile section */
@@ -104,6 +106,8 @@
 		F1810000000000000000000D /* ColorTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorTab.swift; sourceTree = "<group>"; };
 		F18100000000000000000010 /* ThumbnailStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailStore.swift; sourceTree = "<group>"; };
 		F18100000000000000000011 /* ThumbChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbChecks.swift; sourceTree = "<group>"; };
+		F18100000000000000000012 /* TimelineOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineOverviewView.swift; sourceTree = "<group>"; };
+		F18100000000000000000013 /* OverviewChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewChecks.swift; sourceTree = "<group>"; };
 		F1810000000000000000000E /* AudioTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTab.swift; sourceTree = "<group>"; };
 		F1810000000000000000000F /* InfoTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoTab.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -185,6 +189,7 @@
 				9168C630193BE62D64B5B960 /* PlaybackBenchmark.swift */,
 				F18100000000000000000008 /* ShellChecks.swift */,
 				F18100000000000000000011 /* ThumbChecks.swift */,
+				F18100000000000000000013 /* OverviewChecks.swift */,
 			);
 			path = Measure;
 			sourceTree = "<group>";
@@ -197,6 +202,7 @@
 				0B5A7D3629F41E8C5A72D094 /* TimelinePane.swift */,
 				C5D6E7F8091A2B3C4D5E6F70 /* WaveformStore.swift */,
 				F18100000000000000000010 /* ThumbnailStore.swift */,
+				F18100000000000000000012 /* TimelineOverviewView.swift */,
 				8D40E2FA6C31597B0E4AD1B3 /* TrackHeadersView.swift */,
 				6D9C2A4E7B1F50318C6E9A3B /* RampEditorView.swift */,
 				3E7A1C9D5B08462FA1D73C86 /* TimelineRulerView.swift */,
@@ -344,11 +350,13 @@
 				D8D296ED416C1618E779BF80 /* PlaybackBenchmark.swift in Sources */,
 				F18200000000000000000008 /* ShellChecks.swift in Sources */,
 				F18200000000000000000011 /* ThumbChecks.swift in Sources */,
+				F18200000000000000000013 /* OverviewChecks.swift in Sources */,
 				2F71D6C304AB859E1D3E7F0A /* TimelineController.swift in Sources */,
 				A9E3B57C1F0842D6C7B93E15 /* TimelineDocumentView.swift in Sources */,
 				74CB19E8D3A05F2718BE6C40 /* TimelinePane.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* WaveformStore.swift in Sources */,
 				F18200000000000000000010 /* ThumbnailStore.swift in Sources */,
+				F18200000000000000000012 /* TimelineOverviewView.swift in Sources */,
 				1A6BD73E902F84C5D3106E7B /* TrackHeadersView.swift in Sources */,
 				8B1E4D7A2C5F30619E8A4C2D /* RampEditorView.swift in Sources */,
 				C2F508B71A9E3D64B85072AF /* TimelineRulerView.swift in Sources */,

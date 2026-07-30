@@ -3781,6 +3781,8 @@ struct ContentView: View {
                     await model.verifyTrackLayout()
                 } else if arguments.contains("--thumb-check") {
                     await model.verifyThumbnails()
+                } else if arguments.contains("--overview-check") {
+                    await model.verifyOverview()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

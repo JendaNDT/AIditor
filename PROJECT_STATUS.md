@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 29. 07. 2026 (FÁZE 18 — hotové etapy A a C: moduly 1, 2, 3, 7, 8)*
+*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotové moduly 1, 2, 3, 7, 8, 4)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,9 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (453, 29
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 4 — výšky stop 136/78/40 a hlavičky 104 (začátek etapy B).** Plán celé fáze je ve `FAZE_18_UI.md`.
+**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 5 — miniatury na klipech. NEJRIZIKOVĚJŠÍ MODUL PLÁNU** (brána: `--timeline-bench` 0 vypadlých tiků se zapnutými miniaturami). Plán celé fáze je ve `FAZE_18_UI.md`.
 
-**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 → M5 → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
+**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 → M6 → M9 → M10 → M11 → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
 ⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
 
@@ -26,6 +26,35 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
+
+✅ **Modul 4 — výšky stop a hlavičky 104 (30. 07. 2026). Začátek etapy B.**
+
+  - **Model dostal `topInset`** — výchozí **nula**, aby se nepohnulo nic, co na geometrii stojí;
+    výchozí výšky zůstaly 64/44/28 s mezerou 2 (stojí na nich testy balíčku) a aplikace si své
+    rozvržení předává konstruktorem přes `TimelineGeometry.krasa`. **+3 testy, celkem 456.**
+  - **Hlavičky 104 px** (dřív 96): jméno semibold **nahoře** (se stopou vysokou 136 bodů by V1 na
+    středu plavalo v prázdnu), pod ním meta `obraz · 5 klipů` / `řeč` / `hudba` / `titulky`, u zvuku
+    navíc **hlasitost v dB**. Řádek je karta se zaoblením jen vpravo.
+  - **Uklizen dluh z M1:** `viewDidChangeEffectiveAppearance` je odstraněné ze všech tří view osy —
+    okno je natvrdo tmavé, takže se nikdy nespustilo.
+  - **Ověřeno `--layout-check`:** stopy na **3 / 142 / 223 / 304**, součet **344**, výšky 136/78/40,
+    mezera 3, odsazení 3, hlavičky 104 — všech 11 hodnot sedí. Hit testing na bod: `y=138,9` ještě V1,
+    `y=140` mezera, a hlavně **`y=0` a `y=2,9` NENÍ stopa**, takže klik nad prvním klipem ho netrefí
+    (to je celý smysl `topInset`u).
+  - **⚠️ Změřeno, co plán čekal: při minimálním okně se stopy NEVEJDOU** — výřez 286 proti dokumentu
+    344, T1 je pod ohybem. Kontrola proto netvrdí, že se to vejde, ale že se na to **dá dostat**.
+    Při okně z návrhu (1470×900) je pro stopy ~350 bodů, takže 344 projde — ale **až přijde přehled
+    celé osy z M6 (46 bodů), přestane se vejít i tam**. Vlastnost návrhu, ne chyba.
+  - **Regrese:** `--timeline-bench` **0 vypadlých tiků**, medián **0,80 ms** — stopy dvakrát vyšší
+    (136 proti 64) **nestály nic měřitelného**. **Tím se zavírá otevřená položka z M8:** kritérium
+    fáze 2 platí, dřívější výpadky byly zátěž stroje. `--select-check` 15 ✅ a `--range-check` 9 ✅
+    prošly celé, přestože se hit testing posunul o odsazení.
+  - **⚠️ `--shell-check` na M4 spadl, a bylo to správně** — hlídal hlavičky na 96 s komentářem „návrh
+    je nemění". M4 je záměrně rozšířil; očekávání se opravilo. To, že se kontrola ozvala, je přesně
+    to, k čemu je.
+  - **Přiznaný mezistav:** obrazový klip je 136 bodů vysoký a nese jen jméno, takže vypadá **prázdněji
+    než dřív** — vyplní ho pás miniatur v M5. Viditelnost a zámek stopy z návrhu se **nedělají**:
+    model pro ně nemá stav a dvě tlačítka, která v1 nikdy nic neudělají, jsou horší než jejich absence.
 
 ✅ **Modul 8 — záložky Barva, Zvuk a Info (29. 07. 2026). ETAPA C HOTOVÁ.**
 

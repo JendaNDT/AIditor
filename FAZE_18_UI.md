@@ -395,6 +395,56 @@ celý klip je dojezd a nájezd zmizel. Vychází to z `setAudioFadesOnSelection`
 nájezd na `délka − dojezd`. Rozdělit zbytek napůl by bylo asi milejší, ale je to změna chování
 hromadné operace, ne úklid.
 
+### ✅ M4 — výšky stop a hlavičky 104 (30. 07. 2026) · začátek etapy B
+
+**Model dostal `topInset`** (fáze 18, modul 4): výchozí **nula**, aby se nepohnulo nic, co na
+geometrii stojí. Výchozí výšky **zůstaly 64/44/28 s mezerou 2** — na nich stojí testy balíčku
+a aplikace si své rozvržení předává konstruktorem přes `TimelineGeometry.krasa`.
+**+3 testy, celkem 456, 0 selhání.**
+
+**Hlavičky 104 px** (dřív 96): jméno stopy semibold **nahoře** (ne na středu — se stopou vysokou
+136 bodů by V1 plavalo v prázdnu), pod ním meta řádek `obraz · 5 klipů` / `řeč` / `hudba` /
+`titulky`, u zvuku navíc **hodnota hlasitosti v dB**. Řádek je karta se zaoblením jen vpravo.
+
+**Uklizen dluh přiznaný v M1:** `viewDidChangeEffectiveAppearance` je odstraněné ze všech tří view
+osy. Okno je natvrdo tmavé, takže se nikdy nespustilo — a nespouštěná cesta tiše shnije. Obaly
+`performAsCurrentDrawingAppearance` zůstaly: jsou to no-opy, ale drží v kódu vidět, že barva vrstvy
+se vyhodnocuje při zápisu.
+
+**Ověřeno `--layout-check`:**
+
+| | naměřeno | čekáno |
+|---|---|---|
+| V1 / A1 / A2 / T1 shora | **3 / 142 / 223 / 304** | 3 / 142 / 223 / 304 |
+| součet výšky | **344** | 344 |
+| výšky stop | **136 / 78 / 40** | 136 / 78 / 40 |
+| mezera / odsazení / hlavičky | **3 / 3 / 104** | 3 / 3 / 104 |
+
+Hit testing na bod: `y=138,9` je ještě V1, `y=140` už mezera, `y=344` pod poslední stopou — a to
+hlavní: **`y=0` a `y=2,9` (horní odsazení) NENÍ stopa**, takže klik nad prvním klipem ho netrefí.
+To je celý smysl `topInset`u.
+
+**⚠️ Změřeno, co plán čekal: při minimálním okně se stopy do výřezu NEVEJDOU.** Výřez 286 bodů proti
+dokumentu 344 — T1 je pod ohybem a musí se doscrollovat. Kontrola proto netvrdí, že se to vejde, ale
+že se na to **dá dostat** (svislý scroller zapnutý). Při okně z návrhu (1470×900) je pro stopy
+~347–352 bodů, takže 344 se vejde — ale **až přijde přehled celé osy z M6 (46 bodů), přestane se
+vejít i tam**. Je to vlastnost návrhu, ne chyba: v NLE se svisle scrolluje.
+
+**Regrese:** `--timeline-bench` **0 vypadlých tiků**, medián práce **0,80 ms** — tedy stopy dvakrát
+vyšší (136 proti 64) **nestály nic měřitelného**. Tím se zároveň **zavírá otevřená položka z M8**:
+kritérium fáze 2 platí, dřívější výpadky byly zátěž stroje. `--select-check` (15 ✅) a `--range-check`
+(9 ✅) prošly celé, přestože se hit testing posunul o horní odsazení. `--panel-check` a `--shell-check`
+beze změny.
+
+**⚠️ `--shell-check` na M4 spadl, a bylo to správně.** Kontrola z M1 hlídala hlavičky na 96 bodech
+s komentářem „návrh je nemění". M4 je záměrně rozšířil na 104, takže očekávání se opravilo — ale to,
+že se kontrola ozvala, je přesně to, k čemu je: rozměr se nemá měnit náhodou.
+
+**Přiznaný mezistav:** obrazový klip je teď 136 bodů vysoký a nese jen jméno, takže vypadá **prázdněji
+než dřív**. Vyplní ho pás miniatur v M5 — což je zároveň důvod, proč M5 jde hned po tomhle modulu.
+Návrh visibility a zámku stopy v hlavičce se **nedělá**: model pro ně nemá stav a dvě tlačítka, která
+v1 nikdy nic neudělají, jsou horší než jejich absence.
+
 ---
 
 ## 5. Roadmapa

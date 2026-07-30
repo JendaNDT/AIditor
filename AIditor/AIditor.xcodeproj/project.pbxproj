@@ -43,6 +43,7 @@
 		F18200000000000000000001 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000001 /* DesignTokens.swift */; };
 		F18200000000000000000002 /* AppShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000002 /* AppShell.swift */; };
 		F18200000000000000000003 /* AIditorToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000003 /* AIditorToolbar.swift */; };
+		F182000000000000000000A1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F181000000000000000000A1 /* Assets.xcassets */; };
 		F18200000000000000000004 /* IconRail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000004 /* IconRail.swift */; };
 		F18200000000000000000005 /* ViewerPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000005 /* ViewerPane.swift */; };
 		F18200000000000000000006 /* StatusBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000006 /* StatusBar.swift */; };
@@ -108,6 +109,7 @@
 		F18100000000000000000001 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		F18100000000000000000002 /* AppShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShell.swift; sourceTree = "<group>"; };
 		F18100000000000000000003 /* AIditorToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIditorToolbar.swift; sourceTree = "<group>"; };
+		F181000000000000000000A1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F18100000000000000000004 /* IconRail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconRail.swift; sourceTree = "<group>"; };
 		F18100000000000000000005 /* ViewerPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewerPane.swift; sourceTree = "<group>"; };
 		F18100000000000000000006 /* StatusBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBar.swift; sourceTree = "<group>"; };
@@ -182,6 +184,7 @@
 				34AA73FFCE9BBCC557385235 /* Measure */,
 				8B4A0F27C6D91E53B7402AD8 /* Timeline */,
 				F18000000000000000000001 /* UI */,
+				F181000000000000000000A1 /* Assets.xcassets */,
 				E8CE4721331CF75E9478C7F2 /* AIditor.entitlements */,
 			);
 			path = AIditor;
@@ -392,6 +395,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F182000000000000000000A1 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -510,6 +514,7 @@
 		112DB64EE5DD2663C7F9CA6C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AIditor/AIditor.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
@@ -534,6 +539,7 @@
 		1DD7FB0A527F4C0E67C68D57 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AIditor/AIditor.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;

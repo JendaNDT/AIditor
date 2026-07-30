@@ -1,5 +1,5 @@
 # Projekt Krása (AIditor) – Project Status
-*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotových 11 modulů z 13; zbývá prázdný start a fullscreen náhledu)*
+*Naposled aktualizováno: 30. 07. 2026 (FÁZE 18 — hotových 12 modulů z 13; zbývá poslední: fullscreen)*
 
 ## 🎯 Co to je
 Nativní macOS videoeditor pro svatební a rodinné filmy — plynulý speed ramping a 100 % lokální český přepis titulků. **Čistě editor, FREE a zatím jen pro autora** (svatební asistent škrtnut, licencování i distribuce odloženy — vše 28. 07. 2026 na pokyn autora).
@@ -13,9 +13,9 @@ Sedm balíčků/modulů: `SpeedRampEngine` (53 testů), `TimelineModel` (463, 29
 
 **Vylepšovací fáze 10–16 hotové** (plán sestavený 28. 07. výběrem z `Projekt_Krasa_navrh_implementace.docx`): ✅ přechody → ✅ texty/T1 → ✅ fotky+Ken Burns → ✅ barevné presety → ✅ hudební synchronizace (vlajková) → ✅ analýzy kvality → ✅ vymazlení. **Zbývá jen to, co se dělá RUKOU: projít seznam koukanců a pak KILL-GATE 1 — sestříhat touhle appkou reálnou svatbu (materiál ~konec srpna 2026).**
 
-**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 12 — prázdný start** (obrazovka bez projektu: zóna přetažení místo přehrávače, Poslední projekty místo knihovny; brána `--empty-start-check`). Plán celé fáze je ve `FAZE_18_UI.md`. **Hotovo jedenáct modulů ze třinácti — zbývá prázdný start a fullscreen náhledu.**
+**➡️ PŘÍŠTÍ KROK: FÁZE 18, MODUL 13 — fullscreen aplikace a fullscreen náhledu** (`⌃⌘F` celá aplikace, náhled se stavy `čistý / ovládání / osa`, mini osa a plovoucí náhled snímku; brána `--fullscreen-ui-check` + regrese `--fullscreen`). Plán celé fáze je ve `FAZE_18_UI.md`. **Hotovo dvanáct modulů ze třinácti — zbývá poslední.**
 
-**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 ✅ → M11 ✅ → M12 → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
+**Pořadí odsud:** fáze 18 (M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 ✅ → M11 ✅ → M12 ✅ → M13) → koukance rukou → 🚧 **KILL-GATE 1 (svatba)**.
 
 ⚠️ **Pravidlo „do kill-gate se nepřidávají funkce" bylo pro fázi 18 na pokyn autora ZRUŠENO (29. 07. 2026).** Přestavba UI podle `design_handoff_krasa_ui/` jde celá před svatbu — včetně knihovny médií, přehledu osy a fullscreen režimů. Cenou je třináct sessions čerstvého kódu, který nikdo neodzkoušel na skutečné zakázce; drží to jen regresní sada (`--timeline-bench`, `--benchmark`, `--export-check`, `--transition-check`, `--select-check`, `--range-check`), která je **podmínkou odevzdání každého modulu**, ne doporučením. Když modul svou bránou neprojde, odloží se za svatbu **on sám**, ne celá fáze.
 
@@ -26,6 +26,67 @@ Plán, rozhodnutí a roadmapa všech 13 modulů: **`FAZE_18_UI.md`**. Zdroj zad�
 
 **Dvě rozhodnutí autora z 29. 07. 2026:** ① jede se **všech 13 modulů před svatbou**;
 ② **světlý režim padá** — okno je natvrdo tmavé.
+
+✅ **Modul 12 — prázdný start (30. 07. 2026).**
+
+  - **Okno bez materiálu je TÝŽ rám, jen jiný obsah:** místo přehrávače **zóna přetažení**
+    (rámeček `1,5 px dashed`, tři dlaždice, „Přetáhni sem záběry, fotky nebo hudbu",
+    `Vybrat soubory…` / `Vybrat složku…`, řádek formátů), místo knihovny **Poslední projekty**
+    (jméno, datum, počet záběrů, délka; offline řádek oranžově „disk není připojený";
+    patička s velikostí proxy cache a stavem modelu přepisu), toolbar `Otevřít projekt… ⌘O`
+    + `Nový projekt ⌘N`, rail ztlumený na 0,35, lišta osy na 0,4 a **návod v prázdných
+    pruzích stop** („Sem přijdou záběry a fotky…", „Hudba na A2 · Soubor → Přidat hudbu…").
+  - **Obnova zálohy je PRUH, ne dialog.** Modální okno při startu nutilo rozhodnout dřív, než
+    bylo vidět o čem, a „Zahodit" je nevratné. Pruh jde ignorovat; `Zahodit` navíc dohoní to,
+    co by se bylo stalo bez zálohy (sken zapamatovaných složek). Pruh říká i **počet klipů
+    v záloze** — údaj, který dialog nikdy neřekl.
+  - **⚠️ Riziko modulu (sandbox) vyřešené, ne obejité: přetažené URL NENÍ security-scoped.**
+    Drop dává přístup jen na dobu operace a `startAccessingSecurityScopedResource()` na něm
+    vrací `false`; trvalý přístup dá jedině bookmark vyrobený HNED a rovnou rozbalený zpátky
+    (`MediaImporter.adopt(dropped:)`). Kdo by kopíroval vzorec z `NSOpenPanel`
+    (`compactMap { beginAccess($0) }`), zahodí každý přetažený soubor. Zapsané v CLAUDE.md.
+  - **⚠️ Cíl přetažení je AppKit `NSView` a obsah zóny visí UVNITŘ něj.** AppKit hledá cíl hit
+    testem odspodu nahoru, takže SwiftUI obsah položený NAD terčem by drop nad textem
+    a tlačítky tiše zabil. Kontrola se proto ptá `hitTest` na střed zóny a hlásí, co dostala:
+    **`NSHostingView<DropZoneContent>`**, tedy potomek terče. Vedlejší přínos: kontrola jde
+    skutečnou cestou protokolu (`registerForDraggedTypes` → pasteboard s `NSURL` →
+    `draggingEntered` → `performDragOperation`), kterou u SwiftUI `.onDrop` nasimulovat nejde.
+  - **Ověřeno `--empty-start-check`, 31 kontrol:** drop souboru i **složky** (složka dá
+    **5 assetů == `videoFiles(in:)`**, a jsou to tytéž soubory, ne jen stejný počet, tedy
+    „totéž co Otevřít složku"); cizí soubor projekt nezmění a appka řekne proč; po dropu má
+    asset **bookmark**; obnova z pruhu dá **tytéž 2 klipy a týž počet porušení invariantů
+    (0)** jako záloha přečtená napřímo, a zůstává neuložená; uložený projekt se objeví
+    v seznamu se správným počtem záběrů, po smazání souboru se **sám** označí za offline
+    a otevřít nejde.
+  - **⚠️ Kontrola si odkládá zálohu i evidenci projektů a vrací je.** Běží v témže kontejneru
+    jako appka — bez toho by uživateli přepsala zálohu neuložené práce a nechala mu v seznamu
+    mrtvý dočasný projekt.
+  - **⚠️ Snímek okna chytil dvě věci, pošesté v řadě:** ① **prázdný `ScrollView` se smrskl na
+    nulovou šířku** a hláška „Zatím žádný uložený projekt." se vysázela PO PÍSMENKÁCH pod
+    sebe (`maxWidth: .infinity` patří na OBSAH, ne jen na scroll view) — zapsané v CLAUDE.md;
+    ② pruh obnovy na prvním snímku vůbec nebyl, protože si ho kontrola vlastním pořadím
+    smazala (uložení testovacího projektu maže zálohu) — snímek se teď dělá, dokud nabídka platí.
+  - **Přidané cesty do modelu:** `newProject()` (prázdná osa — do teď se z rozdělané práce
+    nedalo vyjít jinak než importem), `openRecent`, `importDropped` (rozdělí video / fotky /
+    hudbu podle přípony a pošle je TÝMIŽ cestami jako menu; **video první**, protože zakládá
+    nový projekt, kdežto fotky a hudba se přidávají), `addPhotos(urls:)` oddělené od panelu.
+    `confirmLosingUnsavedWork` se pod CLI neptá — modální dialog by kontrolu zasekl.
+  - **⚠️ Prázdný start se NIKDY neukazuje při měření** (`showsEmptyStart` má v podmínce
+    `!chromeHidden`) a zóna přehrávač **překrývá, neodebírá**: `PlayerView` musí zůstat na
+    témže místě stromu, jinak by po importu vznikl nový `PlayerHostView`.
+  - **Regrese:** `--shell-check` 16 hodnot ✅, `--select-check` 15 ✅, `--range-check` 9 ✅,
+    `--library-check` ✅, `--export-ui-check` ✅, `--panel-check` ✅, `--layers-check` ✅,
+    `--layout-check` ✅, `--overview-check` ✅, `--export-check` 6087 snímků = 202,900 s osy,
+    `--transition-check` číslo po čísle jako ve fázi 10 (0,7 / 12,9 / 13,1),
+    `--timeline-bench` třikrát: 1 / 0 / 0 vypadlých tiků, medián práce 1,88–1,96 ms
+    (M11 měl 1,96 — beze změny; load average 1,6).
+  - **Přiznané meze:** miniatura v Posledních projektech je neutrální dlaždice (skutečný snímek
+    by znamenal otevřít každý projekt a rozbalit bookmark jeho prvního assetu, a offline projekt
+    by ho stejně neměl); soubory se dají přetáhnout jen na PRÁZDNÉ okno — s materiálem na ose
+    se přidává tlačítkem ＋ v knihovně; ikona railu `Nastavení` se **neztlumuje**, přestože ji
+    tak návrh kreslí, protože na projektu nezávisí a je to jediná cesta ke správě proxy a modelu.
+  - *Koukanec rukou (v seznamu): přetažení složky i jednotlivých souborů na prázdné okno, pruh
+    obnovy po vynuceném ukončení, klik do Posledních projektů, ⇧⌘N a ⌘N.*
 
 ✅ **Modul 11 — panel přepisu řeči a Zdroje řeči (30. 07. 2026).**
 

@@ -931,7 +931,14 @@ v1 nikdy nic neudělají, jsou horší než jejich absence.
 
 ---
 
-#### M12 · Prázdný start
+#### M12 · Prázdný start ✅ *(hotovo 30. 07. 2026 — `--empty-start-check`, 31 kontrol)*
+
+**Jak to dopadlo:** riziko se potvrdilo a bylo horší, než plán čekal — přetažené URL není
+security-scoped a `startAccessingSecurityScopedResource()` na něm vrací `false`, takže vzorec
+z `NSOpenPanel` by každý přetažený soubor zahodil (`MediaImporter.adopt(dropped:)`). Navíc
+vyšlo najevo druhé pravidlo: cíl přetažení musí obsah zóny HOSTIT (vnořený `NSHostingView`),
+protože AppKit hledá cíl hit testem odspodu nahoru — změřeno, ne odhadnuto. Podrobnosti
+v `PROJECT_STATUS.md`.
 
 | | |
 |---|---|
@@ -1016,11 +1023,11 @@ Podle rozhodnutí z 2.1 jde **všech 13 modulů před svatbou**, v jednom sledu.
 | M9 ✅ | knihovna médií a přetažení | C | střední | `--library-check` |
 | M10 ✅ | list exportu | D | střední | `--export-check`, `--export-ui-check` |
 | M11 ✅ | panel přepisu řeči | D | střední | `--transcript-ui-check` |
-| M12 | prázdný start | D | nízké | `--empty-start-check` |
+| M12 ✅ | prázdný start | D | nízké | `--empty-start-check` |
 | M13 | fullscreen aplikace a náhledu | D | střední | `--fullscreen-ui-check` |
 
 **Pořadí: M1 ✅ → M2 ✅ → M3 ✅ → M7 ✅ → M8 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M9 ✅ → M10 ✅ → M11 ✅
-→ M12 → M13 → 🚧 KILL-GATE 1.** (Zbývají DVA moduly: prázdný start a fullscreen náhledu.)
+→ M12 ✅ → M13 → 🚧 KILL-GATE 1.** (Zbývá POSLEDNÍ modul: fullscreen aplikace a náhledu.)
 
 Proč zrovna takhle, když se jede všechno: **ergonomie napřed, kosmetika vzadu.** Prvních pět modulů
 zavírá potíže #2, #3 a #4 ze zadání a nepřidává funkce — kdyby došel čas nebo se něco zadrhlo, jsou

@@ -37,6 +37,11 @@ final class AppModel: ObservableObject {
     @Published var panelVisible = true
     /// Vybraná záložka panelu (fáze 18, modul 7).
     @Published var panelTab: PanelTab = .speed
+    /// Vybraná karta v knihovně médií (fáze 18, modul 9). Stav sezení —
+    /// s výběrem KLIPŮ na ose se schválně neslučuje: v knihovně se vybírá
+    /// zdroj, na ose kus střihu, a splynutí obojího by znamenalo, že klik
+    /// do knihovny přepíše hromadný výběr, na kterém uživatel pracuje.
+    @Published var librarySelection: AssetID?
     /// Okno je na celé obrazovce. Plní `WindowConfigurator` z notifikací
     /// `didEnterFullScreen` / `didExitFullScreen` — `styleMask` se přepíná
     /// už na ZAČÁTKU přechodu, takže se na něj ptát nestačí.
@@ -3229,6 +3234,28 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: Knihovna médií (fáze 18, modul 9)
+
+    /// Dvojklik na kartu: najde první klip toho materiálu na ose, vybere ho
+    /// a postaví na jeho začátek hlavu. Obrazová stopa má přednost —
+    /// u svázané dvojice chce uživatel vidět obraz, ne jeho zvuk.
+    func revealAssetOnTimeline(_ assetID: AssetID) {
+        let tracks = timeline.project.timeline.tracks
+        let ordered = tracks.filter { $0.kind == .video } + tracks.filter { $0.kind != .video }
+        guard let clip = ordered.lazy
+            .compactMap({ track in
+                track.clips.filter { $0.assetID == assetID }
+                    .min(by: { $0.timelineStart < $1.timelineStart })
+            })
+            .first else {
+            status = "Tenhle materiál na ose není — přetáhni ho na stopu."
+            return
+        }
+        librarySelection = assetID
+        timeline.selectClips([clip.id])
+        timeline.setPlayheadFromUser(clip.timelineStart)
+    }
+
     func attach(_ view: PlayerHostView) { hostView = view }
     func attachTimeline(_ pane: TimelinePane) { timelinePane = pane }
 
@@ -3783,6 +3810,8 @@ struct ContentView: View {
                     await model.verifyThumbnails()
                 } else if arguments.contains("--overview-check") {
                     await model.verifyOverview()
+                } else if arguments.contains("--library-check") {
+                    await model.verifyLibrary()
                 }
                 NSApplication.shared.terminate(nil)
             } else if await model.reopenLastProject() {

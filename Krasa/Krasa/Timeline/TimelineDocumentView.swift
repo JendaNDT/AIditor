@@ -732,6 +732,13 @@ final class TimelineDocumentView: NSView {
         dragOverlay.addSublayer(bandLayer)
 
         rebuildLanes()
+
+        // Cíl přetažení z knihovny médií (fáze 18, modul 9). Registrace typů
+        // je POVINNÁ — bez ní `NSDraggingDestination` metody nikdo nezavolá
+        // a nic to nenahlásí. Typ `.string` odpovídá `NSItemProvider(object:
+        // NSString)` na straně knihovny (`public.utf8-plain-text`).
+        // <https://developer.apple.com/documentation/appkit/nsview/registerfordraggedtypes(_:)>
+        registerForDraggedTypes([.string])
     }
 
     @available(*, unavailable)
@@ -1649,7 +1656,13 @@ final class TimelineDocumentView: NSView {
     var hasActiveDrag: Bool {
         fadeDrag != nil || transitionDrag != nil || titleDrag != nil
             || bandDrag != nil || controller.interaction.isDragging
+            // Přetažení z knihovny (F18/M9) je taky tažení: po tu dobu se osa
+            // za hlavou netahá, jinak by cíl ujel pod kurzorem.
+            || isDroppingFromLibrary
     }
+
+    /// Nad osou právě visí přetažení z knihovny médií (fáze 18, modul 9).
+    var isDroppingFromLibrary = false
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
@@ -2718,5 +2731,226 @@ final class TimelineDocumentView: NSView {
                       y: geometry.y(ofTrackAt: index, in: timeline),
                       width: geometry.width(of: duration),
                       height: geometry.height(of: timeline.tracks[index].kind))
+    }
+}
+
+// MARK: - Přetažení z knihovny médií (fáze 18, modul 9)
+
+//  ⚠️ NOVÁ CESTA DO MODELU MIMO `TimelineInteraction` — a proto se drží jeho
+//  pravidel: během tažení se do modelu NEZAPISUJE (hýbe se jen náhled),
+//  a vložení je JEDEN undo krok, po kterém musí projít `validate()`.
+//
+//  ⚠️ Drop se ODMÍTÁ tam, kde by nešel provést, a rozhoduje o tom ZKUŠEBNÍ
+//  BĚH operace na kopii projektu — ne vlastní tabulka pravidel. Tabulka by se
+//  s modelem rozešla (vzorec „o zapnutí položky menu rozhoduje zkušební běh"
+//  z fáze 14).
+//
+//  Fotka a hudba padají na své druhy stop; video s vlastním zvukem se pokládá
+//  jako SVÁZANÁ DVOJICE, stejně jako při importu. Když se zvuk pod obraz
+//  nevejde, drop se odmítne celý — rozstrkat dvojici po volných místech by
+//  rozbilo sync (vzorec atomického vložení ze schránky, F17).
+
+extension TimelineDocumentView {
+
+    /// Co by se vložilo, kdyby uživatel pustil myš tady.
+    private struct DropPlan {
+        let project: Project
+        let videoClip: Clip
+        let videoTrack: TrackID
+        let audioClip: Clip?
+        let audioTrack: TrackID?
+        let assetName: String
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        draggingUpdated(sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let point = convert(sender.draggingLocation, from: nil)
+        guard let plan = dropPlan(at: point, pasteboard: sender.draggingPasteboard) else {
+            // Neplatné místo: náhled se ukáže ČERVENĚ na stopě pod kurzorem,
+            // ať je vidět, že se míří jinam, než kam to jde. Prázdný náhled by
+            // vypadal, jako že myš není nad osou.
+            showRejectedDropPreview(at: point, pasteboard: sender.draggingPasteboard)
+            return []
+        }
+        showDropPreview(plan)
+        return .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        clearDropPreview()
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        clearDropPreview()
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        defer { clearDropPreview() }
+        let point = convert(sender.draggingLocation, from: nil)
+        guard let plan = dropPlan(at: point, pasteboard: sender.draggingPasteboard) else {
+            controller.onStatus?("Sem to položit nejde — fotka a video patří na "
+                                 + "obrazovou stopu, hudba na zvukovou, a místo musí být volné.")
+            return false
+        }
+        // Jeden undo krok pro celý drop, i když vkládá dvojici.
+        controller.undo.record(controller.project)
+        controller.project = plan.project
+        controller.selectClips([plan.videoClip.id])
+        controller.onStatus?("\(plan.assetName) položeno na "
+                             + "\(Timecode(plan.videoClip.timelineStart, frameRate: plan.project.timeline.frameRate).shortText).")
+        return true
+    }
+
+    /// Sestaví plán vložení, nebo `nil`, když to na tomhle místě nejde.
+    private func dropPlan(at point: NSPoint, pasteboard: NSPasteboard) -> DropPlan? {
+        guard let asset = draggedAsset(from: pasteboard) else { return nil }
+        let timeline = controller.project.timeline
+        let geometry = controller.geometry
+        guard let trackIndex = geometry.trackIndex(atY: Double(point.y), in: timeline)
+        else { return nil }
+        let track = timeline.tracks[trackIndex]
+
+        // Kam: snímek pod kurzorem, nikdy před nulu.
+        let start = Frames(max(0, geometry.frame(atX: Double(point.x)).count))
+
+        let isMusic = asset.hasAudio && !asset.hasVideo && !asset.isStill
+        switch track.kind {
+        case .video where isMusic: return nil
+        case .audio where !isMusic: return nil
+        case .title: return nil
+        default: break
+        }
+
+        var project = controller.project
+        // Asset v projektu být MUSÍ (knihovna nabízí právě jeho assety), ale
+        // `addAsset` nahrazuje podle ID, takže je to bezpečná pojistka.
+        project.addAsset(asset)
+
+        // ⚠️ Porovnává se POČET porušení, ne „musí být nula".
+        // `validate()` hlídá i věci, které s dropem nesouvisí (třeba asset bez
+        // naměřené frekvence), a podmínka „výsledek musí být bez porušení" by
+        // z jedné takové vady udělala zámek na celé vkládání — bez vysvětlení,
+        // proč to nejde. Chytila to `--library-check`, když do projektu přidala
+        // hudební asset s nulovou frekvencí.
+        let violationsBefore = controller.project.validate().count
+
+        do {
+            if track.kind == .video, asset.hasAudio, !asset.isStill,
+               let audioTrack = timeline.tracks.first(where: { $0.kind == .audio })?.id {
+                let pair = try project.makeLinkedClips(assetID: asset.id, at: start)
+                try project.insertLinked(video: pair.video, onVideoTrack: track.id,
+                                         audio: pair.audio, onAudioTrack: audioTrack)
+                guard project.validate().count <= violationsBefore else { return nil }
+                return DropPlan(project: project, videoClip: pair.video, videoTrack: track.id,
+                                audioClip: pair.audio, audioTrack: audioTrack,
+                                assetName: asset.originalURL.lastPathComponent)
+            }
+            let clip = try project.makeClip(assetID: asset.id, at: start)
+            try project.insert(clip, onTrack: track.id)
+            guard project.validate().count <= violationsBefore else { return nil }
+            return DropPlan(project: project, videoClip: clip, videoTrack: track.id,
+                            audioClip: nil, audioTrack: nil,
+                            assetName: asset.originalURL.lastPathComponent)
+        } catch {
+            return nil
+        }
+    }
+
+    private func draggedAsset(from pasteboard: NSPasteboard) -> Asset? {
+        guard let raw = pasteboard.string(forType: .string) else { return nil }
+        return controller.project.asset(AssetID(rawValue: raw))
+    }
+
+    // MARK: Náhled vložení
+
+    private func showDropPreview(_ plan: DropPlan) {
+        setDropGhosts(video: (plan.videoTrack, plan.videoClip.timelineStart,
+                              plan.videoClip.duration),
+                      audio: plan.audioClip.map { clip in
+                          (plan.audioTrack!, clip.timelineStart, clip.duration)
+                      },
+                      isValid: true)
+    }
+
+    /// Duchové vložení. Používá TYTÉŽ vrstvy jako náhled tažení klipu —
+    /// jeden overlay, jedno místo, kde se maže; dvě sady duchů by se dřív nebo
+    /// později obě zapomněly schovat.
+    private func setDropGhosts(video: (track: TrackID, start: Frames, duration: Frames),
+                               audio: (track: TrackID, start: Frames, duration: Frames)?,
+                               isValid: Bool) {
+        isDroppingFromLibrary = true
+        let timeline = controller.project.timeline
+        let geometry = controller.geometry
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let accent = isValid ? TimelinePalette.clipSelectedStroke : TimelinePalette.playhead
+            for ghost in [ghostLayer, partnerGhostLayer] {
+                ghost.borderColor = accent.cgColor
+            }
+            ghostLayer.backgroundColor = accent.withAlphaComponent(0.22).cgColor
+            partnerGhostLayer.backgroundColor = accent.withAlphaComponent(0.12).cgColor
+        }
+
+        ghostLayer.isHidden = false
+        ghostLayer.frame = ghostFrame(trackID: video.track, start: video.start,
+                                      duration: video.duration,
+                                      timeline: timeline, geometry: geometry)
+        if let audio {
+            partnerGhostLayer.isHidden = false
+            partnerGhostLayer.frame = ghostFrame(trackID: audio.track, start: audio.start,
+                                                 duration: audio.duration,
+                                                 timeline: timeline, geometry: geometry)
+        } else {
+            partnerGhostLayer.isHidden = true
+        }
+        snapGuideLayer.isHidden = true
+    }
+
+    private func clearDropPreview() {
+        isDroppingFromLibrary = false
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        ghostLayer.isHidden = true
+        partnerGhostLayer.isHidden = true
+        snapGuideLayer.isHidden = true
+        CATransaction.commit()
+    }
+
+    /// Měřicí okno pro `--library-check`: kde a jak velký je náhled vložení
+    /// a jestli je platný. Bez tohohle by se dal ověřit jen výsledek dropu,
+    /// ne to, že náhled ukazoval TAM, kam klip potom přistál.
+    var dropPreviewProbe: (frame: CGRect, partner: CGRect?, isValid: Bool)? {
+        guard !ghostLayer.isHidden else { return nil }
+        let isValid = ghostLayer.borderColor
+            == TimelinePalette.clipSelectedStroke.cgColor
+        return (ghostLayer.frame,
+                partnerGhostLayer.isHidden ? nil : partnerGhostLayer.frame,
+                isValid)
+    }
+
+    /// Náhled odmítnutého dropu: délku bere ze zdroje, aby bylo vidět, co by
+    /// se pokládalo, a stopu z místa pod kurzorem.
+    private func showRejectedDropPreview(at point: NSPoint, pasteboard: NSPasteboard) {
+        let timeline = controller.project.timeline
+        let geometry = controller.geometry
+        guard let asset = draggedAsset(from: pasteboard),
+              let trackIndex = geometry.trackIndex(atY: Double(point.y), in: timeline)
+        else {
+            clearDropPreview()
+            return
+        }
+        var probe = controller.project
+        probe.addAsset(asset)
+        let duration = (try? probe.makeClip(assetID: asset.id))?.duration ?? Frames(60)
+        let start = Frames(max(0, geometry.frame(atX: Double(point.x)).count))
+        setDropGhosts(video: (timeline.tracks[trackIndex].id, start, duration),
+                      audio: nil, isValid: false)
     }
 }

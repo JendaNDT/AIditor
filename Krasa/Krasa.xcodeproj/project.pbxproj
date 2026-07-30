@@ -57,6 +57,9 @@
 		F18200000000000000000011 /* ThumbChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000011 /* ThumbChecks.swift */; };
 		F18200000000000000000012 /* TimelineOverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000012 /* TimelineOverviewView.swift */; };
 		F18200000000000000000013 /* OverviewChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000013 /* OverviewChecks.swift */; };
+		F18200000000000000000014 /* LibraryPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000014 /* LibraryPane.swift */; };
+		F18200000000000000000015 /* LibraryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000015 /* LibraryCard.swift */; };
+		F18200000000000000000016 /* LibraryChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18100000000000000000016 /* LibraryChecks.swift */; };
 		F1820000000000000000000E /* AudioTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000E /* AudioTab.swift */; };
 		F1820000000000000000000F /* InfoTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1810000000000000000000F /* InfoTab.swift */; };
 /* End PBXBuildFile section */
@@ -108,6 +111,9 @@
 		F18100000000000000000011 /* ThumbChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbChecks.swift; sourceTree = "<group>"; };
 		F18100000000000000000012 /* TimelineOverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineOverviewView.swift; sourceTree = "<group>"; };
 		F18100000000000000000013 /* OverviewChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewChecks.swift; sourceTree = "<group>"; };
+		F18100000000000000000014 /* LibraryPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryPane.swift; sourceTree = "<group>"; };
+		F18100000000000000000015 /* LibraryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryCard.swift; sourceTree = "<group>"; };
+		F18100000000000000000016 /* LibraryChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryChecks.swift; sourceTree = "<group>"; };
 		F1810000000000000000000E /* AudioTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTab.swift; sourceTree = "<group>"; };
 		F1810000000000000000000F /* InfoTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoTab.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -190,6 +196,7 @@
 				F18100000000000000000008 /* ShellChecks.swift */,
 				F18100000000000000000011 /* ThumbChecks.swift */,
 				F18100000000000000000013 /* OverviewChecks.swift */,
+				F18100000000000000000016 /* LibraryChecks.swift */,
 			);
 			path = Measure;
 			sourceTree = "<group>";
@@ -210,11 +217,21 @@
 			path = Timeline;
 			sourceTree = "<group>";
 		};
+		F18000000000000000000004 /* Library */ = {
+			isa = PBXGroup;
+			children = (
+				F18100000000000000000014 /* LibraryPane.swift */,
+				F18100000000000000000015 /* LibraryCard.swift */,
+			);
+			path = Library;
+			sourceTree = "<group>";
+		};
 		F18000000000000000000001 /* UI */ = {
 			isa = PBXGroup;
 			children = (
 				F18000000000000000000002 /* Shell */,
 				F18000000000000000000003 /* Panels */,
+				F18000000000000000000004 /* Library */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -351,6 +368,9 @@
 				F18200000000000000000008 /* ShellChecks.swift in Sources */,
 				F18200000000000000000011 /* ThumbChecks.swift in Sources */,
 				F18200000000000000000013 /* OverviewChecks.swift in Sources */,
+				F18200000000000000000014 /* LibraryPane.swift in Sources */,
+				F18200000000000000000015 /* LibraryCard.swift in Sources */,
+				F18200000000000000000016 /* LibraryChecks.swift in Sources */,
 				2F71D6C304AB859E1D3E7F0A /* TimelineController.swift in Sources */,
 				A9E3B57C1F0842D6C7B93E15 /* TimelineDocumentView.swift in Sources */,
 				74CB19E8D3A05F2718BE6C40 /* TimelinePane.swift in Sources */,

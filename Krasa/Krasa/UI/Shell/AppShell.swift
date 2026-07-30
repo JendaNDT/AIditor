@@ -140,14 +140,23 @@ struct AppShell: View {
         }
     }
 
-    /// Horní pás: přehrávač (pružný) a vpravo knihovna (M9 — zatím nic).
+    /// Horní pás: přehrávač (pružný) a vpravo knihovna médií (M9).
     ///
     /// ⚠️ Výška je pevná, dokud je chrome vidět. Při měření se uvolní na
     /// `nil`, aby přehrávač dostal celé okno — tehdy je pod ním prázdno,
     /// protože osa i lišty jsou z hierarchie pryč.
+    ///
+    /// ⚠️ Knihovna se při měření ODEBÍRÁ, nekryje (pravidlo R4) — jinak by
+    /// přehrávač nedostal celou šířku a měřicí běhy by porovnávaly jiná čísla,
+    /// než která platila dřív.
     private var topBand: some View {
         HStack(spacing: 0) {
             ViewerPane(model: model)
+            if chromeVisible {
+                verticalHairline
+                LibraryPane(model: model)
+                    .frame(width: KrasaUI.Metric.libraryWidth)
+            }
         }
         .frame(height: chromeVisible ? mode.topBandHeight : nil)
         .frame(maxWidth: .infinity, maxHeight: chromeVisible ? nil : .infinity)

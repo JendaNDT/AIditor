@@ -33,6 +33,10 @@ extension AppModel {
         let paneBottom: CGFloat
         let viewerLeft: CGFloat
         let viewerTop: CGFloat
+        /// Knihovna médií vpravo od přehrávače (M9) + její předěl + odsazení
+        /// obrazu. Nová hlídaná hodnota: knihovna je chrome a její šířka je
+        /// v zadání pevná, takže se nemá změnit náhodou.
+        let viewerRight: CGFloat
 
         init(mode: ShellMode, panelVisible: Bool) {
             let hairline: CGFloat = 1
@@ -45,6 +49,8 @@ extension AppModel {
             paneBottom = KrasaUI.Metric.statusBarHeight + hairline
             viewerLeft = paneLeft + KrasaUI.Metric.viewerPadding
             viewerTop = toolbar + hairline + KrasaUI.Metric.viewerPadding
+            viewerRight = KrasaUI.Metric.libraryWidth + hairline
+                + KrasaUI.Metric.viewerPadding
         }
     }
 
@@ -143,6 +149,7 @@ extension AppModel {
         check("osa zdola (stav. řádek)", paneInsets.bottom, expected.paneBottom)
         check("obraz zleva", viewerInsets.left, expected.viewerLeft)
         check("obraz shora", viewerInsets.top, expected.viewerTop)
+        check("obraz zprava (knihovna)", viewerInsets.right, expected.viewerRight)
 
         // Pravítko si drží 26 bodů z fáze 2 — návrh ho nemění a nesmí ho
         // rozhodit ani nová skořápka. Hlavičky se v modulu 4 ZÁMĚRNĚ rozšířily
